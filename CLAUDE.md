@@ -496,3 +496,13 @@ See `TODO.md` for full prioritized list. **All P0 code fixes completed 2026-02-1
 | ~~P1~~ | ~~VSO IDOR (cross-org access)~~ | Fixed — org validation + security tests (2026-02-11) |
 | ~~P1~~ | ~~`ai_summary` unencrypted~~ | Fixed — `EncryptedJSONField` + data migration (2026-02-11) |
 | ~~P1~~ | ~~Missing agent model indexes~~ | Fixed — 5 composite indexes added (2026-02-11) |
+
+## Git & Save Practices
+- **Commit message format**: Conventional Commits — `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`
+- **Commit subject**: Imperative mood, concise (<72 chars)
+- **Commit body**: Explain *why*, not *what*
+- **When to commit**: After each logical unit of work, tests passing
+- **What NOT to commit**: `.env`, `.do/app.yaml` with credentials, `db.sqlite3`, `venv/`, `__pycache__/`, media uploads
+- **Branch strategy**: Feature branches off `main`; PR for significant changes
+- **Before pushing**: Run `pytest` — all tests must pass, no security regressions
+- **Secrets**: See "Remaining Security TODOs" — never commit API keys, encryption keys, or DSNs
