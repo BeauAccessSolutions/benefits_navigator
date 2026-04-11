@@ -28,7 +28,7 @@
                     <!-- Branch of Service -->
                     <div>
                         <label for="branch" class="block text-sm font-medium text-gray-700">Branch of Service</label>
-                        <select name="branch" id="branch" required
+                        <select name="branch" id="branch" required aria-required="true"
                                 class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
                             <option value="">Select your branch...</option>
                             {% for value, label in branches %}
@@ -40,7 +40,7 @@
                     <!-- Service Era -->
                     <div>
                         <label for="service_era" class="block text-sm font-medium text-gray-700">Service Era</label>
-                        <select name="service_era" id="service_era" required
+                        <select name="service_era" id="service_era" required aria-required="true"
                                 class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
                             <option value="">Select your service era...</option>
                             {% for value, label in service_eras.items %}

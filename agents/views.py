@@ -46,7 +46,8 @@ def check_ai_consent(user):
     """
     try:
         return bool(user.profile.ai_processing_consent)
-    except Exception:
+    except Exception as e:
+        logger.warning("AI consent check failed for user %s: %s", user.pk, type(e).__name__)
         return False
 
 

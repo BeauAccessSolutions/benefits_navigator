@@ -265,6 +265,11 @@ if CELERY_BROKER_URL.startswith('rediss://'):
     }
 
 # Celery Beat Schedule for periodic tasks
+# DEPLOYMENT NOTE: Beat scheduler runs on the "worker" process in DigitalOcean App Platform
+# (the single Procfile worker dyno). Only ONE instance must run Beat at a time —
+# if you scale the worker to multiple instances, pin Beat to exactly one using
+# CELERY_BEAT_MAX_LOOP_INTERVAL or a dedicated beat dyno. Duplicate Beat instances
+# will double-fire all periodic tasks (duplicate emails, double data retention runs).
 from celery.schedules import crontab
 CELERY_BEAT_SCHEDULE = {
     # Health monitoring
@@ -372,8 +377,8 @@ SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
 # Content Security Policy
 # Restricts what resources can be loaded
 CSP_DEFAULT_SRC = ("'self'",)
-CSP_STYLE_SRC = ("'self'", "'unsafe-inline'", "https://cdn.tailwindcss.com")
-CSP_SCRIPT_SRC = ("'self'", "'unsafe-inline'", "https://cdn.tailwindcss.com", "https://unpkg.com")
+CSP_STYLE_SRC = ("'self'",)
+CSP_SCRIPT_SRC = ("'self'", "'unsafe-inline'", "https://unpkg.com")
 CSP_IMG_SRC = ("'self'", "data:", "https:")
 CSP_FONT_SRC = ("'self'", "https://fonts.gstatic.com")
 CSP_CONNECT_SRC = ("'self'",)
@@ -391,11 +396,8 @@ if not DEBUG:
     SECURE_HSTS_PRELOAD = not STAGING
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
-    # Stricter CSP in production
-    # Note: 'unsafe-inline' required for Tailwind CDN which generates inline styles
-    # TODO: Build Tailwind to static CSS file to remove 'unsafe-inline' dependency
-    CSP_SCRIPT_SRC = ("'self'", "https://cdn.tailwindcss.com", "https://unpkg.com")
-    CSP_STYLE_SRC = ("'self'", "'unsafe-inline'", "https://cdn.tailwindcss.com")
+    # CSP is already strict at module level (no unsafe-inline, no CDN).
+    # Production inherits the base CSP_* settings above without override.
 
 # ==============================================================================
 # DJANGO-ALLAUTH CONFIGURATION

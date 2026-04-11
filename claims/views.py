@@ -408,6 +408,7 @@ def denial_decoder_status(request, pk):
 # =============================================================================
 
 @login_required
+@ratelimit(key='user', rate='60/m', method='GET', block=True)
 @require_http_methods(["GET"])
 def document_download(request, pk):
     """
@@ -487,6 +488,7 @@ def document_download(request, pk):
 
 
 @login_required
+@ratelimit(key='user', rate='60/m', method='GET', block=True)
 @require_http_methods(["GET"])
 def document_view_inline(request, pk):
     """

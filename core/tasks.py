@@ -14,7 +14,7 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 
-@shared_task
+@shared_task(acks_late=True)
 def enforce_data_retention():
     """
     Periodic task to enforce data retention policies.
@@ -138,7 +138,7 @@ def _purge_session_data(cutoff_date):
     return count
 
 
-@shared_task
+@shared_task(acks_late=True)
 def create_default_retention_policies():
     """
     Create default data retention policies if they don't exist.

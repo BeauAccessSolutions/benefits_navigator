@@ -27,7 +27,6 @@ db.sqlite3
 db.sqlite3-journal
 /media
 /staticfiles
-/static
 
 # Environment
 .env
@@ -67,7 +66,6 @@ media/documents/*
 
 # Node modules (if using npm for Tailwind)
 node_modules/
-package-lock.json
 
 # Secrets
 *.pem

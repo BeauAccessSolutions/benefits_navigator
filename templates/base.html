@@ -46,68 +46,12 @@
     </script>
     {% block structured_data %}{% endblock %}
 
-    <!-- Tailwind CSS via CDN (for MVP - move to build process later) -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tailwind CSS (built from static/css/input.css — run `npm run build` to update) -->
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/tailwind.min.css' %}">
 
     <!-- HTMX for dynamic interactions -->
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
-
-    <!-- Custom styles -->
-    <style>
-        /* High contrast focus indicators for accessibility */
-        *:focus {
-            outline: 3px solid #2563eb;
-            outline-offset: 2px;
-        }
-
-        /* Skip to main content link - visible only on focus */
-        .skip-link {
-            position: absolute;
-            top: -40px;
-            left: 0;
-            background: #2563eb;
-            color: white;
-            padding: 8px;
-            text-decoration: none;
-            z-index: 100;
-        }
-
-        .skip-link:focus {
-            top: 0;
-        }
-
-        /* Ensure sufficient color contrast */
-        body {
-            color: #1f2937;
-            background: #ffffff;
-        }
-
-        /* Loading spinner for async operations */
-        .htmx-indicator {
-            display: none;
-        }
-
-        .htmx-request .htmx-indicator {
-            display: inline-block;
-        }
-
-        /* Accessible form error styling */
-        .field-error {
-            border-color: #dc2626;
-            border-width: 2px;
-        }
-
-        .error-message {
-            color: #dc2626;
-            font-weight: 500;
-        }
-
-        /* Success message styling */
-        .success-message {
-            color: #059669;
-            font-weight: 500;
-        }
-    </style>
 
     {% block extra_css %}{% endblock %}
 </head>

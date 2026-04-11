@@ -147,6 +147,45 @@ def check_document_processing(hours=24):
         }
 
 
+def check_stuck_tasks(stuck_after_hours=2):
+    """Check for documents stuck in processing state beyond the expected window."""
+    try:
+        from claims.models import Document
+
+        cutoff = timezone.now() - timedelta(hours=stuck_after_hours)
+        stuck = Document.objects.filter(
+            status__in=['processing', 'analyzing'],
+            updated_at__lt=cutoff,
+        )
+        stuck_count = stuck.count()
+
+        if stuck_count == 0:
+            return {
+                'status': 'healthy',
+                'message': f'No documents stuck in processing (>{stuck_after_hours}h)',
+                'stuck_count': 0,
+            }
+
+        # Surface oldest stuck task for ops triage
+        oldest = stuck.order_by('updated_at').values('id', 'updated_at').first()
+        oldest_age_hours = round(
+            (timezone.now() - oldest['updated_at']).total_seconds() / 3600, 1
+        ) if oldest else None
+
+        status = 'unhealthy' if stuck_count >= 3 else 'degraded'
+        return {
+            'status': status,
+            'message': f'{stuck_count} document(s) stuck in processing for >{stuck_after_hours}h',
+            'stuck_count': stuck_count,
+            'oldest_document_id': oldest['id'] if oldest else None,
+            'oldest_age_hours': oldest_age_hours,
+        }
+
+    except Exception as e:
+        logger.error(f"Stuck task health check failed: {e}")
+        return {'status': 'unknown', 'message': str(e), 'stuck_count': None}
+
+
 def check_failure_rate(hours=24):
     """Check recent processing failure rate."""
     try:
@@ -190,6 +229,7 @@ def get_full_health_status():
         'redis': check_redis(),
         'celery': check_celery(),
         'document_processing': check_document_processing(),
+        'stuck_tasks': check_stuck_tasks(),
         'failures': check_failure_rate(),
     }
 

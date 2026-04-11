@@ -1,0 +1,60 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   Custom utilities — previously inline in base.html <style>
+   ============================================================ */
+
+/* High contrast focus indicators (WCAG 2.4.7) */
+*:focus {
+    outline: 3px solid #2563eb;
+    outline-offset: 2px;
+}
+
+/* Skip to main content link — visible only on focus (WCAG 2.4.1) */
+.skip-link {
+    position: absolute;
+    top: -40px;
+    left: 0;
+    background: #2563eb;
+    color: white;
+    padding: 8px;
+    text-decoration: none;
+    z-index: 100;
+}
+
+.skip-link:focus {
+    top: 0;
+}
+
+/* Base body defaults */
+body {
+    color: #1f2937;
+    background: #ffffff;
+}
+
+/* HTMX loading indicator */
+.htmx-indicator {
+    display: none;
+}
+
+.htmx-request .htmx-indicator {
+    display: inline-block;
+}
+
+/* Form error / success styling */
+.field-error {
+    border-color: #dc2626;
+    border-width: 2px;
+}
+
+.error-message {
+    color: #dc2626;
+    font-weight: 500;
+}
+
+.success-message {
+    color: #059669;
+    font-weight: 500;
+}

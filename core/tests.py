@@ -828,10 +828,10 @@ class TestCSPHeaders:
     Tests to verify Content Security Policy headers are configured correctly
     and don't break application functionality.
 
-    CSP Configuration:
+    CSP Configuration (Tailwind now served from static file, no CDN):
     - default-src: 'self'
-    - script-src: 'self', 'unsafe-inline', cdn.tailwindcss.com, unpkg.com
-    - style-src: 'self', 'unsafe-inline', cdn.tailwindcss.com
+    - script-src: 'self', 'unsafe-inline', unpkg.com (HTMX)
+    - style-src: 'self' only (no unsafe-inline, no CDN)
     - img-src: 'self', data:, https:
     - font-src: 'self', fonts.gstatic.com
     - connect-src: 'self'
@@ -851,12 +851,12 @@ class TestCSPHeaders:
         csp = response.headers.get('Content-Security-Policy', '')
         assert "default-src 'self'" in csp
 
-    def test_csp_allows_tailwind_cdn(self, client):
-        """CSP allows Tailwind CSS from CDN."""
+    def test_csp_style_src_self_only(self, client):
+        """CSP style-src is self-only — Tailwind is now served from static file, not CDN."""
         response = client.get(reverse('home'))
         csp = response.headers.get('Content-Security-Policy', '')
-        # Should allow both scripts and styles from Tailwind CDN
-        assert 'cdn.tailwindcss.com' in csp
+        assert 'cdn.tailwindcss.com' not in csp
+        assert "style-src 'self'" in csp
 
     def test_csp_allows_htmx_cdn(self, client):
         """CSP allows HTMX from unpkg.com CDN."""
@@ -1001,20 +1001,22 @@ class TestCSPConfiguration(TestCase):
         assert hasattr(settings, 'CSP_DEFAULT_SRC')
         assert "'self'" in settings.CSP_DEFAULT_SRC
 
-    def test_csp_script_src_includes_cdns(self):
-        """CSP_SCRIPT_SRC includes required CDNs."""
+    def test_csp_script_src_includes_htmx_cdn(self):
+        """CSP_SCRIPT_SRC includes unpkg.com for HTMX (Tailwind CDN removed)."""
         from django.conf import settings
         assert hasattr(settings, 'CSP_SCRIPT_SRC')
         script_src = settings.CSP_SCRIPT_SRC
-        assert any('cdn.tailwindcss.com' in src for src in script_src)
+        assert not any('cdn.tailwindcss.com' in src for src in script_src)
         assert any('unpkg.com' in src for src in script_src)
 
-    def test_csp_style_src_includes_tailwind(self):
-        """CSP_STYLE_SRC includes Tailwind CDN."""
+    def test_csp_style_src_self_only(self):
+        """CSP_STYLE_SRC is self-only — Tailwind served from static file, no CDN needed."""
         from django.conf import settings
         assert hasattr(settings, 'CSP_STYLE_SRC')
         style_src = settings.CSP_STYLE_SRC
-        assert any('cdn.tailwindcss.com' in src for src in style_src)
+        assert not any('cdn.tailwindcss.com' in src for src in style_src)
+        assert not any('unsafe-inline' in src for src in style_src)
+        assert "'self'" in style_src
 
     def test_csp_connect_src_for_htmx(self):
         """CSP_CONNECT_SRC allows same-origin for HTMX."""

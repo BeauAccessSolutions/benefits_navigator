@@ -18,7 +18,7 @@
             {% for membership in memberships %}
             <label class="block p-4 border rounded-lg cursor-pointer hover:bg-gray-50 focus-within:ring-2 focus-within:ring-blue-500 transition-colors">
                 <div class="flex items-start">
-                    <input type="radio" name="organization" value="{{ membership.organization.slug }}" required
+                    <input type="radio" name="organization" value="{{ membership.organization.slug }}" required aria-required="true"
                            class="mt-1 h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500">
                     <div class="ml-3 flex-1">
                         <span class="block text-base font-medium text-gray-900">

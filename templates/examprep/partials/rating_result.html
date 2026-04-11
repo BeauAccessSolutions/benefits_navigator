@@ -11,19 +11,20 @@
 </div>
 
 <!-- Compensation Estimate -->
-<div class="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+<div class="bg-green-50 border border-green-200 rounded-lg p-4 mb-3">
     <h3 class="font-bold text-green-900 mb-2">Estimated Compensation</h3>
     <div class="grid grid-cols-2 gap-4 text-center">
         <div>
-            <div class="text-2xl font-bold text-green-600">{{ monthly_compensation }}</div>
-            <div class="text-sm text-green-700">Monthly</div>
+            <div class="text-2xl font-bold text-green-600">~{{ monthly_compensation }}</div>
+            <div class="text-sm text-green-700">/ month (est.)</div>
         </div>
         <div>
-            <div class="text-2xl font-bold text-green-600">{{ annual_compensation }}</div>
-            <div class="text-sm text-green-700">Annual</div>
+            <div class="text-2xl font-bold text-green-600">~{{ annual_compensation }}</div>
+            <div class="text-sm text-green-700">/ year (est.)</div>
         </div>
     </div>
 </div>
+<p class="text-xs text-gray-500 mb-6">Estimates based on {{ rate_year|default:"current" }} VA rates for veterans without dependents unless specified. Actual amounts vary by effective date, SMC, and VA determination. Not legal advice — consult a VSO for your specific situation.</p>
 
 {% if bilateral_factor > 0 %}
 <!-- Bilateral Factor Applied -->

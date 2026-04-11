@@ -144,36 +144,45 @@ def claim_progress(request):
     """
     user = request.user
 
-    # Get counts for progress calculation
+    # Get counts for progress calculation — single annotated query (6 COUNTs → 1 DB round-trip)
+    from django.db.models import Count, Q
     from claims.models import Document
     from agents.models import (
         DecisionLetterAnalysis, EvidenceGapAnalysis,
         PersonalStatement, RatingAnalysis
     )
 
-    # Document uploads
-    total_documents = Document.objects.filter(user=user, is_deleted=False).count()
+    user_data = (
+        type(user).objects
+        .filter(pk=user.pk)
+        .annotate(
+            doc_count=Count('documents', filter=Q(documents__is_deleted=False), distinct=True),
+            decision_count=Count('decision_analyses', distinct=True),
+            rating_count=Count('rating_analyses', distinct=True),
+            evidence_count=Count('evidence_analyses', distinct=True),
+            statement_count=Count('personal_statements', distinct=True),
+            exam_count=Count('exam_checklists', distinct=True),
+        )
+        .first()
+    )
+    total_documents = user_data.doc_count
+    decision_analyses = user_data.decision_count
+    rating_analyses = user_data.rating_count
+    evidence_analyses = user_data.evidence_count
+    statements_generated = user_data.statement_count
+    exam_checklists = user_data.exam_count
+
+    # Recent documents for activity feed (separate query — fetches full rows for template)
     recent_documents = Document.objects.filter(
         user=user, is_deleted=False
     ).order_by('-created_at')[:5]
 
-    # AI Analyses completed
-    decision_analyses = DecisionLetterAnalysis.objects.filter(user=user).count()
-    rating_analyses = RatingAnalysis.objects.filter(user=user).count()
-    evidence_analyses = EvidenceGapAnalysis.objects.filter(user=user).count()
-    statements_generated = PersonalStatement.objects.filter(user=user).count()
-
-    # Get most recent evidence gap analysis for recommendations
+    # Most recent evidence gap analysis for recommendations
     latest_evidence_gap = EvidenceGapAnalysis.objects.filter(user=user).order_by('-created_at').first()
     evidence_readiness_score = latest_evidence_gap.readiness_score if latest_evidence_gap else None
     evidence_gaps = []
     if latest_evidence_gap and latest_evidence_gap.evidence_gaps:
         evidence_gaps = latest_evidence_gap.evidence_gaps[:5]  # Top 5 gaps
-
-    # Get exam checklists
-    exam_checklists = []
-    if hasattr(user, 'exam_checklists'):
-        exam_checklists = user.exam_checklists.all().count()
 
     # Calculate overall readiness score (0-100)
     # Weights: documents (20), decision analysis (20), rating analysis (15),

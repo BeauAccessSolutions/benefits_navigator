@@ -1,5 +1,5 @@
 # Django Core
-Django>=5.1.14
+Django>=5.2.13
 django-environ==0.11.2
 psycopg2-binary==2.9.9
 python-decouple==3.8

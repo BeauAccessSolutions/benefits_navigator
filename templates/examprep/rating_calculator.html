@@ -685,6 +685,16 @@ function shareCalculation() {
     });
 }
 
+// Close share modal on Escape key
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        const shareModal = document.getElementById('share-modal');
+        if (shareModal && !shareModal.classList.contains('hidden')) {
+            shareModal.classList.add('hidden');
+        }
+    }
+});
+
 function copyShareLink() {
     const shareUrlInput = document.getElementById('share-url-input');
     if (shareUrlInput) {

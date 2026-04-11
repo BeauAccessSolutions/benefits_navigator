@@ -58,17 +58,27 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
-      - name: Install dependencies
+      - name: Install Python dependencies
         run: |
           pip install -r requirements.txt
+
+      - name: Install Node dependencies and build Tailwind CSS
+        run: |
+          npm ci
+          npm run build
 
       - name: Run migrations
         run: |
           python manage.py migrate --noinput
 
+      - name: Lint
+        run: |
+          ruff check .
+          black --check .
+
       - name: Run tests
         run: |
-          pytest --cov=. --cov-report=xml -x -q
+          pytest --cov=. --cov-report=xml --cov-fail-under=60 -x -q --ignore=tests/e2e
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4

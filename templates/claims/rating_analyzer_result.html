@@ -21,7 +21,11 @@
     <div id="status-container"
          hx-get="{% url 'claims:rating_analyzer_status' document.pk %}"
          hx-trigger="{% if document.is_processing %}load, every 5s{% endif %}"
-         hx-swap="innerHTML">
+         hx-swap="innerHTML"
+         role="status"
+         aria-live="polite"
+         aria-atomic="false"
+         tabindex="-1">
         {% include 'claims/partials/rating_analyzer_status.html' %}
     </div>
 
@@ -171,6 +175,34 @@
             </div>
             {% endif %}
         </div>
+
+        <!-- Supportive messaging when combined rating is 0% or no increase opportunities found -->
+        {% if analysis.combined_rating == 0 %}
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-5">
+            <div class="flex items-start gap-3">
+                <svg class="w-5 h-5 text-blue-600 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                </svg>
+                <div>
+                    <p class="font-semibold text-blue-900 mb-1">A 0% rating doesn't mean your service doesn't count.</p>
+                    <p class="text-sm text-blue-800 mb-2">The VA assigns 0% for conditions that are service-connected but not currently disabling enough for compensation. You may still be eligible for VA healthcare, and you can file a new claim if your condition worsens. Secondary conditions and TDIU may also apply.</p>
+                    <p class="text-sm text-blue-800">
+                        <a href="https://www.va.gov/vso/" target="_blank" rel="noopener noreferrer" class="font-medium underline">Find a VSO near you</a>
+                        — free, accredited help navigating your options.
+                    </p>
+                </div>
+            </div>
+        </div>
+        {% elif not analysis.increase_opportunities and not analysis.rating_errors %}
+        <div class="bg-green-50 border border-green-200 rounded-lg p-4">
+            <div class="flex items-start gap-3">
+                <svg class="w-5 h-5 text-green-600 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                </svg>
+                <p class="text-sm text-green-800">No obvious increase opportunities were found in this document. That said, secondary conditions, TDIU eligibility, and future worsening can all affect your rating. A VSO can review your full claims file for anything this analysis may have missed.</p>
+            </div>
+        </div>
+        {% endif %}
 
         <!-- Deadline Tracker -->
         {% if analysis.deadline_tracker %}
