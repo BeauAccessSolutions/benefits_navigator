@@ -10,6 +10,19 @@ Complete documentation for the VA Benefits Navigator project.
 - **[CONTENT_PROMPTS.md](./CONTENT_PROMPTS.md)** - Ready-to-use prompts for generating guides and glossary content
 - **[TROUBLESHOOTING.md](./TROUBLESHOOTING.md)** - Common issues and solutions
 
+## Operations & Security
+
+- **[FAILURE_TRACKING.md](./FAILURE_TRACKING.md)** - Querying, triaging, and replaying `ProcessingFailure` records
+- **[PHI_DATA_FLOW.md](./PHI_DATA_FLOW.md)** - Where PHI/PII travels, what is persisted vs ephemeral, encryption boundaries
+- **[CAPACITY_SCALING.md](./CAPACITY_SCALING.md)** - When and how to scale workers, web, and database on DigitalOcean
+- **[INCIDENT_RESPONSE.md](./INCIDENT_RESPONSE.md)** - Severity levels, escalation paths, runbooks, post-mortem template
+- **[security-invariants.md](./security-invariants.md)** - Automated enforcement of PHI/PII protections
+
+## Architecture Decision Records
+
+- **[adr/001-celery-retry-strategy.md](./adr/001-celery-retry-strategy.md)** - 3-retry/exponential-backoff decision, no-DLQ trade-offs
+- **[adr/002-ai-consent-model.md](./adr/002-ai-consent-model.md)** - Dual-check AI consent pattern (view + task layer)
+
 ## When to Use Each Document
 
 ### Starting a New Session?
@@ -26,6 +39,18 @@ Complete documentation for the VA Benefits Navigator project.
 
 ### Encountering an Error?
 → Check **[TROUBLESHOOTING.md](./TROUBLESHOOTING.md)** first
+
+### Document processing task failed?
+→ See **[FAILURE_TRACKING.md](./FAILURE_TRACKING.md)** to query, triage, and replay
+
+### Production incident?
+→ See **[INCIDENT_RESPONSE.md](./INCIDENT_RESPONSE.md)** for runbooks and escalation
+
+### Scaling workers or hitting memory limits?
+→ See **[CAPACITY_SCALING.md](./CAPACITY_SCALING.md)**
+
+### PHI/compliance question?
+→ See **[PHI_DATA_FLOW.md](./PHI_DATA_FLOW.md)** and **[security-invariants.md](./security-invariants.md)**
 
 ## Document Details
 

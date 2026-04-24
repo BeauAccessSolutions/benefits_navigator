@@ -47,6 +47,6 @@ Risk Register (Top 10)
    - Mitigation: Add startup health check for dependencies, fail fast with clear admin alert, and provide graceful fallback (extension + content_type) until fixed.
 
 10) Limited automated test coverage for critical flows  
-    - Files: tests focus on `agents/tests.py`; minimal coverage for claims uploads/tasks, VSO permissions, invitations, GraphQL, or Celery pipelines.  
-    - Issue: Regression risk in core Path A/B flows and AI consent/permissions; no end-to-end checks for background tasks.  
-    - Mitigation: Add tests for claims upload → task dispatch, VSO access control, invitation acceptance, and OpenAI wrapper mocks; include contract tests for GraphQL resolvers and HTMX endpoints.
+   - Files: tests focus on `agents/tests.py`; minimal coverage for claims uploads/tasks, VSO permissions, invitations, GraphQL, or Celery pipelines.  
+   - Issue: Regression risk in core Path A/B flows and AI consent/permissions; no end-to-end checks for background tasks.  
+   - Mitigation: Add tests for claims upload → task dispatch, VSO access control, invitation acceptance, and OpenAI wrapper mocks; include contract tests for GraphQL resolvers and HTMX endpoints.

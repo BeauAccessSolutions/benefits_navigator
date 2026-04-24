@@ -1,7 +1,7 @@
 # VA Benefits Navigator — TODO & Audit Tracker
 
-**Last Updated:** 2026-02-11
-**Updated By:** Claude Code P0 Fix Session
+**Last Updated:** 2026-03-26
+**Updated By:** Claude Code System Design & Documentation Session
 
 ---
 
@@ -154,6 +154,19 @@ All P1 code fixes completed 2026-02-11.
 - [ ] Add usage analytics (privacy-respecting)
 - [ ] Create admin dashboard with stats
 - [ ] Add daily alert for documents stuck in 'failed' status >24 hours
+- [ ] Schedule `run_all_monitoring_checks` as Celery Beat task (every 5 min) — currently must be called manually
+
+### Infrastructure (from 2026-03-26 system design audit)
+- [ ] **Upgrade Celery worker to `basic-xs` (1GB RAM)** — basic-xxs (512MB) is undersized for concurrent OCR+LLM; OOM risk at concurrency=2
+- [ ] **Add `replay_failed_tasks` management command** — manual shell replay is the only option today; see `docs/FAILURE_TRACKING.md`
+- [ ] **Add task idempotency check** — tasks don't guard against duplicate execution on worker restart; add existence check at task start
+- [ ] **Add circuit breaker on OpenAI calls** — sustained OpenAI outage floods queue with retries; gateway has backoff but no global shed
+
+### Documentation (P2 — remaining gaps)
+- [ ] **API contract docs** — GraphQL schema + REST v1 endpoints undocumented for consumers
+- [ ] **Celery task catalog** — all tasks, schedules, retry configs, and inter-task dependencies in one place
+- [ ] **Security runbook** — prompt injection response playbook, anomalous download investigation steps (referenced in INCIDENT_RESPONSE but not written)
+- [ ] **VSO onboarding guide** — invitation flow, org permissions model, case sharing mechanics
 
 ---
 
@@ -263,6 +276,15 @@ All P1 code fixes completed 2026-02-11.
 - [x] Switch to DO Managed Valkey (2026-02-05)
 - [x] CELERY_RESULT_EXPIRES auto-cleanup (2026-02-05)
 - [x] Celery Beat monitoring tasks scheduled (2026-02-09)
+
+### Documentation ✅ (2026-03-26)
+- [x] System design evaluation — architecture gaps, failure tracking gaps, scaling risks identified
+- [x] `docs/FAILURE_TRACKING.md` — runbook for querying, triaging, and replaying ProcessingFailure records
+- [x] `docs/PHI_DATA_FLOW.md` — PHI/PII boundary map, what's ephemeral vs persisted, OpenAI data boundary
+- [x] `docs/adr/001-celery-retry-strategy.md` — retry/backoff/no-DLQ decision record
+- [x] `docs/adr/002-ai-consent-model.md` — dual-check consent pattern decision record
+- [x] `docs/CAPACITY_SCALING.md` — when/how to scale workers and web on DO, memory sizing rationale
+- [x] `docs/README.md` updated with all new docs and when-to-use guidance
 
 ---
 
