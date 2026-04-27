@@ -1,6 +1,6 @@
 # Django Core
-Django>=5.2.13
-django-environ==0.11.2
+Django>=6.0.4
+django-environ==0.13.0
 psycopg2-binary==2.9.9
 python-decouple==3.8
 
@@ -11,13 +11,13 @@ dj-database-url==2.1.0
 celery==5.3.6
 redis==5.0.1
 flower==2.0.1
-django-celery-beat>=2.7.0
+django-celery-beat>=2.9.0
 
 # File Storage & Processing
 Pillow>=10.3.0
 python-magic==0.4.27
 boto3==1.34.34
-django-storages==1.14.2
+django-storages==1.14.6
 
 # OCR
 pytesseract==0.3.10
@@ -34,34 +34,34 @@ stripe==4.2.0
 dj-stripe==2.8.3
 
 # Django Workflow
-django-viewflow==2.2.3
+django-viewflow==2.2.15
 django-material==1.12.0
 
 # Frontend & Templates
-django-htmx==1.17.2
-django-widget-tweaks==1.5.0
+django-htmx==1.27.0
+django-widget-tweaks==1.5.1
 
 # Static Files
 whitenoise==6.6.0
 
 # Forms & Validation
-django-crispy-forms==2.1
+django-crispy-forms==2.6
 crispy-tailwind==0.5.0
 
 # Security & Authentication
-django-allauth>=65.13.0
-django-allauth-2fa==0.11.1
-django-otp==1.3.0
+django-allauth>=65.16.1
+django-allauth-2fa==0.12.0
+django-otp==1.7.0
 qrcode==7.4.2
 django-ratelimit==4.1.0
-django-csp==3.8
+django-csp==4.0
 argon2-cffi==23.1.0
 cryptography>=42.0.0
 
 # API & Utilities
 requests>=2.32.4
 python-dateutil==2.8.2
-djangorestframework==3.16.1
+djangorestframework==3.17.1
 djangorestframework-simplejwt==5.5.1
 django-cors-headers==4.9.0
 
@@ -84,7 +84,7 @@ pre-commit==3.6.0
 sentry-sdk>=2.8.0
 
 # Utilities
-django-extensions==3.2.3
+django-extensions==4.1
 python-slugify==8.0.4
 
 # PDF Generation
