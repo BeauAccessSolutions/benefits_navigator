@@ -28,6 +28,9 @@ urlpatterns = [
     path('feedback/submit/', views.submit_feedback, name='submit_feedback'),
     path('feedback/form/', views.feedback_form, name='feedback_form'),
 
+    # Data Activity (access transparency)
+    path('data-activity/', views.data_activity, name='data_activity'),
+
     # Support/Contact
     path('contact/', views.contact, name='contact'),
     path('contact/success/', views.contact_success, name='contact_success'),

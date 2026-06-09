@@ -172,6 +172,8 @@
             <h2 id="sharing-heading" class="text-lg font-medium text-gray-900 mb-2">Shared With</h2>
             <p class="text-sm text-gray-500 mb-4">
                 You control who can see this document. Revoking access takes effect immediately.
+                <a href="{% url 'core:data_activity' %}" class="text-blue-600 hover:text-blue-800 underline">
+                    See who's viewed your records</a>.
             </p>
             <ul class="divide-y divide-gray-200">
                 {% for share in active_shares %}

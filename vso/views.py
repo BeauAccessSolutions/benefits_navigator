@@ -575,6 +575,15 @@ def case_detail(request, pk):
         organization=org
     )
 
+    # Surfaced to the veteran on their data-activity page
+    AuditLog.log(
+        action='vso_case_view',
+        request=request,
+        resource_type='VeteranCase',
+        resource_id=case.pk,
+        details={'veteran_id': case.veteran_id, 'organization_id': org.pk},
+    )
+
     # Get related data
     notes = case.notes.select_related('author').order_by('-created_at')
     shared_docs = case.shared_documents.select_related('document', 'shared_by')
@@ -870,6 +879,21 @@ def shared_document_review(request, pk, doc_pk):
     org = get_user_organization(request.user, request=request)
     case = get_object_or_404(VeteranCase, pk=pk, organization=org)
     shared_doc = get_object_or_404(SharedDocument, pk=doc_pk, case=case)
+
+    # Surfaced to the veteran on their data-activity page
+    AuditLog.log(
+        action='vso_document_review',
+        request=request,
+        resource_type='Document',
+        resource_id=shared_doc.document_id,
+        details={
+            'event': 'review_saved' if request.method == 'POST' else 'viewed',
+            'case_id': case.pk,
+            'veteran_id': case.veteran_id,
+            'organization_id': org.pk,
+            'include_ai_analysis': shared_doc.include_ai_analysis,
+        },
+    )
 
     if request.method == 'POST':
         # Archived cases are read-only
