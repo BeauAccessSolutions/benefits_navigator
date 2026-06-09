@@ -45,7 +45,7 @@ class User(AbstractUser):
     Uses email as the primary identifier instead of username
     """
     email = models.EmailField('Email address', unique=True)
-    phone_number = models.CharField('Phone number', max_length=20, blank=True)
+    phone_number = EncryptedCharField('Phone number', max_length=255, blank=True)
     is_verified = models.BooleanField('Email verified', default=False)
     stripe_customer_id = models.CharField('Stripe customer ID', max_length=255, blank=True)
 

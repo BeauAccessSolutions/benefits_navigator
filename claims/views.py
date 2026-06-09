@@ -543,6 +543,7 @@ def document_view_inline(request, pk):
 # Signed URL Access (Token-based, no session required)
 # =============================================================================
 
+@ratelimit(key='ip', rate='30/m', method='GET', block=True)
 @require_http_methods(["GET"])
 def document_download_signed(request, token):
     """
@@ -625,6 +626,7 @@ def document_download_signed(request, token):
     return response
 
 
+@ratelimit(key='ip', rate='30/m', method='GET', block=True)
 @require_http_methods(["GET"])
 def document_view_signed(request, token):
     """

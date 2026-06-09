@@ -352,8 +352,8 @@ def case_list(request):
             Q(title__icontains=search_query) |
             Q(veteran__email__icontains=search_query) |
             Q(veteran__first_name__icontains=search_query) |
-            Q(veteran__last_name__icontains=search_query) |
-            Q(description__icontains=search_query)
+            Q(veteran__last_name__icontains=search_query)
+            # description is encrypted at rest — not searchable via icontains
         )
 
     # Ordering
