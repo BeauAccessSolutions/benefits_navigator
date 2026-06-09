@@ -1,7 +1,46 @@
 # VA Benefits Navigator — TODO & Audit Tracker
 
-**Last Updated:** 2026-03-26
-**Updated By:** Claude Code System Design & Documentation Session
+**Last Updated:** 2026-06-09
+**Updated By:** Claude Code Comprehensive Audit (see `audits/2026-06-09/comprehensive-audit.md`)
+
+---
+
+## Audit Summary (2026-06-09)
+
+Tier 1 scans + 7-specialist review. Overall **3.4/5** (up from 2.9/5 on 2026-04-10). Verdict: SHIP WITH CAVEATS — **do not deploy until P0 below is fixed**. Full findings, evidence, and delta: `audits/2026-06-09/comprehensive-audit.md`.
+
+### P0 — NEW (Deploy-blocking)
+- [ ] **Add `django.contrib.postgres` to INSTALLED_APPS** — `benefits_navigator/settings.py:86`. `documentation` models use SearchVectorField/GinIndex; `manage.py check`/`migrate` fail with postgres.E005 ×3, so the DO pre-deploy migrate job will fail. One-line fix; then add `python manage.py check --deploy` to CI.
+
+### P1 — NEW (Fix within 1–2 weeks)
+- [ ] **Rate-limit signed-URL endpoints** — `claims/views.py:547,629` have no throttle (unauthenticated token-validated views). Add `@ratelimit(key='ip', rate='30/m')`.
+- [ ] **Encrypt `phone_number`** — `accounts/models.py:48` is plaintext PII. Migrate to `EncryptedCharField`.
+- [ ] **Bump lxml to >=6.1.0** — 5.1.0 has PYSEC-2026-87; parses scraped M21 HTML.
+- [ ] **Disclaimers on remaining AI pages** — statement_generator, condition_discovery, evidence_gap_result templates (decision analyzer pattern exists).
+- [ ] **WCAG: 5 aria-required + 10+ aria-live gaps** — contact.html:47,60,89,102, decision_analyzer.html:38; HTMX targets in search/journey/appeals/claims partials.
+- [ ] **N+1 in VSO views** — `vso/views.py:365-370` (triage per case), `:430-445` (CSV export), `:1407-1468` (reports). select_related/prefetch/annotate.
+- [ ] **transaction.atomic on accept_invitation** — `vso/views.py:1245-1280` (3 writes, no boundary).
+- [ ] **Security tests: signed-URL expiry/tampering + encryption round-trip + GraphQL PII redaction** — currently zero coverage on these paths.
+
+### P2 — NEW (Fix before scaling)
+- [ ] M21 scraper tasks lack acks_late/retry config — `agents/tasks.py:23,86,186,197,222`
+- [ ] `core/health.py:77` except/pass hides Redis failure (queue alerts can't fire when Redis is down)
+- [ ] Download-anomaly alerts include user email — `core/alerting.py:348` (use user ID)
+- [ ] No per-user token-spend cap — `accounts/models.py:895` counts analyses, not tokens
+- [ ] `exc_info=True` may leak PII into logs — `agents/ai_gateway.py:400`
+- [ ] Silent except/pass handlers — `core/views.py:711,719`, `api/views.py:65,165,177,230`, `claims/forms.py:83` (audit-log write failures swallowed)
+- [ ] `mark_safe` on DB content — `core/templatetags/supportive_tags.py:78` (use format_html/escape)
+- [ ] bandit High: use `hashlib.md5(key, usedforsecurity=False)` — `core/encryption.py:79`
+- [ ] Enforce bandit in CI (currently `continue-on-error: true`, security-checks.yml:141); ratchet coverage floor above 60
+- [ ] "(estimated)" label on rates table — `rating_calculator.html:170-180` (also verify year label isn't hardcoded "2024")
+- [ ] Supplemental appeal: render "No deadline (can file anytime)" instead of "—" — `appeal_detail.html:99-100`
+- [ ] HTMX focus management after swaps (carried over from 2026-04-10, still zero instances)
+- [ ] JWT refresh lifetime 7d → consider 24-48h — `settings.py:724`
+- [ ] CLAUDE.md drift: route table app attribution; FEATURES lists 6 of 14 flags; archive stale root docs to docs/archive/
+- [ ] conftest guard/dummy key so `agents/tests.py` doesn't need real env var locally (6 tests fail without OPENAI_API_KEY)
+
+### Fixed since 2026-04-10 (verified this audit)
+Download endpoint rate limits, consent-check logging (fails closed), CI coverage gate (60) + lint gate (ruff/black), acks_late on core tasks, stuck-task detection, replay_failed_documents command, Beat placement docs, Django >=5.2.13, aria-required 21→5, decision-analyzer disclaimer, rating-result "(est.)" labels.
 
 ---
 
