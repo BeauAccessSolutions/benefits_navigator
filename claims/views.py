@@ -126,8 +126,13 @@ def document_detail(request, pk):
         is_deleted=False
     )
 
+    active_shares = document.case_shares.select_related(
+        'case__organization'
+    ).order_by('-shared_at')
+
     context = {
         'document': document,
+        'active_shares': active_shares,
     }
 
     return render(request, 'claims/document_detail.html', context)
@@ -928,3 +933,57 @@ def document_share(request, pk):
     }
 
     return render(request, 'claims/document_share.html', context)
+
+
+@login_required
+@require_http_methods(["POST"])
+def document_unshare(request, pk, share_pk):
+    """
+    Revoke a document share with a VSO.
+
+    Veterans control sharing in both directions: the SharedDocument row is
+    deleted (the VSO loses access immediately) and the revocation is
+    audit-logged. VSO-authored case notes are unaffected.
+    """
+    from vso.models import SharedDocument
+
+    document = get_object_or_404(
+        Document,
+        pk=pk,
+        user=request.user,
+        is_deleted=False
+    )
+
+    shared_doc = get_object_or_404(
+        SharedDocument,
+        pk=share_pk,
+        document=document,
+        document__user=request.user,
+    )
+
+    case = shared_doc.case
+    details = {
+        'document_id': document.pk,
+        'case_id': case.pk,
+        'organization_id': case.organization.pk,
+        'was_shared_at': shared_doc.shared_at.isoformat(),
+    }
+
+    shared_doc.delete()
+
+    AuditLog.log(
+        action='vso_document_unshare',
+        request=request,
+        resource_type='SharedDocument',
+        resource_id=share_pk,
+        details=details,
+        success=True
+    )
+
+    messages.success(
+        request,
+        f'Sharing revoked. {case.organization.name} no longer has access '
+        f'to this document.'
+    )
+
+    return redirect('claims:document_detail', pk=pk)

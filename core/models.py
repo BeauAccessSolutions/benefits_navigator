@@ -398,6 +398,7 @@ class AuditLog(models.Model):
         ('vso_case_view', 'Case Viewed'),
         ('vso_case_update', 'Case Updated'),
         ('vso_document_share', 'Document Shared'),
+        ('vso_document_unshare', 'Document Sharing Revoked'),
         ('vso_document_review', 'Document Reviewed'),
         ('vso_analysis_share', 'Analysis Shared'),
         ('vso_analysis_view', 'Analysis Viewed'),
