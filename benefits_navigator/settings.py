@@ -93,6 +93,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'django.contrib.sites',
     'django.contrib.sitemaps',
+    'django.contrib.postgres',  # SearchVectorField/GinIndex in documentation app
 
     # Third-party apps
     'django_htmx',

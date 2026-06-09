@@ -67,6 +67,10 @@ jobs:
           npm ci
           npm run build
 
+      - name: Django system checks (deploy)
+        run: |
+          python manage.py check --deploy --fail-level ERROR
+
       - name: Run migrations
         run: |
           python manage.py migrate --noinput
