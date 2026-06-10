@@ -79,7 +79,7 @@ Not code, but the deliverable marketing actually ships on.
 | 2 — Access transparency | 1–2 days | "See everyone who's viewed your records" | ✅ Done 2026-06-09 |
 | 3 — Least privilege + exports | 2–3 days | B2B security questionnaires | ✅ Done 2026-06-09 |
 | 4 — Operator minimization | 1–2 days | "Operator access is logged and minimized" | ✅ Done 2026-06-09 (set ADMIN_OTP_REQUIRED=True in prod after superusers enroll TOTP) |
-| 5 — Policy/claims register | drafting | Marketing copy itself | Pending |
+| 5 — Policy/claims register | drafting | Marketing copy itself | ✅ Drafted 2026-06-09 — docs/TRUST.md live; TERMS_DRAFT.md + PRIVACY_POLICY_DRAFT.md awaiting counsel review |
 
 Total: roughly **6–10 dev-days**. Phases 1+2 are the marketing-differentiating pair; 0 is non-negotiable; 3–4 can land after launch if pilot orgs are trusted, but before any self-serve org signup.
 
