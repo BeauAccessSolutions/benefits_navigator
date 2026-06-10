@@ -3,11 +3,13 @@ Django admin configuration for claims app
 """
 
 from django.contrib import admin
+
+from core.admin import PIIRedactedAdminMixin
 from .models import Document, Claim
 
 
 @admin.register(Document)
-class DocumentAdmin(admin.ModelAdmin):
+class DocumentAdmin(PIIRedactedAdminMixin, admin.ModelAdmin):
     """Admin for Document model"""
     list_display = ['file_name', 'user', 'document_type', 'status', 'file_size_mb', 'page_count', 'created_at']
     list_filter = ['status', 'document_type', 'created_at']
@@ -31,7 +33,8 @@ class DocumentAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         }),
         ('AI Analysis', {
-            'fields': ('ai_summary', 'ai_model_used', 'ai_tokens_used'),
+            # ai_summary removed for PHI protection - metadata only
+            'fields': ('ai_model_used', 'ai_tokens_used'),
             'classes': ('collapse',)
         }),
         ('Timestamps', {

@@ -34,6 +34,11 @@ from accounts.views import (
 from .schema import schema
 from .sitemaps import sitemaps
 
+# Require a verified TOTP device for /admin when enabled (privacy plan Phase 4)
+if settings.ADMIN_OTP_REQUIRED:
+    from django_otp.admin import OTPAdminSite
+    admin.site.__class__ = OTPAdminSite
+
 urlpatterns = [
     # Health check for load balancers/monitoring
     path('health/', health_check, name='health_check'),

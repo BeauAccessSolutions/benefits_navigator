@@ -393,3 +393,44 @@ class ProcessingFailureAdmin(admin.ModelAdmin):
         for failure in queryset:
             if not failure.alert_sent:
                 failure.send_alert()
+
+
+class PIIRedactedAdminMixin:
+    """
+    Operator access minimization (privacy plan Phase 4).
+
+    - Set `pii_redacted_fields` to hide PII fields from admin forms on
+      models without explicit fieldsets (uses get_exclude). Admins with
+      fieldsets must simply omit PII fields from them.
+    - Every admin change/history view writes an AuditLog row, so operator
+      access to veteran records appears in the same ledger veterans see
+      on /data-activity/ (for Document and VeteranCase resource types).
+    """
+
+    pii_redacted_fields = ()
+    audit_resource_type = None  # defaults to the model class name
+
+    def get_exclude(self, request, obj=None):
+        exclude = super().get_exclude(request, obj) or ()
+        return tuple(exclude) + tuple(self.pii_redacted_fields)
+
+    def change_view(self, request, object_id, form_url='', extra_context=None):
+        self._log_admin_access(request, object_id, 'admin_change_view')
+        return super().change_view(request, object_id, form_url, extra_context)
+
+    def history_view(self, request, object_id, extra_context=None):
+        self._log_admin_access(request, object_id, 'admin_history_view')
+        return super().history_view(request, object_id, extra_context)
+
+    def _log_admin_access(self, request, object_id, event):
+        try:
+            resource_id = int(object_id)
+        except (TypeError, ValueError):
+            resource_id = None
+        AuditLog.log(
+            action='admin_action',
+            request=request,
+            resource_type=self.audit_resource_type or self.model.__name__,
+            resource_id=resource_id,
+            details={'event': event, 'model': self.model._meta.label},
+        )
