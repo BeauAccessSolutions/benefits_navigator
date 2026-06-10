@@ -23,7 +23,8 @@ from .models import (
 )
 from .permissions import (
     Roles, has_role, is_vso_staff as check_vso_staff,
-    get_user_organization_membership, vso_staff_required
+    get_user_organization_membership, vso_staff_required,
+    member_is_org_admin, scope_cases_for_member
 )
 from .services import GapCheckerService
 from appeals.models import Appeal
@@ -203,8 +204,10 @@ def dashboard(request):
         messages.error(request, "Please select an organization to continue.")
         return redirect('vso:select_organization')
 
-    # Get all cases for this organization
-    cases = VeteranCase.objects.filter(organization=org)
+    # Get all cases for this organization (least-privilege scoped)
+    cases = scope_cases_for_member(
+        request.user, org, VeteranCase.objects.filter(organization=org)
+    )
 
     # Case counts by status
     status_counts = cases.values('status').annotate(count=Count('id'))
@@ -317,6 +320,7 @@ def case_list(request):
         organization=org,
         is_archived=False
     ).select_related('veteran', 'assigned_to')
+    cases = scope_cases_for_member(request.user, org, cases)
 
     # Filtering
     status_filter = request.GET.get('status')
@@ -415,13 +419,38 @@ def case_list(request):
 
 
 def _export_cases_csv(cases, request=None, org=None):
-    """Export cases to CSV format with audit logging."""
+    """
+    Export cases to CSV format with audit logging.
+
+    Bulk export is a privilege, not a default: org admins only,
+    rate-limited, ops-alerted, and without veteran emails in the output.
+    """
+    from django_ratelimit.core import is_ratelimited
+
+    if request is not None and org is not None:
+        if not member_is_org_admin(request.user, org):
+            messages.error(
+                request,
+                'Bulk export is limited to organization administrators.'
+            )
+            return redirect('vso:case_list')
+
+        if is_ratelimited(
+            request, group='vso_case_export', key='user',
+            rate='5/h', increment=True,
+        ):
+            messages.error(
+                request,
+                'Export limit reached (5 per hour). Please try again later.'
+            )
+            return redirect('vso:case_list')
+
     response = HttpResponse(content_type='text/csv')
     response['Content-Disposition'] = 'attachment; filename="cases_export.csv"'
 
     writer = csv.writer(response)
     writer.writerow([
-        'Case Title', 'Veteran Email', 'Veteran Name', 'Status', 'Priority',
+        'Case Title', 'Veteran Name', 'Status', 'Priority',
         'Assigned To', 'Triage Status', 'Days Open', 'Intake Date',
         'Initial Rating', 'Final Rating', 'Conditions Count'
     ])
@@ -431,7 +460,6 @@ def _export_cases_csv(cases, request=None, org=None):
         case_ids.append(case.pk)
         writer.writerow([
             case.title,
-            case.veteran.email,
             case.veteran.get_full_name() or '',
             case.get_status_display(),
             case.get_priority_display(),
@@ -460,6 +488,22 @@ def _export_cases_csv(cases, request=None, org=None):
                 'organization': org.slug if org else None,
                 'format': 'csv',
             }
+        )
+
+        # Ops visibility: bulk pulls of veteran data should never be silent
+        from core.alerting import AlertSeverity, send_alert
+        send_alert(
+            title="VSO Bulk Case Export",
+            message=(
+                f"User id={request.user.pk} exported {len(case_ids)} cases "
+                f"from org '{org.slug if org else 'unknown'}'"
+            ),
+            severity=AlertSeverity.INFO,
+            details={
+                'user_id': request.user.pk,
+                'case_count': len(case_ids),
+                'organization': org.slug if org else None,
+            },
         )
 
     return response
@@ -570,7 +614,11 @@ def case_detail(request, pk):
         return redirect('vso:dashboard')
 
     case = get_object_or_404(
-        VeteranCase.objects.select_related('veteran', 'assigned_to', 'organization'),
+        scope_cases_for_member(
+            request.user,
+            org,
+            VeteranCase.objects.select_related('veteran', 'assigned_to', 'organization'),
+        ),
         pk=pk,
         organization=org
     )
@@ -1404,8 +1452,11 @@ def reports(request):
         messages.error(request, "Please select an organization to continue.")
         return redirect('vso:select_organization')
 
-    # Get all cases for this organization (excluding archived)
-    cases = VeteranCase.objects.filter(organization=org, is_archived=False)
+    # Get all cases for this organization (excluding archived, least-privilege scoped)
+    cases = scope_cases_for_member(
+        request.user, org,
+        VeteranCase.objects.filter(organization=org, is_archived=False)
+    )
 
     # --- Cases by Status ---
     status_breakdown = list(
