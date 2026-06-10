@@ -663,33 +663,36 @@ class TestStatementGeneratorViews:
 class TestDecisionLetterAnalyzerService(TestCase):
     """Tests for the DecisionLetterAnalyzer service."""
 
-    @patch('agents.services.OpenAI')
-    def test_analyzer_initialization(self, mock_openai):
-        """DecisionLetterAnalyzer can be initialized."""
+    def test_analyzer_initialization(self):
+        """DecisionLetterAnalyzer can be initialized without an API key
+        (client construction is lazy — only real calls need credentials)."""
         from agents.services import DecisionLetterAnalyzer
         analyzer = DecisionLetterAnalyzer()
         self.assertIsNotNone(analyzer)
 
-    @patch('agents.services.OpenAI')
-    def test_analyzer_analyze_mocked(self, mock_openai):
-        """DecisionLetterAnalyzer analyzes text with mocked OpenAI."""
+    @patch('agents.ai_gateway.Anthropic')
+    def test_analyzer_analyze_mocked(self, mock_anthropic):
+        """DecisionLetterAnalyzer analyzes text with mocked Claude client."""
         from agents.services import DecisionLetterAnalyzer
 
-        # Mock response
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = json.dumps({
+        block = MagicMock()
+        block.type = "text"
+        block.text = json.dumps({
             'granted': [{'condition': 'Tinnitus', 'rating': 10}],
             'denied': [{'condition': 'PTSD', 'reason': 'No nexus'}],
             'deferred': [],
             'summary': 'Test summary',
             'appeal_options': [],
         })
-        mock_response.usage.total_tokens = 1000
+        mock_response = MagicMock()
+        mock_response.content = [block]
+        mock_response.stop_reason = "end_turn"
+        mock_response.usage.input_tokens = 600
+        mock_response.usage.output_tokens = 400
 
         mock_client = MagicMock()
-        mock_client.chat.completions.create.return_value = mock_response
-        mock_openai.OpenAI.return_value = mock_client
+        mock_client.messages.create.return_value = mock_response
+        mock_anthropic.return_value = mock_client
 
         analyzer = DecisionLetterAnalyzer()
         # Service should be callable
@@ -698,8 +701,7 @@ class TestDecisionLetterAnalyzerService(TestCase):
 class TestEvidenceGapAnalyzerService(TestCase):
     """Tests for the EvidenceGapAnalyzer service."""
 
-    @patch('agents.services.OpenAI')
-    def test_gap_analyzer_initialization(self, mock_openai):
+    def test_gap_analyzer_initialization(self):
         """EvidenceGapAnalyzer can be initialized."""
         from agents.services import EvidenceGapAnalyzer
         analyzer = EvidenceGapAnalyzer()
@@ -709,8 +711,7 @@ class TestEvidenceGapAnalyzerService(TestCase):
 class TestPersonalStatementGeneratorService(TestCase):
     """Tests for the PersonalStatementGenerator service."""
 
-    @patch('agents.services.OpenAI')
-    def test_generator_initialization(self, mock_openai):
+    def test_generator_initialization(self):
         """PersonalStatementGenerator can be initialized."""
         from agents.services import PersonalStatementGenerator
         generator = PersonalStatementGenerator()
@@ -737,8 +738,7 @@ class TestDenialDecoderService(TestCase):
             content="Service connection requirements...",
         )
 
-    @patch('agents.services.OpenAI')
-    def test_decoder_initialization(self, mock_openai):
+    def test_decoder_initialization(self):
         """DenialDecoderService can be initialized."""
         from agents.services import DenialDecoderService
         service = DenialDecoderService()

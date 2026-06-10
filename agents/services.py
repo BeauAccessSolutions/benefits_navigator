@@ -13,8 +13,6 @@ from decimal import Decimal
 from typing import Optional
 from django.conf import settings
 
-from openai import OpenAI
-
 # Import from the centralized AI gateway
 from .ai_gateway import (
     get_gateway,
@@ -64,23 +62,27 @@ class BaseAgent:
         # Use the centralized AI gateway
         self._gateway = get_gateway()
         # Keep legacy attributes for backwards compatibility
-        self.client = self._gateway.client
         self.model = self._gateway.config.model
         self.max_tokens = self._gateway.config.max_tokens
 
+    @property
+    def client(self):
+        """Legacy accessor — lazy so constructing an agent never requires
+        ANTHROPIC_API_KEY (only actual API calls do)."""
+        return self._gateway.client
+
     def _call_openai(self, system_prompt: str, user_prompt: str, temperature: float = 0.3) -> tuple[str, int]:
         """
-        Make OpenAI API call and return response with token count.
-        Lower temperature for more consistent, factual responses.
+        Make an AI completion call and return response with token count.
 
-        NOTE: This method is maintained for backwards compatibility.
-        It raises exceptions on error. For new code, use _call_openai_safe()
-        which returns Result types.
+        NOTE: Name kept for backwards compatibility — calls now go to the
+        Claude API via the gateway. It raises exceptions on error. For new
+        code, use _call_openai_safe() which returns Result types.
         """
         result = self._call_openai_safe(system_prompt, user_prompt, temperature)
         if result.is_failure:
             # Preserve existing behavior: raise on error
-            raise Exception(f"OpenAI API error: {result.error.message}")
+            raise Exception(f"AI API error: {result.error.message}")
         return result.value.content, result.value.tokens_used
 
     def _call_openai_safe(

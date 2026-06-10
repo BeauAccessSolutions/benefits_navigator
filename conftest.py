@@ -665,52 +665,69 @@ def m21_section(db):
 # MOCKS FOR EXTERNAL SERVICES
 # =============================================================================
 
+def _mock_anthropic_message(text='{"test": "data"}', input_tokens=60, output_tokens=40):
+    """Build a MagicMock shaped like an anthropic Message response."""
+    block = MagicMock()
+    block.type = "text"
+    block.text = text
+
+    response = MagicMock()
+    response.content = [block]
+    response.stop_reason = "end_turn"
+    response.usage = MagicMock()
+    response.usage.input_tokens = input_tokens
+    response.usage.output_tokens = output_tokens
+    return response
+
+
 @pytest.fixture
-def mock_openai():
-    """Mock OpenAI API responses."""
-    with patch('openai.OpenAI') as mock:
+def mock_anthropic():
+    """Mock Anthropic API responses (module-level client)."""
+    with patch('anthropic.Anthropic') as mock:
         mock_client = MagicMock()
         mock.return_value = mock_client
-
-        # Mock chat completion response
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = '{"summary": "Test analysis", "conditions": []}'
-        mock_response.usage.total_tokens = 500
-        mock_client.chat.completions.create.return_value = mock_response
-
+        mock_client.messages.create.return_value = _mock_anthropic_message(
+            '{"summary": "Test analysis", "conditions": []}', 300, 200
+        )
         yield mock_client
+
+
+# Backwards-compatible alias — older tests request mock_openai
+@pytest.fixture
+def mock_openai(mock_anthropic):
+    """Deprecated alias for mock_anthropic (provider switched 2026-06)."""
+    yield mock_anthropic
 
 
 @pytest.fixture
 def mock_ai_gateway():
     """Mock the AI gateway for tests.
 
-    This fixture patches the OpenAI client used by the AI gateway,
-    providing a consistent mock for all tests that use AI functionality.
+    Patches the Anthropic client used by the AI gateway, providing a
+    consistent mock for all tests that use AI functionality. Covers both
+    messages.create (complete) and messages.parse (complete_structured).
     """
-    with patch('agents.ai_gateway.OpenAI') as mock:
+    with patch('agents.ai_gateway.Anthropic') as mock:
         mock_client = MagicMock()
         mock.return_value = mock_client
 
-        # Default successful response
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = '{"test": "data"}'
-        mock_response.choices[0].finish_reason = "stop"
-        mock_response.usage = MagicMock()
-        mock_response.usage.total_tokens = 100
-        mock_client.chat.completions.create.return_value = mock_response
+        # Default successful raw completion
+        mock_client.messages.create.return_value = _mock_anthropic_message()
+
+        # Default successful structured completion: parsed_output is set
+        # per-test (a validated Pydantic instance), so leave a MagicMock
+        parse_response = _mock_anthropic_message()
+        mock_client.messages.parse.return_value = parse_response
 
         yield mock_client
 
 
 @pytest.fixture
 def ai_gateway(mock_ai_gateway):
-    """Get an AI gateway instance with mocked OpenAI client.
+    """Get an AI gateway instance with a mocked Anthropic client.
 
     Use this fixture when you need to test code that uses the AI gateway.
-    The OpenAI client is already mocked via the mock_ai_gateway fixture.
+    The Anthropic client is already mocked via the mock_ai_gateway fixture.
     """
     from agents.ai_gateway import AIGateway, GatewayConfig, reset_gateway
 

@@ -447,17 +447,22 @@ CRISPY_ALLOWED_TEMPLATE_PACKS = 'tailwind'
 CRISPY_TEMPLATE_PACK = 'tailwind'
 
 # ==============================================================================
-# OPENAI CONFIGURATION
+# ANTHROPIC (CLAUDE) CONFIGURATION
 # ==============================================================================
-OPENAI_API_KEY = env('OPENAI_API_KEY', default='')
-OPENAI_MODEL = env('OPENAI_MODEL', default='gpt-3.5-turbo')
-OPENAI_MAX_TOKENS = env.int('OPENAI_MAX_TOKENS', default=4000)
+# All Claude calls go through the AI Gateway (agents/ai_gateway.py).
+# Model can be overridden per-environment: claude-sonnet-4-6 and
+# claude-haiku-4-5 are cheaper tiers if cost requires it.
+ANTHROPIC_API_KEY = env('ANTHROPIC_API_KEY', default='')
+ANTHROPIC_MODEL = env('ANTHROPIC_MODEL', default='claude-opus-4-8')
+ANTHROPIC_MAX_TOKENS = env.int('ANTHROPIC_MAX_TOKENS', default=8192)
+# Adaptive thinking lets Claude decide when/how much to reason per request
+ANTHROPIC_ADAPTIVE_THINKING = env.bool('ANTHROPIC_ADAPTIVE_THINKING', default=True)
 
 # AI Gateway settings (timeout, retry, backoff)
-OPENAI_TIMEOUT_SECONDS = env.int('OPENAI_TIMEOUT_SECONDS', default=60)
-OPENAI_MAX_RETRIES = env.int('OPENAI_MAX_RETRIES', default=3)
-OPENAI_RETRY_BASE_DELAY = env.float('OPENAI_RETRY_BASE_DELAY', default=1.0)
-OPENAI_RETRY_MAX_DELAY = env.float('OPENAI_RETRY_MAX_DELAY', default=60.0)
+ANTHROPIC_TIMEOUT_SECONDS = env.int('ANTHROPIC_TIMEOUT_SECONDS', default=120)
+ANTHROPIC_MAX_RETRIES = env.int('ANTHROPIC_MAX_RETRIES', default=3)
+ANTHROPIC_RETRY_BASE_DELAY = env.float('ANTHROPIC_RETRY_BASE_DELAY', default=1.0)
+ANTHROPIC_RETRY_MAX_DELAY = env.float('ANTHROPIC_RETRY_MAX_DELAY', default=60.0)
 
 # ==============================================================================
 # STRIPE CONFIGURATION

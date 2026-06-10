@@ -3,7 +3,7 @@
 **Last Audit:** 2026-02-11 | **Production-Readiness:** 8.0/10 | See `TODO.md` for prioritized issues
 
 ## Project Summary
-Django 5.1.14 app deployed on DigitalOcean App Platform, using OpenAI API (GPT-3.5-turbo default).
+Django 5.1.14 app deployed on DigitalOcean App Platform, using the Anthropic Claude API (claude-opus-4-8 default; model env-configurable).
 Celery + Redis (DO Managed Valkey) for async document processing. PostgreSQL database. Stripe for subscriptions.
 
 **Two user flows:**
@@ -25,14 +25,14 @@ Celery + Redis (DO Managed Valkey) for async document processing. PostgreSQL dat
 ## How to work (required workflow)
 1. Find the exact entry points for Path A and Path B (routes/views/templates).
 2. Identify the boundary contract(s) between the paths and any shared modules.
-3. Use the **AI Gateway** (`agents/ai_gateway.py`) for all OpenAI calls:
+3. Use the **AI Gateway** (`agents/ai_gateway.py`) for all Claude calls:
    - `gateway.complete()` for raw completions
    - `gateway.complete_structured()` for Pydantic-validated responses
    - Returns `Result[T]` types — check `result.is_success` before accessing value
 4. Before changing logic, add tests:
    - path-level tests (URLs/views)
    - unit tests for eligibility/routing logic
-   - tests for OpenAI wrapper parsing/validation (mock model output)
+   - tests for the Claude wrapper parsing/validation (mock model output)
 5. After changes: run `pytest` and lint.
 
 ## Output requirements for every task
@@ -62,7 +62,7 @@ Celery + Redis (DO Managed Valkey) for async document processing. PostgreSQL dat
 
 ### Data Flow
 1. **Document Upload:** User uploads → `Document` model created → Celery task `process_document_task()` queued
-2. **Processing Pipeline:** OCR (Tesseract) → AI Analysis (OpenAI) → Results stored in `Document.ai_summary`
+2. **Processing Pipeline:** OCR (Tesseract) → AI Analysis (Claude) → Results stored in `Document.ai_summary`
 3. **Agent Tools:** User input → `BaseAgent._call_openai()` → Parsed JSON response → stored in agent-specific models
 
 ### Models Used
@@ -71,7 +71,7 @@ Celery + Redis (DO Managed Valkey) for async document processing. PostgreSQL dat
 - `core/models.py`: `JourneyStage`, `UserJourneyEvent`, `Milestone`
 - `accounts/models.py`: `UsageTracking`, `Subscription`
 
-### OpenAI Usage
+### Claude Usage
 - All calls go through **AI Gateway** (`agents/ai_gateway.py`)
 - `agents/services.py`: `DecisionLetterAnalyzer`, `DenialDecoderService`, `EvidenceGapAnalyzer`, `PersonalStatementGenerator`
 - `claims/services/ai_service.py`: Document analysis
@@ -109,9 +109,9 @@ Celery + Redis (DO Managed Valkey) for async document processing. PostgreSQL dat
 - `vso/models.py`: `VeteranCase`, `CaseNote`, `SharedDocument`, `SharedAnalysis`
 - `accounts/models.py`: `Organization`, `OrganizationMembership`, `OrganizationInvitation`
 
-### OpenAI Usage
+### Claude Usage
 - VSOs view shared AI analyses (read-only access to veteran's `DecisionLetterAnalysis`, `RatingAnalysis`, etc.)
-- No direct OpenAI calls from VSO views
+- No direct Claude calls from VSO views
 
 ### Outputs
 - Case dashboard with status metrics, priority cases, win rates
@@ -129,7 +129,7 @@ Celery + Redis (DO Managed Valkey) for async document processing. PostgreSQL dat
 | `core/encryption.py` | `EncryptedCharField`, `EncryptedDateField` for PII |
 | `core/middleware.py` | `AuditMiddleware` (logs sensitive operations), `SecurityHeadersMiddleware` |
 | `core/context_processors.py` | `user_usage()`, `feature_flags()`, `vso_access()` |
-| `agents/ai_gateway.py` | **AIGateway** — centralized OpenAI calls with retry, timeout, validation |
+| `agents/ai_gateway.py` | **AIGateway** — centralized Claude calls with retry, timeout, validation |
 | `agents/schemas.py` | Pydantic schemas for all AI response types |
 | `agents/services.py` | `BaseAgent` class — uses AIGateway internally |
 | `agents/m21_matcher.py` | M21 manual section matching for denial analysis |
@@ -167,7 +167,7 @@ else:
 ```
 
 ### Request/Response Schemas
-- **OpenAI calls:** Return `Result[CompletionResponse]` or `Result[StructuredResponse[T]]`
+- **Claude calls:** Return `Result[CompletionResponse]` or `Result[StructuredResponse[T]]`
 - **Agent outputs:** Validated via Pydantic schemas in `agents/schemas.py`
 - **Document processing:** Status progression: `uploading` → `processing` → `analyzing` → `completed`/`failed`
 
@@ -216,7 +216,7 @@ pytest -n auto            # Parallel execution
 - `premium_user` — User with active premium subscription
 - `authenticated_client` — Logged-in client
 - `premium_client` — Premium logged-in client
-- `mock_ai_gateway` — Mocked OpenAI client for gateway
+- `mock_ai_gateway` — Mocked Anthropic client for gateway
 - `ai_gateway` — Gateway instance with mocked client
 
 ---
@@ -235,7 +235,7 @@ DATABASE_URL              # postgresql://...?sslmode=require
 REDIS_URL                 # rediss://... (SSL)
 CELERY_BROKER_URL         # Same as REDIS_URL
 FIELD_ENCRYPTION_KEY      # Fernet key for PII encryption
-OPENAI_API_KEY
+ANTHROPIC_API_KEY
 SENTRY_DSN
 ALLOWED_HOSTS
 ```
@@ -250,7 +250,7 @@ ALLOWED_HOSTS
 
 | Category | File | Purpose |
 |----------|------|---------|
-| Config | `benefits_navigator/settings.py` | All Django config, feature flags, OpenAI setup |
+| Config | `benefits_navigator/settings.py` | All Django config, feature flags, Claude setup |
 | Config | `.do/app.yaml` | DigitalOcean deployment |
 | Models | `core/models.py` | Base models, journey, audit |
 | Models | `accounts/models.py` | User, subscription, organization |

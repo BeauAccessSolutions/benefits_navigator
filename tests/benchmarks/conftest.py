@@ -99,17 +99,24 @@ def authenticated_client(db, benchmark_user):
 
 @pytest.fixture
 def mock_openai():
-    """Mock OpenAI API calls to prevent network requests."""
-    mock_response = MagicMock()
-    mock_response.choices = [MagicMock()]
-    mock_response.choices[0].message.content = json.dumps({
+    """Mock Claude API calls to prevent network requests.
+
+    Name kept for fixture compatibility — provider switched to Anthropic.
+    """
+    block = MagicMock()
+    block.type = "text"
+    block.text = json.dumps({
         'summary': 'Test analysis summary',
         'key_findings': ['Finding 1', 'Finding 2'],
     })
-    mock_response.usage.total_tokens = 100
+    mock_response = MagicMock()
+    mock_response.content = [block]
+    mock_response.stop_reason = "end_turn"
+    mock_response.usage.input_tokens = 60
+    mock_response.usage.output_tokens = 40
 
-    with patch('openai.OpenAI') as mock_client:
-        mock_client.return_value.chat.completions.create.return_value = mock_response
+    with patch('anthropic.Anthropic') as mock_client:
+        mock_client.return_value.messages.create.return_value = mock_response
         yield mock_client
 
 

@@ -1,7 +1,7 @@
 """
-AI Service - Analyze documents using OpenAI GPT
+AI Service - Analyze documents using Claude
 
-Uses the centralized AI Gateway for all OpenAI API calls.
+Uses the centralized AI Gateway for all Claude API calls.
 """
 
 import logging
@@ -102,7 +102,7 @@ TODAY'S DATE: {today}"""
 
 class AIService:
     """
-    Service for analyzing document text using OpenAI GPT.
+    Service for analyzing document text using Claude.
 
     Uses the centralized AI Gateway for all API calls, providing:
     - Automatic retry with exponential backoff
@@ -146,7 +146,7 @@ class AIService:
         system_prompt = self._get_system_prompt(document_type)
         user_prompt = self._build_user_prompt(truncated_text, document_type)
 
-        logger.info(f"Sending {len(truncated_text)} characters to OpenAI for analysis")
+        logger.info(f"Sending {len(truncated_text)} characters to Claude for analysis")
 
         # Use the gateway for the API call (includes retry, timeout, etc.)
         result = self._gateway.complete(
@@ -158,7 +158,7 @@ class AIService:
         )
 
         if result.is_failure:
-            logger.error(f"OpenAI API error: {result.error.message}")
+            logger.error(f"AI API error: {result.error.message}")
             raise Exception(f"AI analysis failed: {result.error.message}")
 
         # Extract response
