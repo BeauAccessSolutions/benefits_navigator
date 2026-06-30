@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class TestResult:
     """Result of a single test action."""
+
     action: str
     url: str
     success: bool
@@ -33,19 +34,20 @@ class TestResult:
 
     def to_dict(self) -> dict:
         return {
-            'action': self.action,
-            'url': self.url,
-            'success': self.success,
-            'error': self.error,
-            'screenshot': self.screenshot,
-            'timestamp': self.timestamp.isoformat(),
-            'details': self.details,
+            "action": self.action,
+            "url": self.url,
+            "success": self.success,
+            "error": self.error,
+            "screenshot": self.screenshot,
+            "timestamp": self.timestamp.isoformat(),
+            "details": self.details,
         }
 
 
 @dataclass
 class TestSession:
     """A testing session containing multiple test results."""
+
     agent_name: str
     start_time: datetime = field(default_factory=datetime.now)
     end_time: Optional[datetime] = None
@@ -70,19 +72,19 @@ class TestSession:
 
     def to_dict(self) -> dict:
         return {
-            'agent_name': self.agent_name,
-            'start_time': self.start_time.isoformat(),
-            'end_time': self.end_time.isoformat() if self.end_time else None,
-            'total_actions': len(self.results),
-            'success_rate': self.success_rate,
-            'pages_visited': list(self.pages_visited),
-            'errors_count': len(self.errors_found),
-            'results': [r.to_dict() for r in self.results],
+            "agent_name": self.agent_name,
+            "start_time": self.start_time.isoformat(),
+            "end_time": self.end_time.isoformat() if self.end_time else None,
+            "total_actions": len(self.results),
+            "success_rate": self.success_rate,
+            "pages_visited": list(self.pages_visited),
+            "errors_count": len(self.errors_found),
+            "results": [r.to_dict() for r in self.results],
         }
 
     def save_report(self, filepath: str):
         """Save session report to JSON file."""
-        with open(filepath, 'w') as f:
+        with open(filepath, "w") as f:
             json.dump(self.to_dict(), f, indent=2)
 
 
@@ -96,9 +98,9 @@ class BaseTestAgent(ABC):
 
     def __init__(
         self,
-        base_url: str = 'http://localhost:8000',
+        base_url: str = "http://localhost:8000",
         headless: bool = True,
-        screenshot_dir: str = 'tests/agents/screenshots',
+        screenshot_dir: str = "tests/agents/screenshots",
     ):
         self.base_url = base_url
         self.headless = headless
@@ -126,7 +128,7 @@ class BaseTestAgent(ABC):
         self._playwright = sync_playwright().start()
         self.browser = self._playwright.chromium.launch(headless=self.headless)
         self.context = self.browser.new_context(
-            viewport={'width': 1280, 'height': 720},
+            viewport={"width": 1280, "height": 720},
             base_url=self.base_url,
         )
         self.page = self.context.new_page()
@@ -142,13 +144,13 @@ class BaseTestAgent(ABC):
             self.context.close()
         if self.browser:
             self.browser.close()
-        if hasattr(self, '_playwright'):
+        if hasattr(self, "_playwright"):
             self._playwright.stop()
 
     def take_screenshot(self, name: str) -> str:
         """Take a screenshot and return the path."""
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f'{name}_{timestamp}.png'
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{name}_{timestamp}.png"
         filepath = os.path.join(self.screenshot_dir, filename)
         self.page.screenshot(path=filepath)
         return filepath
@@ -160,23 +162,23 @@ class BaseTestAgent(ABC):
             success = response.status < 400 if response else False
 
             result = TestResult(
-                action='navigate',
+                action="navigate",
                 url=self.page.url,
                 success=success,
-                details={'status_code': response.status if response else None}
+                details={"status_code": response.status if response else None},
             )
 
             if not success:
-                result.screenshot = self.take_screenshot('nav_error')
+                result.screenshot = self.take_screenshot("nav_error")
                 result.error = f'HTTP {response.status if response else "unknown"}'
 
         except Exception as e:
             result = TestResult(
-                action='navigate',
+                action="navigate",
                 url=url,
                 success=False,
                 error=str(e),
-                screenshot=self.take_screenshot('nav_exception'),
+                screenshot=self.take_screenshot("nav_exception"),
             )
 
         if self.session:
@@ -188,17 +190,17 @@ class BaseTestAgent(ABC):
         try:
             self.page.click(selector, timeout=5000)
             result = TestResult(
-                action=f'click: {selector}',
+                action=f"click: {selector}",
                 url=self.page.url,
                 success=True,
             )
         except Exception as e:
             result = TestResult(
-                action=f'click: {selector}',
+                action=f"click: {selector}",
                 url=self.page.url,
                 success=False,
                 error=str(e),
-                screenshot=self.take_screenshot('click_error'),
+                screenshot=self.take_screenshot("click_error"),
             )
 
         if self.session:
@@ -210,13 +212,13 @@ class BaseTestAgent(ABC):
         try:
             self.page.fill(selector, value, timeout=5000)
             result = TestResult(
-                action=f'fill: {selector}',
+                action=f"fill: {selector}",
                 url=self.page.url,
                 success=True,
             )
         except Exception as e:
             result = TestResult(
-                action=f'fill: {selector}',
+                action=f"fill: {selector}",
                 url=self.page.url,
                 success=False,
                 error=str(e),
@@ -232,10 +234,16 @@ class BaseTestAgent(ABC):
 
         # Check for error status
         error_selectors = [
-            '.error', '.alert-danger', '.alert-error',
-            '[role="alert"]', '.errorlist', '.form-error',
-            'h1:has-text("Error")', 'h1:has-text("500")',
-            'h1:has-text("404")', 'h1:has-text("403")',
+            ".error",
+            ".alert-danger",
+            ".alert-error",
+            '[role="alert"]',
+            ".errorlist",
+            ".form-error",
+            'h1:has-text("Error")',
+            'h1:has-text("500")',
+            'h1:has-text("404")',
+            'h1:has-text("403")',
         ]
 
         for selector in error_selectors:
@@ -244,24 +252,28 @@ class BaseTestAgent(ABC):
                 for i in range(elements.count()):
                     text = elements.nth(i).text_content()
                     if text and text.strip():
-                        errors.append({
-                            'selector': selector,
-                            'text': text.strip()[:200],
-                            'url': self.page.url,
-                        })
+                        errors.append(
+                            {
+                                "selector": selector,
+                                "text": text.strip()[:200],
+                                "url": self.page.url,
+                            }
+                        )
 
         return errors
 
     def get_all_links(self) -> list:
         """Get all internal links on the current page."""
         links = []
-        elements = self.page.locator('a[href]')
+        elements = self.page.locator("a[href]")
 
         for i in range(elements.count()):
-            href = elements.nth(i).get_attribute('href')
-            if href and not href.startswith(('http://', 'https://', 'mailto:', 'tel:', '#', 'javascript:')):
+            href = elements.nth(i).get_attribute("href")
+            if href and not href.startswith(
+                ("http://", "https://", "mailto:", "tel:", "#", "javascript:")
+            ):
                 links.append(href)
-            elif href and (href.startswith(self.base_url) or href.startswith('/')):
+            elif href and (href.startswith(self.base_url) or href.startswith("/")):
                 links.append(href)
 
         return list(set(links))
@@ -269,24 +281,24 @@ class BaseTestAgent(ABC):
     def get_all_forms(self) -> list:
         """Get all forms on the current page."""
         forms = []
-        elements = self.page.locator('form')
+        elements = self.page.locator("form")
 
         for i in range(elements.count()):
             form = elements.nth(i)
-            action = form.get_attribute('action') or ''
-            method = form.get_attribute('method') or 'get'
-            forms.append({'action': action, 'method': method})
+            action = form.get_attribute("action") or ""
+            method = form.get_attribute("method") or "get"
+            forms.append({"action": action, "method": method})
 
         return forms
 
     def get_interactive_elements(self) -> dict:
         """Get all interactive elements on the page."""
         return {
-            'links': self.get_all_links(),
-            'forms': self.get_all_forms(),
-            'buttons': self.page.locator('button').count(),
-            'inputs': self.page.locator('input').count(),
-            'selects': self.page.locator('select').count(),
+            "links": self.get_all_links(),
+            "forms": self.get_all_forms(),
+            "buttons": self.page.locator("button").count(),
+            "inputs": self.page.locator("input").count(),
+            "selects": self.page.locator("select").count(),
         }
 
 
@@ -300,26 +312,26 @@ class RandomExplorerMixin:
 
     def random_click(self) -> TestResult:
         """Click a random interactive element."""
-        clickable = self.page.locator('a, button').all()
+        clickable = self.page.locator("a, button").all()
         if clickable:
             element = random.choice(clickable)
             try:
                 element.click(timeout=3000)
                 return TestResult(
-                    action='random_click',
+                    action="random_click",
                     url=self.page.url,
                     success=True,
                 )
             except Exception as e:
                 return TestResult(
-                    action='random_click',
+                    action="random_click",
                     url=self.page.url,
                     success=False,
                     error=str(e),
                 )
         return TestResult(
-            action='random_click',
+            action="random_click",
             url=self.page.url,
             success=False,
-            error='No clickable elements found',
+            error="No clickable elements found",
         )

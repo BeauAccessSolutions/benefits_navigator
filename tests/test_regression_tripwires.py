@@ -11,7 +11,6 @@ import pytest
 from django.urls import reverse, resolve, NoReverseMatch
 from django.urls.exceptions import Resolver404
 
-
 # =============================================================================
 # Route Configuration Constants
 # =============================================================================
@@ -115,29 +114,39 @@ PROTECTED_PATHS = [
 # Sanity Tests: Ensure route lists are not accidentally emptied
 # =============================================================================
 
+
 class TestRouteListIntegrity:
     """Verify route configuration lists are not empty (prevents accidental deletion)."""
 
     def test_named_urls_not_empty(self):
         """NAMED_URLS must contain at least one entry."""
-        assert len(NAMED_URLS) > 0, "NAMED_URLS is empty - this would skip all URL resolution tests"
+        assert (
+            len(NAMED_URLS) > 0
+        ), "NAMED_URLS is empty - this would skip all URL resolution tests"
 
     def test_critical_paths_not_empty(self):
         """CRITICAL_PATHS must contain at least one entry."""
-        assert len(CRITICAL_PATHS) > 0, "CRITICAL_PATHS is empty - this would skip all path resolution tests"
+        assert (
+            len(CRITICAL_PATHS) > 0
+        ), "CRITICAL_PATHS is empty - this would skip all path resolution tests"
 
     def test_core_public_paths_not_empty(self):
         """CORE_PUBLIC_PATHS must contain at least one entry."""
-        assert len(CORE_PUBLIC_PATHS) > 0, "CORE_PUBLIC_PATHS is empty - this would skip core public route tests"
+        assert (
+            len(CORE_PUBLIC_PATHS) > 0
+        ), "CORE_PUBLIC_PATHS is empty - this would skip core public route tests"
 
     def test_protected_paths_not_empty(self):
         """PROTECTED_PATHS must contain at least one entry."""
-        assert len(PROTECTED_PATHS) > 0, "PROTECTED_PATHS is empty - this would skip protected route tests"
+        assert (
+            len(PROTECTED_PATHS) > 0
+        ), "PROTECTED_PATHS is empty - this would skip protected route tests"
 
 
 # =============================================================================
 # Goal A: Ensure removed OCR/PHI fields cannot reappear in database
 # =============================================================================
+
 
 class TestPHIFieldRemovalInvariants:
     """
@@ -157,7 +166,7 @@ class TestPHIFieldRemovalInvariants:
 
     def _get_db_field_names(self, model_class):
         """Extract database column field names from Django model _meta."""
-        return {f.name for f in model_class._meta.get_fields() if hasattr(f, 'column')}
+        return {f.name for f in model_class._meta.get_fields() if hasattr(f, "column")}
 
     # -------------------------------------------------------------------------
     # Document.ocr_text removal
@@ -169,7 +178,7 @@ class TestPHIFieldRemovalInvariants:
 
         db_fields = self._get_db_field_names(Document)
 
-        assert 'ocr_text' not in db_fields, (
+        assert "ocr_text" not in db_fields, (
             "REGRESSION: Document.ocr_text database field has reappeared. "
             "This field was removed in the Ephemeral OCR Refactor to protect PHI. "
             "Raw OCR text must not be persisted to the database."
@@ -181,11 +190,11 @@ class TestPHIFieldRemovalInvariants:
 
         db_fields = self._get_db_field_names(Document)
 
-        assert 'ocr_length' in db_fields, (
+        assert "ocr_length" in db_fields, (
             "Document.ocr_length field is missing. "
             "This metadata field replaced ocr_text for observability without PHI."
         )
-        assert 'ocr_status' in db_fields, (
+        assert "ocr_status" in db_fields, (
             "Document.ocr_status field is missing. "
             "This metadata field replaced ocr_text for observability without PHI."
         )
@@ -200,7 +209,7 @@ class TestPHIFieldRemovalInvariants:
 
         db_fields = self._get_db_field_names(DecisionLetterAnalysis)
 
-        assert 'raw_text' not in db_fields, (
+        assert "raw_text" not in db_fields, (
             "REGRESSION: DecisionLetterAnalysis.raw_text database field has reappeared. "
             "This field was removed in the Ephemeral OCR Refactor to protect PHI."
         )
@@ -215,7 +224,7 @@ class TestPHIFieldRemovalInvariants:
 
         db_fields = self._get_db_field_names(RatingAnalysis)
 
-        assert 'raw_text' not in db_fields, (
+        assert "raw_text" not in db_fields, (
             "REGRESSION: RatingAnalysis.raw_text database field has reappeared. "
             "This field was removed in the Ephemeral OCR Refactor to protect PHI."
         )
@@ -224,6 +233,7 @@ class TestPHIFieldRemovalInvariants:
 # =============================================================================
 # Goal B: URL Resolution Integrity (no DB required)
 # =============================================================================
+
 
 class TestURLResolutionIntegrity:
     """
@@ -260,7 +270,9 @@ class TestURLResolutionIntegrity:
         """URL paths must resolve to a view function (not raise Resolver404)."""
         try:
             match = resolve(path)
-            assert match.func is not None, f"Path '{path}' resolved but has no view function."
+            assert (
+                match.func is not None
+            ), f"Path '{path}' resolved but has no view function."
         except Resolver404:
             pytest.fail(
                 f"Path '{path}' raised Resolver404. "
@@ -271,6 +283,7 @@ class TestURLResolutionIntegrity:
 # =============================================================================
 # Goal C: Route HTTP Behavior (requires DB for auth checks)
 # =============================================================================
+
 
 @pytest.mark.django_db
 class TestRouteHTTPBehavior:
@@ -289,6 +302,7 @@ class TestRouteHTTPBehavior:
     def client(self):
         """Django test client for anonymous requests."""
         from django.test import Client
+
         return Client()
 
     # -------------------------------------------------------------------------
@@ -348,15 +362,15 @@ class TestRouteHTTPBehavior:
         )
 
         # Get redirect location
-        redirect_url = response.get('Location', '')
+        redirect_url = response.get("Location", "")
 
         # (2) Must redirect to login page
-        assert '/accounts/login/' in redirect_url or '/login/' in redirect_url, (
-            f"Route '{path}' redirected to '{redirect_url}', expected login page."
-        )
+        assert (
+            "/accounts/login/" in redirect_url or "/login/" in redirect_url
+        ), f"Route '{path}' redirected to '{redirect_url}', expected login page."
 
         # (3) Must include next= parameter to preserve original destination
-        assert 'next=' in redirect_url, (
+        assert "next=" in redirect_url, (
             f"Route '{path}' redirect missing next= parameter. "
             f"Got: '{redirect_url}'. Login redirect should preserve original destination."
         )

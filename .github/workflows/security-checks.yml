@@ -58,7 +58,7 @@ jobs:
           DEBUG: 'False'
           DATABASE_URL: postgres://test:test@localhost:5432/test_db
           ALLOWED_HOSTS: localhost,127.0.0.1
-          OPENAI_API_KEY: sk-test-fake-key
+          ANTHROPIC_API_KEY: sk-ant-test-fake-key
           FIELD_ENCRYPTION_KEY: icYQDhc0tmgE75lYSiQfexQ-2bSFuMJBn9SsiH5xpOI=
 
   # ===========================================================================

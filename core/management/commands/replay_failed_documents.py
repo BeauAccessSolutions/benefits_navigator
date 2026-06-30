@@ -85,12 +85,18 @@ class Command(BaseCommand):
                 doc_pks = set(qs.values_list("pk", flat=True)) | set(
                     stuck_qs.values_list("pk", flat=True)
                 )
-                documents = list(Document.objects.filter(pk__in=doc_pks).order_by("updated_at"))
+                documents = list(
+                    Document.objects.filter(pk__in=doc_pks).order_by("updated_at")
+                )
             else:
                 documents = list(qs.order_by("updated_at"))
 
         if not documents:
-            self.stdout.write(self.style.SUCCESS("No documents match the criteria — nothing to replay."))
+            self.stdout.write(
+                self.style.SUCCESS(
+                    "No documents match the criteria — nothing to replay."
+                )
+            )
             return
 
         verb = "Replaying" if execute else "Would replay (dry run)"
@@ -113,7 +119,11 @@ class Command(BaseCommand):
                 replayed += 1
 
         if execute:
-            self.stdout.write(self.style.SUCCESS(f"\n✓ Queued {replayed} document(s) for reprocessing."))
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"\n✓ Queued {replayed} document(s) for reprocessing."
+                )
+            )
         else:
             self.stdout.write(
                 self.style.WARNING(

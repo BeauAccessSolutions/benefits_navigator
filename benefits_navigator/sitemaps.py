@@ -13,20 +13,21 @@ from appeals.models import AppealGuidance
 
 class StaticViewSitemap(Sitemap):
     """Sitemap for static pages."""
+
     priority = 0.8
-    changefreq = 'weekly'
+    changefreq = "weekly"
 
     def items(self):
         return [
-            'home',
-            'examprep:guide_list',
-            'examprep:glossary_list',
-            'examprep:rating_calculator',
-            'examprep:smc_calculator',
-            'examprep:tdiu_calculator',
-            'examprep:secondary_conditions_hub',
-            'appeals:home',
-            'appeals:decision_tree',
+            "home",
+            "examprep:guide_list",
+            "examprep:glossary_list",
+            "examprep:rating_calculator",
+            "examprep:smc_calculator",
+            "examprep:tdiu_calculator",
+            "examprep:secondary_conditions_hub",
+            "appeals:home",
+            "appeals:decision_tree",
         ]
 
     def location(self, item):
@@ -35,7 +36,8 @@ class StaticViewSitemap(Sitemap):
 
 class ExamGuideSitemap(Sitemap):
     """Sitemap for C&P exam preparation guides."""
-    changefreq = 'monthly'
+
+    changefreq = "monthly"
     priority = 0.7
 
     def items(self):
@@ -45,12 +47,13 @@ class ExamGuideSitemap(Sitemap):
         return obj.updated_at
 
     def location(self, obj):
-        return reverse('examprep:guide_detail', kwargs={'slug': obj.slug})
+        return reverse("examprep:guide_detail", kwargs={"slug": obj.slug})
 
 
 class GlossaryTermSitemap(Sitemap):
     """Sitemap for VA glossary terms."""
-    changefreq = 'monthly'
+
+    changefreq = "monthly"
     priority = 0.5
 
     def items(self):
@@ -60,12 +63,13 @@ class GlossaryTermSitemap(Sitemap):
         return obj.updated_at
 
     def location(self, obj):
-        return reverse('examprep:glossary_detail', kwargs={'pk': obj.pk})
+        return reverse("examprep:glossary_detail", kwargs={"pk": obj.pk})
 
 
 class AppealGuidanceSitemap(Sitemap):
     """Sitemap for appeals guidance pages."""
-    changefreq = 'monthly'
+
+    changefreq = "monthly"
     priority = 0.7
 
     def items(self):
@@ -75,36 +79,39 @@ class AppealGuidanceSitemap(Sitemap):
         return obj.updated_at
 
     def location(self, obj):
-        return reverse('appeals:guidance_detail', kwargs={'slug': obj.slug})
+        return reverse("appeals:guidance_detail", kwargs={"slug": obj.slug})
 
 
 class SecondaryConditionSitemap(Sitemap):
     """Sitemap for secondary conditions pages."""
-    changefreq = 'monthly'
+
+    changefreq = "monthly"
     priority = 0.6
 
     def items(self):
         # Known condition slugs from the secondary conditions hub
         return [
-            'ptsd',
-            'tbi',
-            'back-condition',
-            'knee-condition',
-            'diabetes',
-            'sleep-apnea',
-            'hypertension',
-            'tinnitus',
+            "ptsd",
+            "tbi",
+            "back-condition",
+            "knee-condition",
+            "diabetes",
+            "sleep-apnea",
+            "hypertension",
+            "tinnitus",
         ]
 
     def location(self, item):
-        return reverse('examprep:secondary_condition_detail', kwargs={'condition_slug': item})
+        return reverse(
+            "examprep:secondary_condition_detail", kwargs={"condition_slug": item}
+        )
 
 
 # Dictionary of all sitemaps for URL configuration
 sitemaps = {
-    'static': StaticViewSitemap,
-    'exam-guides': ExamGuideSitemap,
-    'glossary': GlossaryTermSitemap,
-    'appeals': AppealGuidanceSitemap,
-    'secondary-conditions': SecondaryConditionSitemap,
+    "static": StaticViewSitemap,
+    "exam-guides": ExamGuideSitemap,
+    "glossary": GlossaryTermSitemap,
+    "appeals": AppealGuidanceSitemap,
+    "secondary-conditions": SecondaryConditionSitemap,
 }

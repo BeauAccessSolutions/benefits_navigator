@@ -7,7 +7,6 @@ Provides:
 """
 
 from django.shortcuts import redirect
-from django.urls import reverse
 from django.contrib import messages
 
 from .views import get_user_staff_memberships
@@ -28,12 +27,12 @@ class VSOStaffMFAMiddleware:
 
     # URLs that should be accessible without MFA check (to allow setup)
     EXEMPT_URLS = [
-        '/accounts/2fa/',
-        '/accounts/login/',
-        '/accounts/logout/',
-        '/accounts/signup/',
-        '/admin/',
-        '/health/',
+        "/accounts/2fa/",
+        "/accounts/login/",
+        "/accounts/logout/",
+        "/accounts/signup/",
+        "/admin/",
+        "/health/",
     ]
 
     def __init__(self, get_response):
@@ -56,7 +55,7 @@ class VSOStaffMFAMiddleware:
 
         # User is VSO staff - check MFA status
         # django-otp adds is_verified() method to user via OTPMiddleware
-        if hasattr(request.user, 'is_verified'):
+        if hasattr(request.user, "is_verified"):
             # User has OTP middleware - check if verified or has devices
             from django_otp import devices_for_user
 
@@ -65,17 +64,17 @@ class VSOStaffMFAMiddleware:
             if not user_devices:
                 # User has no MFA devices set up
                 # Only show warning on VSO pages, don't block
-                if path.startswith('/vso/'):
+                if path.startswith("/vso/"):
                     # Check if we've already shown the warning in this session
-                    if not request.session.get('mfa_warning_shown'):
+                    if not request.session.get("mfa_warning_shown"):
                         messages.warning(
                             request,
-                            'For enhanced security, please enable two-factor authentication. '
+                            "For enhanced security, please enable two-factor authentication. "
                             '<a href="/accounts/2fa/setup/" class="underline font-medium">'
-                            'Set up 2FA now</a>',
-                            extra_tags='safe'
+                            "Set up 2FA now</a>",
+                            extra_tags="safe",
                         )
-                        request.session['mfa_warning_shown'] = True
+                        request.session["mfa_warning_shown"] = True
 
         return self.get_response(request)
 
@@ -97,7 +96,7 @@ def require_mfa_for_vso(view_func):
     @wraps(view_func)
     def wrapper(request, *args, **kwargs):
         if not request.user.is_authenticated:
-            return redirect('account_login')
+            return redirect("account_login")
 
         # Check if user is VSO staff
         memberships = get_user_staff_memberships(request.user)
@@ -107,10 +106,10 @@ def require_mfa_for_vso(view_func):
             if not user_devices:
                 messages.error(
                     request,
-                    'This action requires two-factor authentication. '
-                    'Please set up 2FA to continue.'
+                    "This action requires two-factor authentication. "
+                    "Please set up 2FA to continue.",
                 )
-                return redirect('two-factor-setup')
+                return redirect("two-factor-setup")
 
         return view_func(request, *args, **kwargs)
 

@@ -32,7 +32,6 @@ import hmac
 import json
 import time
 from typing import Optional, Dict, Any
-from urllib.parse import urlencode, parse_qs
 
 from django.conf import settings
 from django.urls import reverse
@@ -40,16 +39,19 @@ from django.urls import reverse
 
 class SignedURLError(Exception):
     """Base exception for signed URL errors."""
+
     pass
 
 
 class TokenExpiredError(SignedURLError):
     """Token has expired."""
+
     pass
 
 
 class InvalidTokenError(SignedURLError):
     """Token is invalid or tampered with."""
+
     pass
 
 
@@ -76,16 +78,14 @@ class SignedURLGenerator:
         """
         self.secret_key = secret_key or settings.SECRET_KEY
         if isinstance(self.secret_key, str):
-            self.secret_key = self.secret_key.encode('utf-8')
+            self.secret_key = self.secret_key.encode("utf-8")
 
     def _generate_signature(self, data: str) -> str:
         """Generate HMAC-SHA256 signature for data."""
         signature = hmac.new(
-            self.secret_key,
-            data.encode('utf-8'),
-            hashlib.sha256
+            self.secret_key, data.encode("utf-8"), hashlib.sha256
         ).digest()
-        return base64.urlsafe_b64encode(signature).decode('utf-8').rstrip('=')
+        return base64.urlsafe_b64encode(signature).decode("utf-8").rstrip("=")
 
     def _verify_signature(self, data: str, signature: str) -> bool:
         """Verify HMAC-SHA256 signature."""
@@ -97,9 +97,9 @@ class SignedURLGenerator:
         resource_type: str,
         resource_id: int,
         user_id: int,
-        action: str = 'download',
+        action: str = "download",
         expires_minutes: int = None,
-        extra_data: Dict[str, Any] = None
+        extra_data: Dict[str, Any] = None,
     ) -> str:
         """
         Generate a signed token for resource access.
@@ -126,19 +126,23 @@ class SignedURLGenerator:
 
         # Build payload
         payload = {
-            'rt': resource_type,  # resource_type
-            'ri': resource_id,    # resource_id
-            'ui': user_id,        # user_id
-            'a': action,          # action
-            'e': expires_at,      # expires_at
+            "rt": resource_type,  # resource_type
+            "ri": resource_id,  # resource_id
+            "ui": user_id,  # user_id
+            "a": action,  # action
+            "e": expires_at,  # expires_at
         }
 
         if extra_data:
-            payload['x'] = extra_data
+            payload["x"] = extra_data
 
         # Encode payload
-        payload_json = json.dumps(payload, separators=(',', ':'), sort_keys=True)
-        payload_b64 = base64.urlsafe_b64encode(payload_json.encode('utf-8')).decode('utf-8').rstrip('=')
+        payload_json = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+        payload_b64 = (
+            base64.urlsafe_b64encode(payload_json.encode("utf-8"))
+            .decode("utf-8")
+            .rstrip("=")
+        )
 
         # Generate signature
         signature = self._generate_signature(payload_b64)
@@ -162,12 +166,12 @@ class SignedURLGenerator:
             TokenExpiredError: If token has expired
             InvalidTokenError: If token is malformed or signature invalid
         """
-        if not token or '.' not in token:
+        if not token or "." not in token:
             raise InvalidTokenError("Invalid token format")
 
         try:
             # Split token into payload and signature
-            parts = token.split('.')
+            parts = token.split(".")
             if len(parts) != 2:
                 raise InvalidTokenError("Invalid token format")
 
@@ -180,24 +184,24 @@ class SignedURLGenerator:
             # Decode payload (add padding if needed)
             padding = 4 - len(payload_b64) % 4
             if padding != 4:
-                payload_b64 += '=' * padding
+                payload_b64 += "=" * padding
 
-            payload_json = base64.urlsafe_b64decode(payload_b64).decode('utf-8')
+            payload_json = base64.urlsafe_b64decode(payload_b64).decode("utf-8")
             payload = json.loads(payload_json)
 
             # Check expiration
-            expires_at = payload.get('e', 0)
+            expires_at = payload.get("e", 0)
             if time.time() > expires_at:
                 raise TokenExpiredError("Token has expired")
 
             # Return normalized data
             return {
-                'resource_type': payload.get('rt'),
-                'resource_id': payload.get('ri'),
-                'user_id': payload.get('ui'),
-                'action': payload.get('a'),
-                'expires_at': expires_at,
-                'extra_data': payload.get('x'),
+                "resource_type": payload.get("rt"),
+                "resource_id": payload.get("ri"),
+                "user_id": payload.get("ui"),
+                "action": payload.get("a"),
+                "expires_at": expires_at,
+                "extra_data": payload.get("x"),
             }
 
         except (json.JSONDecodeError, KeyError, ValueError) as e:
@@ -208,12 +212,12 @@ class SignedURLGenerator:
         resource_type: str,
         resource_id: int,
         user_id: int,
-        action: str = 'download',
+        action: str = "download",
         expires_minutes: int = None,
         extra_data: Dict[str, Any] = None,
         url_name: str = None,
         absolute: bool = False,
-        request=None
+        request=None,
     ) -> str:
         """
         Generate a complete signed URL for resource access.
@@ -238,22 +242,22 @@ class SignedURLGenerator:
             user_id=user_id,
             action=action,
             expires_minutes=expires_minutes,
-            extra_data=extra_data
+            extra_data=extra_data,
         )
 
         # Determine URL name
         if url_name is None:
-            if resource_type == 'document':
-                url_name = f'claims:document_{action}_signed'
+            if resource_type == "document":
+                url_name = f"claims:document_{action}_signed"
             else:
-                url_name = f'{resource_type}_{action}_signed'
+                url_name = f"{resource_type}_{action}_signed"
 
         # Build URL
         try:
-            url = reverse(url_name, kwargs={'token': token})
+            url = reverse(url_name, kwargs={"token": token})
         except Exception:
             # Fallback: append token as query parameter
-            base_url = reverse(f'claims:document_{action}', kwargs={'pk': resource_id})
+            base_url = reverse(f"claims:document_{action}", kwargs={"pk": resource_id})
             url = f"{base_url}?token={token}"
 
         if absolute and request:
@@ -278,9 +282,9 @@ def generate_signed_url(
     resource_type: str,
     resource_id: int,
     user_id: int,
-    action: str = 'download',
+    action: str = "download",
     expires_minutes: int = 30,
-    request=None
+    request=None,
 ) -> str:
     """
     Convenience function to generate a signed URL.
@@ -303,7 +307,7 @@ def generate_signed_url(
         user_id=user_id,
         action=action,
         expires_minutes=expires_minutes,
-        request=request
+        request=request,
     )
 
 

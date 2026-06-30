@@ -22,7 +22,7 @@ def encrypt_existing_data(apps, schema_editor):
     """
     from core.encryption import FieldEncryption
 
-    UserProfile = apps.get_model('accounts', 'UserProfile')
+    UserProfile = apps.get_model("accounts", "UserProfile")
     db_alias = schema_editor.connection.alias
 
     # Get raw values directly from database
@@ -41,7 +41,7 @@ def encrypt_existing_data(apps, schema_editor):
             encrypted = FieldEncryption.encrypt(va_file_number)
             cursor.execute(
                 "UPDATE accounts_userprofile SET va_file_number = %s WHERE id = %s",
-                [encrypted, profile_id]
+                [encrypted, profile_id],
             )
 
         # Encrypt date_of_birth (stored as date, needs conversion)
@@ -52,17 +52,17 @@ def encrypt_existing_data(apps, schema_editor):
         """)
         for profile_id, dob in cursor.fetchall():
             # Skip if already encrypted (would be a string starting with Z0FB)
-            if isinstance(dob, str) and len(dob) > 50 and dob.startswith('Z0FB'):
+            if isinstance(dob, str) and len(dob) > 50 and dob.startswith("Z0FB"):
                 continue
             # Convert date to ISO string and encrypt
-            if hasattr(dob, 'isoformat'):
+            if hasattr(dob, "isoformat"):
                 date_str = dob.isoformat()
             else:
                 date_str = str(dob)
             encrypted = FieldEncryption.encrypt(date_str)
             cursor.execute(
                 "UPDATE accounts_userprofile SET date_of_birth = %s WHERE id = %s",
-                [encrypted, profile_id]
+                [encrypted, profile_id],
             )
 
 
@@ -89,7 +89,7 @@ def decrypt_data(apps, schema_editor):
             if decrypted:
                 cursor.execute(
                     "UPDATE accounts_userprofile SET va_file_number = %s WHERE id = %s",
-                    [decrypted, profile_id]
+                    [decrypted, profile_id],
                 )
 
         # Decrypt date_of_birth
@@ -105,7 +105,7 @@ def decrypt_data(apps, schema_editor):
                 if decrypted:
                     cursor.execute(
                         "UPDATE accounts_userprofile SET date_of_birth = %s WHERE id = %s",
-                        [decrypted, profile_id]
+                        [decrypted, profile_id],
                     )
 
 

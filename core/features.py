@@ -59,6 +59,7 @@ def require_feature(feature_name: str, redirect_url: str = None):
         def org_view(request):
             ...
     """
+
     def decorator(view_func):
         @wraps(view_func)
         def wrapper(request, *args, **kwargs):
@@ -68,7 +69,9 @@ def require_feature(feature_name: str, redirect_url: str = None):
                     return redirect(redirect_url)
                 raise Http404("Feature not available")
             return view_func(request, *args, **kwargs)
+
         return wrapper
+
     return decorator
 
 
@@ -93,23 +96,23 @@ def get_path_features() -> dict:
     features = settings.FEATURES
 
     return {
-        'path_a': {
-            'freemium_limits': features.get('freemium_limits', False),
-            'stripe_individual': features.get('stripe_individual', False),
-            'usage_tracking': features.get('usage_tracking', False),
+        "path_a": {
+            "freemium_limits": features.get("freemium_limits", False),
+            "stripe_individual": features.get("stripe_individual", False),
+            "usage_tracking": features.get("usage_tracking", False),
         },
-        'path_b': {
-            'organizations': features.get('organizations', False),
-            'org_roles': features.get('org_roles', False),
-            'org_invitations': features.get('org_invitations', False),
-            'caseworker_assignment': features.get('caseworker_assignment', False),
-            'org_billing': features.get('org_billing', False),
-            'org_admin_dashboard': features.get('org_admin_dashboard', False),
-            'audit_export': features.get('audit_export', False),
+        "path_b": {
+            "organizations": features.get("organizations", False),
+            "org_roles": features.get("org_roles", False),
+            "org_invitations": features.get("org_invitations", False),
+            "caseworker_assignment": features.get("caseworker_assignment", False),
+            "org_billing": features.get("org_billing", False),
+            "org_admin_dashboard": features.get("org_admin_dashboard", False),
+            "audit_export": features.get("audit_export", False),
         },
-        'future': {
-            'sso_saml': features.get('sso_saml', False),
-            'mfa': features.get('mfa', False),
+        "future": {
+            "sso_saml": features.get("sso_saml", False),
+            "mfa": features.get("mfa", False),
         },
     }
 

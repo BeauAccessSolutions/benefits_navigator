@@ -33,10 +33,10 @@ def log_shared_analysis_action(instance, action: str, user=None, details: dict =
         from core.models import AuditLog
 
         log_details = {
-            'analysis_type': instance.analysis_type,
-            'case_id': instance.case_id,
-            'case_title': instance.case.title if instance.case else None,
-            'organization_id': instance.organization_id,
+            "analysis_type": instance.analysis_type,
+            "case_id": instance.case_id,
+            "case_title": instance.case.title if instance.case else None,
+            "organization_id": instance.organization_id,
         }
         if details:
             log_details.update(details)
@@ -44,7 +44,7 @@ def log_shared_analysis_action(instance, action: str, user=None, details: dict =
         AuditLog.objects.create(
             user=user or instance.shared_by,
             action=action,
-            resource_type='SharedAnalysis',
+            resource_type="SharedAnalysis",
             resource_id=instance.pk,
             details=log_details,
             success=True,
@@ -57,7 +57,7 @@ def log_shared_analysis_action(instance, action: str, user=None, details: dict =
 def audit_log_shared_analysis(sender, instance, created, **kwargs):
     """Create audit log entry when an analysis is shared."""
     if created:
-        log_shared_analysis_action(instance, 'vso_analysis_share')
+        log_shared_analysis_action(instance, "vso_analysis_share")
 
 
 def update_case_activity(case_id: int) -> None:
@@ -72,28 +72,28 @@ def update_case_activity(case_id: int) -> None:
 @receiver(post_save, sender=CaseNote)
 def update_case_activity_on_note(sender, instance, created, **kwargs):
     """Update case activity when a note is added or updated."""
-    if hasattr(instance, 'case') and instance.case_id:
+    if hasattr(instance, "case") and instance.case_id:
         update_case_activity(instance.case_id)
 
 
 @receiver(post_save, sender=SharedDocument)
 def update_case_activity_on_document(sender, instance, created, **kwargs):
     """Update case activity when a document is shared."""
-    if hasattr(instance, 'case') and instance.case_id:
+    if hasattr(instance, "case") and instance.case_id:
         update_case_activity(instance.case_id)
 
 
 @receiver(post_save, sender=SharedAnalysis)
 def update_case_activity_on_analysis(sender, instance, created, **kwargs):
     """Update case activity when an analysis is shared."""
-    if hasattr(instance, 'case') and instance.case_id:
+    if hasattr(instance, "case") and instance.case_id:
         update_case_activity(instance.case_id)
 
 
 @receiver(post_save, sender=CaseCondition)
 def update_case_activity_on_condition(sender, instance, created, **kwargs):
     """Update case activity when a condition is added or updated."""
-    if hasattr(instance, 'case') and instance.case_id:
+    if hasattr(instance, "case") and instance.case_id:
         update_case_activity(instance.case_id)
 
 
@@ -106,11 +106,15 @@ def derive_conditions_on_analysis_share(sender, instance, created, **kwargs):
     """
     if created:
         try:
-            conditions = ConditionDerivationService.derive_conditions_from_analysis(instance)
+            conditions = ConditionDerivationService.derive_conditions_from_analysis(
+                instance
+            )
             if conditions:
                 logger.info(
                     f"Derived {len(conditions)} conditions from analysis {instance.pk} "
                     f"for case {instance.case_id}"
                 )
         except Exception as e:
-            logger.error(f"Failed to derive conditions from analysis {instance.pk}: {e}")
+            logger.error(
+                f"Failed to derive conditions from analysis {instance.pk}: {e}"
+            )

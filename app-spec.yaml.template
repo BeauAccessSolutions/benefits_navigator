@@ -22,7 +22,7 @@ envs:
     value: "CHANGE_ME"
   - key: CELERY_BROKER_URL
     value: "CHANGE_ME"
-  - key: OPENAI_API_KEY
+  - key: ANTHROPIC_API_KEY
     value: "CHANGE_ME"
   - key: SENTRY_DSN
     value: "CHANGE_ME"
@@ -103,7 +103,7 @@ workers:
         value: "CHANGE_ME"
       - key: CELERY_BROKER_URL
         value: "CHANGE_ME"
-      - key: OPENAI_API_KEY
+      - key: ANTHROPIC_API_KEY
         value: "CHANGE_ME"
       - key: FIELD_ENCRYPTION_KEY
         value: "CHANGE_ME"
@@ -133,6 +133,6 @@ jobs:
 # - FIELD_ENCRYPTION_KEY (generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
 # - DATABASE_URL (postgresql://user:password@host:port/dbname)
 # - REDIS_URL / CELERY_BROKER_URL (rediss://user:password@host:port)
-# - OPENAI_API_KEY
+# - ANTHROPIC_API_KEY
 # - SENTRY_DSN
 # - ALLOWED_HOSTS (comma-separated list of domains)

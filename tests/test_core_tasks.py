@@ -11,11 +11,11 @@ Covers:
 
 import pytest
 from datetime import timedelta
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from django.utils import timezone
 from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings
+from django.test import override_settings
 
 User = get_user_model()
 
@@ -23,6 +23,7 @@ User = get_user_model()
 # =============================================================================
 # enforce_data_retention
 # =============================================================================
+
 
 @pytest.mark.django_db
 class TestEnforceDataRetention:
@@ -35,16 +36,20 @@ class TestEnforceDataRetention:
 
         # Create retention policy: 30 days for audit logs
         DataRetentionPolicy.objects.create(
-            data_type='audit_logs',
+            data_type="audit_logs",
             retention_days=30,
             is_active=True,
         )
 
-        user = User.objects.create_user(email="retention@example.com", password="TestPass123!")
+        user = User.objects.create_user(
+            email="retention@example.com", password="TestPass123!"
+        )
 
         # Create an old audit log (beyond retention)
         old_log = AuditLog.objects.create(
-            user=user, action='test_action', resource_type='test',
+            user=user,
+            action="test_action",
+            resource_type="test",
         )
         AuditLog.objects.filter(pk=old_log.pk).update(
             timestamp=timezone.now() - timedelta(days=60)
@@ -52,12 +57,14 @@ class TestEnforceDataRetention:
 
         # Create a recent audit log (within retention)
         recent_log = AuditLog.objects.create(
-            user=user, action='recent_action', resource_type='test',
+            user=user,
+            action="recent_action",
+            resource_type="test",
         )
 
         result = enforce_data_retention()
 
-        assert result.get('audit_logs', 0) >= 1
+        assert result.get("audit_logs", 0) >= 1
         assert not AuditLog.objects.filter(pk=old_log.pk).exists()
         assert AuditLog.objects.filter(pk=recent_log.pk).exists()
 
@@ -67,14 +74,18 @@ class TestEnforceDataRetention:
         from core.tasks import enforce_data_retention
 
         DataRetentionPolicy.objects.create(
-            data_type='audit_logs',
+            data_type="audit_logs",
             retention_days=1,
             is_active=False,  # Inactive
         )
 
-        user = User.objects.create_user(email="inactive@example.com", password="TestPass123!")
+        user = User.objects.create_user(
+            email="inactive@example.com", password="TestPass123!"
+        )
         old_log = AuditLog.objects.create(
-            user=user, action='test_action', resource_type='test',
+            user=user,
+            action="test_action",
+            resource_type="test",
         )
         AuditLog.objects.filter(pk=old_log.pk).update(
             timestamp=timezone.now() - timedelta(days=60)
@@ -83,7 +94,7 @@ class TestEnforceDataRetention:
         result = enforce_data_retention()
 
         # No policies processed → empty result
-        assert 'audit_logs' not in result
+        assert "audit_logs" not in result
         assert AuditLog.objects.filter(pk=old_log.pk).exists()
 
     def test_updates_last_cleanup_timestamp(self):
@@ -92,7 +103,7 @@ class TestEnforceDataRetention:
         from core.tasks import enforce_data_retention
 
         policy = DataRetentionPolicy.objects.create(
-            data_type='session_data',
+            data_type="session_data",
             retention_days=30,
             is_active=True,
         )
@@ -108,6 +119,7 @@ class TestEnforceDataRetention:
 # enforce_pilot_data_retention
 # =============================================================================
 
+
 @pytest.mark.django_db
 class TestEnforcePilotDataRetention:
     """Tests for the enforce_pilot_data_retention task."""
@@ -118,12 +130,17 @@ class TestEnforcePilotDataRetention:
         from claims.models import Document
         from core.tasks import enforce_pilot_data_retention
 
-        pilot_user = User.objects.create_user(email="pilot@example.com", password="TestPass123!")
+        pilot_user = User.objects.create_user(
+            email="pilot@example.com", password="TestPass123!"
+        )
 
         # Create old document
         old_doc = Document.objects.create(
-            user=pilot_user, file_name="old.pdf", file_size=100,
-            document_type='other', status='completed',
+            user=pilot_user,
+            file_name="old.pdf",
+            file_size=100,
+            document_type="other",
+            status="completed",
         )
         Document.objects.filter(pk=old_doc.pk).update(
             created_at=timezone.now() - timedelta(days=60)
@@ -131,15 +148,25 @@ class TestEnforcePilotDataRetention:
 
         # Create recent document
         recent_doc = Document.objects.create(
-            user=pilot_user, file_name="recent.pdf", file_size=100,
-            document_type='other', status='completed',
+            user=pilot_user,
+            file_name="recent.pdf",
+            file_size=100,
+            document_type="other",
+            status="completed",
         )
 
         # Patch soft_delete since SoftDeleteModel doesn't have it as a method
-        with patch.object(Document, 'soft_delete', create=True, side_effect=lambda: Document.objects.filter(pk=old_doc.pk).update(is_deleted=True)):
+        with patch.object(
+            Document,
+            "soft_delete",
+            create=True,
+            side_effect=lambda: Document.objects.filter(pk=old_doc.pk).update(
+                is_deleted=True
+            ),
+        ):
             result = enforce_pilot_data_retention()
 
-        assert result['documents_soft_deleted'] >= 1
+        assert result["documents_soft_deleted"] >= 1
         old_doc.refresh_from_db()
         assert old_doc.is_deleted is True
         recent_doc.refresh_from_db()
@@ -151,18 +178,23 @@ class TestEnforcePilotDataRetention:
         from core.tasks import enforce_pilot_data_retention
 
         result = enforce_pilot_data_retention()
-        assert result['status'] == 'disabled'
+        assert result["status"] == "disabled"
 
     def test_skips_non_pilot_users(self):
         """Should not touch documents of non-pilot users."""
         from claims.models import Document
         from core.tasks import enforce_pilot_data_retention
 
-        non_pilot = User.objects.create_user(email="nonpilot@example.com", password="TestPass123!")
+        non_pilot = User.objects.create_user(
+            email="nonpilot@example.com", password="TestPass123!"
+        )
 
         old_doc = Document.objects.create(
-            user=non_pilot, file_name="old.pdf", file_size=100,
-            document_type='other', status='completed',
+            user=non_pilot,
+            file_name="old.pdf",
+            file_size=100,
+            document_type="other",
+            status="completed",
         )
         Document.objects.filter(pk=old_doc.pk).update(
             created_at=timezone.now() - timedelta(days=60)
@@ -171,7 +203,7 @@ class TestEnforcePilotDataRetention:
         with override_settings(PILOT_DATA_RETENTION_DAYS=30):
             result = enforce_pilot_data_retention()
 
-        assert result['documents_soft_deleted'] == 0
+        assert result["documents_soft_deleted"] == 0
         old_doc.refresh_from_db()
         assert old_doc.is_deleted is False
 
@@ -180,23 +212,29 @@ class TestEnforcePilotDataRetention:
 # notify_pilot_users_before_retention
 # =============================================================================
 
+
 @pytest.mark.django_db
 class TestNotifyPilotUsersBeforeRetention:
     """Tests for the notify_pilot_users_before_retention task."""
 
     @override_settings(PILOT_DATA_RETENTION_DAYS=30, PILOT_PREMIUM_ACCESS=True)
-    @patch('django.core.mail.send_mail')
+    @patch("django.core.mail.send_mail")
     def test_sends_warning_email(self, mock_send_mail):
         """Should send warning email to pilot users with at-risk documents."""
         from claims.models import Document
         from core.tasks import notify_pilot_users_before_retention
 
-        pilot_user = User.objects.create_user(email="warnme@example.com", password="TestPass123!")
+        pilot_user = User.objects.create_user(
+            email="warnme@example.com", password="TestPass123!"
+        )
 
         # Create document that will be at risk (older than retention - 7 days warning)
         at_risk_doc = Document.objects.create(
-            user=pilot_user, file_name="atrisk.pdf", file_size=100,
-            document_type='other', status='completed',
+            user=pilot_user,
+            file_name="atrisk.pdf",
+            file_size=100,
+            document_type="other",
+            status="completed",
         )
         Document.objects.filter(pk=at_risk_doc.pk).update(
             created_at=timezone.now() - timedelta(days=25)
@@ -204,7 +242,7 @@ class TestNotifyPilotUsersBeforeRetention:
 
         result = notify_pilot_users_before_retention()
 
-        assert result['notifications_sent'] >= 1
+        assert result["notifications_sent"] >= 1
         mock_send_mail.assert_called()
 
     @override_settings(PILOT_DATA_RETENTION_DAYS=5)
@@ -213,12 +251,13 @@ class TestNotifyPilotUsersBeforeRetention:
         from core.tasks import notify_pilot_users_before_retention
 
         result = notify_pilot_users_before_retention()
-        assert result['status'] == 'skipped'
+        assert result["status"] == "skipped"
 
 
 # =============================================================================
 # cleanup_old_health_metrics
 # =============================================================================
+
 
 @pytest.mark.django_db
 class TestCleanupOldHealthMetrics:
@@ -231,7 +270,8 @@ class TestCleanupOldHealthMetrics:
 
         # Create old metric
         old_metric = SystemHealthMetric.objects.create(
-            metric_type='celery_queue', value=5.0,
+            metric_type="celery_queue",
+            value=5.0,
         )
         SystemHealthMetric.objects.filter(pk=old_metric.pk).update(
             timestamp=timezone.now() - timedelta(days=45)
@@ -239,12 +279,13 @@ class TestCleanupOldHealthMetrics:
 
         # Create recent metric
         recent_metric = SystemHealthMetric.objects.create(
-            metric_type='celery_queue', value=3.0,
+            metric_type="celery_queue",
+            value=3.0,
         )
 
         result = cleanup_old_health_metrics()
 
-        assert 'Deleted' in result or 'deleted' in result.lower()
+        assert "Deleted" in result or "deleted" in result.lower()
         assert not SystemHealthMetric.objects.filter(pk=old_metric.pk).exists()
         assert SystemHealthMetric.objects.filter(pk=recent_metric.pk).exists()
 
@@ -254,7 +295,8 @@ class TestCleanupOldHealthMetrics:
         from core.tasks import cleanup_old_health_metrics
 
         recent = SystemHealthMetric.objects.create(
-            metric_type='celery_workers', value=2.0,
+            metric_type="celery_workers",
+            value=2.0,
         )
 
         cleanup_old_health_metrics()
@@ -266,6 +308,7 @@ class TestCleanupOldHealthMetrics:
 # check_processing_health
 # =============================================================================
 
+
 @pytest.mark.django_db
 class TestCheckProcessingHealth:
     """Tests for the check_processing_health task."""
@@ -275,40 +318,49 @@ class TestCheckProcessingHealth:
         from claims.models import Document
         from core.tasks import check_processing_health
 
-        user = User.objects.create_user(email="stuckdocs@example.com", password="TestPass123!")
+        user = User.objects.create_user(
+            email="stuckdocs@example.com", password="TestPass123!"
+        )
 
         # Create stuck document
         stuck_doc = Document.objects.create(
-            user=user, file_name="stuck.pdf", file_size=100,
-            document_type='other', status='processing',
+            user=user,
+            file_name="stuck.pdf",
+            file_size=100,
+            document_type="other",
+            status="processing",
         )
         Document.objects.filter(pk=stuck_doc.pk).update(
             updated_at=timezone.now() - timedelta(hours=2)
         )
 
-        with patch('core.health.check_celery', return_value={'queue_length': 0, 'workers': 1}):
+        with patch(
+            "core.health.check_celery", return_value={"queue_length": 0, "workers": 1}
+        ):
             result = check_processing_health()
 
-        assert result['stuck_docs'] >= 1
+        assert result["stuck_docs"] >= 1
 
     def test_no_alerts_when_healthy(self):
         """Should return no alerts when everything is healthy."""
         from core.tasks import check_processing_health
 
-        with patch('core.health.check_celery', return_value={'queue_length': 0, 'workers': 2}):
+        with patch(
+            "core.health.check_celery", return_value={"queue_length": 0, "workers": 2}
+        ):
             result = check_processing_health()
 
-        assert result['stuck_docs'] == 0
-        assert len(result['alerts']) == 0
+        assert result["stuck_docs"] == 0
+        assert len(result["alerts"]) == 0
 
-    @patch('core.health.check_celery', side_effect=Exception("Redis down"))
+    @patch("core.health.check_celery", side_effect=Exception("Redis down"))
     def test_handles_celery_check_failure(self, mock_celery):
         """Should handle Celery check failures gracefully."""
         from core.tasks import check_processing_health
 
         # Should not raise
         result = check_processing_health()
-        assert 'stuck_docs' in result
+        assert "stuck_docs" in result
 
     def test_detects_high_failure_rate(self):
         """Should alert when failure rate exceeds threshold."""
@@ -319,12 +371,14 @@ class TestCheckProcessingHealth:
         for i in range(6):
             ProcessingFailure.objects.create(
                 document_id=None,
-                failure_type='ocr',
-                error_message=f'Test failure {i}',
+                failure_type="ocr",
+                error_message=f"Test failure {i}",
             )
 
-        with patch('core.health.check_celery', return_value={'queue_length': 0, 'workers': 1}):
+        with patch(
+            "core.health.check_celery", return_value={"queue_length": 0, "workers": 1}
+        ):
             result = check_processing_health()
 
-        assert result['failure_stats']['total'] >= 5
-        assert len(result['alerts']) >= 1
+        assert result["failure_stats"]["total"] >= 5
+        assert len(result["alerts"]) >= 1

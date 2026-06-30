@@ -13,37 +13,41 @@ def backfill_last_activity(apps, schema_editor):
     - Most recent SharedDocument shared_at
     - Most recent SharedAnalysis shared_at
     """
-    VeteranCase = apps.get_model('vso', 'VeteranCase')
-    CaseNote = apps.get_model('vso', 'CaseNote')
-    SharedDocument = apps.get_model('vso', 'SharedDocument')
-    SharedAnalysis = apps.get_model('vso', 'SharedAnalysis')
+    VeteranCase = apps.get_model("vso", "VeteranCase")
+    CaseNote = apps.get_model("vso", "CaseNote")
+    SharedDocument = apps.get_model("vso", "SharedDocument")
+    SharedAnalysis = apps.get_model("vso", "SharedAnalysis")
 
     for case in VeteranCase.objects.filter(last_activity_at__isnull=True):
         # Start with the case's updated_at
         last_activity = case.updated_at
 
         # Check for more recent notes
-        latest_note = CaseNote.objects.filter(case=case).order_by('-created_at').first()
+        latest_note = CaseNote.objects.filter(case=case).order_by("-created_at").first()
         if latest_note and latest_note.created_at > last_activity:
             last_activity = latest_note.created_at
 
         # Check for more recent shared documents
-        latest_doc = SharedDocument.objects.filter(case=case).order_by('-shared_at').first()
+        latest_doc = (
+            SharedDocument.objects.filter(case=case).order_by("-shared_at").first()
+        )
         if latest_doc and latest_doc.shared_at > last_activity:
             last_activity = latest_doc.shared_at
 
         # Check for more recent shared analyses
-        latest_analysis = SharedAnalysis.objects.filter(case=case).order_by('-shared_at').first()
+        latest_analysis = (
+            SharedAnalysis.objects.filter(case=case).order_by("-shared_at").first()
+        )
         if latest_analysis and latest_analysis.shared_at > last_activity:
             last_activity = latest_analysis.shared_at
 
         case.last_activity_at = last_activity
-        case.save(update_fields=['last_activity_at'])
+        case.save(update_fields=["last_activity_at"])
 
 
 def reverse_backfill(apps, schema_editor):
     """Reverse operation - set all last_activity_at to NULL."""
-    VeteranCase = apps.get_model('vso', 'VeteranCase')
+    VeteranCase = apps.get_model("vso", "VeteranCase")
     VeteranCase.objects.all().update(last_activity_at=None)
 
 

@@ -37,7 +37,7 @@ jobs:
       DEBUG: 'False'
       DATABASE_URL: postgres://test:test@localhost:5432/test_db
       ALLOWED_HOSTS: localhost,127.0.0.1
-      OPENAI_API_KEY: sk-test-fake-key
+      ANTHROPIC_API_KEY: sk-ant-test-fake-key
       DJANGO_SETTINGS_MODULE: benefits_navigator.settings
       FIELD_ENCRYPTION_KEY: icYQDhc0tmgE75lYSiQfexQ-2bSFuMJBn9SsiH5xpOI=
 
@@ -66,6 +66,10 @@ jobs:
         run: |
           npm ci
           npm run build
+
+      - name: Django system checks (deploy)
+        run: |
+          python manage.py check --deploy --fail-level ERROR
 
       - name: Run migrations
         run: |

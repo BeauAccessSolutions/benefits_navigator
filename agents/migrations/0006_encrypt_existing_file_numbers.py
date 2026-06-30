@@ -26,7 +26,7 @@ def encrypt_existing_data(apps, schema_editor):
             encrypted = FieldEncryption.encrypt(file_number)
             cursor.execute(
                 "UPDATE agents_ratinganalysis SET file_number = %s WHERE id = %s",
-                [encrypted, analysis_id]
+                [encrypted, analysis_id],
             )
 
 
@@ -50,7 +50,7 @@ def decrypt_data(apps, schema_editor):
             if decrypted:
                 cursor.execute(
                     "UPDATE agents_ratinganalysis SET file_number = %s WHERE id = %s",
-                    [decrypted, analysis_id]
+                    [decrypted, analysis_id],
                 )
 
 

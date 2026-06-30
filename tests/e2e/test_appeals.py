@@ -20,19 +20,19 @@ class TestAppealsPublic:
 
     def test_appeals_home_loads(self, page: Page):
         """Appeals home should be accessible."""
-        page.goto('/appeals/')
-        expect(page).to_have_url('/appeals/')
-        expect(page.locator('h1').last).to_be_visible()
+        page.goto("/appeals/")
+        expect(page).to_have_url("/appeals/")
+        expect(page.locator("h1").last).to_be_visible()
 
     def test_decision_tree_loads(self, page: Page):
         """Decision tree should be accessible."""
-        page.goto('/appeals/find-your-path/')
-        expect(page).to_have_url('/appeals/find-your-path/')
-        expect(page.locator('form, .decision-tree')).to_be_visible()
+        page.goto("/appeals/find-your-path/")
+        expect(page).to_have_url("/appeals/find-your-path/")
+        expect(page.locator("form, .decision-tree")).to_be_visible()
 
     def test_decision_tree_navigation(self, page: Page):
         """Decision tree should guide user through questions."""
-        page.goto('/appeals/find-your-path/')
+        page.goto("/appeals/find-your-path/")
 
         # Look for decision options
         options = page.locator('input[type="radio"], button, .option')
@@ -42,30 +42,33 @@ class TestAppealsPublic:
 class TestAppealGuidance:
     """Test appeal guidance pages."""
 
-    @pytest.mark.parametrize('appeal_type', [
-        'higher-level-review',
-        'supplemental-claim',
-        # Add more as they exist
-    ])
+    @pytest.mark.parametrize(
+        "appeal_type",
+        [
+            "higher-level-review",
+            "supplemental-claim",
+            # Add more as they exist
+        ],
+    )
     def test_guidance_pages_load(self, page: Page, appeal_type: str):
         """Appeal guidance pages should be accessible."""
-        page.goto(f'/appeals/guide/{appeal_type}/')
+        page.goto(f"/appeals/guide/{appeal_type}/")
         # Should either load or 404
-        page.wait_for_load_state('networkidle')
+        page.wait_for_load_state("networkidle")
 
     def test_guidance_has_steps(self, page: Page):
         """Guidance should show step-by-step instructions."""
-        page.goto('/appeals/')
+        page.goto("/appeals/")
 
         # Look for guidance links
         guidance_links = page.locator('a[href*="/appeals/guide/"]')
         if guidance_links.count() > 0:
             # Click first guidance link
             guidance_links.first.click()
-            page.wait_for_load_state('networkidle')
+            page.wait_for_load_state("networkidle")
 
             # Should have steps or content
-            expect(page.locator('main, article, .content')).to_be_visible()
+            expect(page.locator("main, article, .content")).to_be_visible()
 
 
 class TestMyAppeals:
@@ -73,21 +76,21 @@ class TestMyAppeals:
 
     def test_my_appeals_requires_auth(self, page: Page):
         """My appeals should require authentication."""
-        page.goto('/appeals/my-appeals/')
-        expect(page).to_have_url('/accounts/login/?next=/appeals/my-appeals/')
+        page.goto("/appeals/my-appeals/")
+        expect(page).to_have_url("/accounts/login/?next=/appeals/my-appeals/")
 
     def test_my_appeals_loads(self, authenticated_page: Page):
         """Authenticated users can access their appeals."""
         page = authenticated_page
-        page.goto('/appeals/my-appeals/')
+        page.goto("/appeals/my-appeals/")
 
-        expect(page).to_have_url('/appeals/my-appeals/')
-        expect(page.locator('h1').last).to_be_visible()
+        expect(page).to_have_url("/appeals/my-appeals/")
+        expect(page.locator("h1").last).to_be_visible()
 
     def test_start_appeal_button_visible(self, authenticated_page: Page):
         """Start appeal button should be visible."""
         page = authenticated_page
-        page.goto('/appeals/my-appeals/')
+        page.goto("/appeals/my-appeals/")
 
         start_button = page.locator(
             'a[href*="start"], button:has-text("Start"), '
@@ -102,20 +105,18 @@ class TestStartAppeal:
     def test_start_appeal_page_loads(self, authenticated_page: Page):
         """Start appeal page should be accessible."""
         page = authenticated_page
-        page.goto('/appeals/start/')
+        page.goto("/appeals/start/")
 
-        expect(page).to_have_url('/appeals/start/')
-        expect(page.locator('form')).to_be_visible()
+        expect(page).to_have_url("/appeals/start/")
+        expect(page.locator("form")).to_be_visible()
 
     def test_start_appeal_form_fields(self, authenticated_page: Page):
         """Start appeal form should have required fields."""
         page = authenticated_page
-        page.goto('/appeals/start/')
+        page.goto("/appeals/start/")
 
         # Should have decision date field
-        date_input = page.locator(
-            'input[type="date"], input[name*="date"]'
-        )
+        date_input = page.locator('input[type="date"], input[name*="date"]')
         expect(date_input.first).to_be_visible()
 
         # Should have conditions field
@@ -127,7 +128,7 @@ class TestStartAppeal:
     def test_appeal_type_selection(self, authenticated_page: Page):
         """Should be able to select appeal type."""
         page = authenticated_page
-        page.goto('/appeals/start/')
+        page.goto("/appeals/start/")
 
         # May have appeal type selection or go through decision tree
         page.wait_for_timeout(500)
@@ -141,24 +142,24 @@ class TestAppealWorkflow:
         page = authenticated_page
 
         # First, navigate to my appeals
-        page.goto('/appeals/my-appeals/')
+        page.goto("/appeals/my-appeals/")
 
         # If there are appeals, click first one
         appeal_links = page.locator('a[href*="/appeals/"][href$="/"]')
         if appeal_links.count() > 0:
             appeal_links.first.click()
-            page.wait_for_load_state('networkidle')
+            page.wait_for_load_state("networkidle")
 
             # Should show status information
-            expect(page.locator('main')).to_be_visible()
+            expect(page.locator("main")).to_be_visible()
         else:
             # No appeals exist for test user — page loaded successfully
-            expect(page.locator('h1').last).to_be_visible()
+            expect(page.locator("h1").last).to_be_visible()
 
     def test_workflow_step_toggle(self, authenticated_page: Page):
         """Should be able to toggle workflow steps."""
         page = authenticated_page
-        page.goto('/appeals/my-appeals/')
+        page.goto("/appeals/my-appeals/")
 
         # This test verifies workflow UI works
         # Detailed testing in unit tests
@@ -171,13 +172,13 @@ class TestAppealDocuments:
     def test_add_document_option(self, authenticated_page: Page):
         """Should have option to add documents to appeal."""
         page = authenticated_page
-        page.goto('/appeals/my-appeals/')
+        page.goto("/appeals/my-appeals/")
 
         # If there are appeals, check for document option
         appeal_links = page.locator('a[href*="/appeals/"][href$="/"]')
         if appeal_links.count() > 0:
             appeal_links.first.click()
-            page.wait_for_load_state('networkidle')
+            page.wait_for_load_state("networkidle")
 
             # Look for add document button
             add_doc = page.locator(
@@ -193,13 +194,13 @@ class TestAppealNotes:
     def test_add_note_option(self, authenticated_page: Page):
         """Should have option to add notes to appeal."""
         page = authenticated_page
-        page.goto('/appeals/my-appeals/')
+        page.goto("/appeals/my-appeals/")
 
         # If there are appeals, check for notes
         appeal_links = page.locator('a[href*="/appeals/"][href$="/"]')
         if appeal_links.count() > 0:
             appeal_links.first.click()
-            page.wait_for_load_state('networkidle')
+            page.wait_for_load_state("networkidle")
 
             # Look for notes section or add note button
             notes = page.locator(

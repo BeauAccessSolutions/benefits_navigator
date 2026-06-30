@@ -1,14 +1,12 @@
 """
-AI Service - Analyze documents using OpenAI GPT
+AI Service - Analyze documents using Claude
 
-Uses the centralized AI Gateway for all OpenAI API calls.
+Uses the centralized AI Gateway for all Claude API calls.
 """
 
 import logging
 from datetime import datetime
 from typing import Dict
-
-from django.conf import settings
 
 # Use the centralized AI gateway
 from agents.ai_gateway import get_gateway, sanitize_input
@@ -102,7 +100,7 @@ TODAY'S DATE: {today}"""
 
 class AIService:
     """
-    Service for analyzing document text using OpenAI GPT.
+    Service for analyzing document text using Claude.
 
     Uses the centralized AI Gateway for all API calls, providing:
     - Automatic retry with exponential backoff
@@ -137,16 +135,22 @@ class AIService:
         max_input_tokens = self.max_tokens - 1000
         # Rough estimate: 1 token ≈ 4 characters
         max_chars = max_input_tokens * 4
-        truncated_text = sanitized_text[:max_chars] if len(sanitized_text) > max_chars else sanitized_text
+        truncated_text = (
+            sanitized_text[:max_chars]
+            if len(sanitized_text) > max_chars
+            else sanitized_text
+        )
 
         if len(sanitized_text) > max_chars:
-            logger.warning(f"Text truncated from {len(sanitized_text)} to {len(truncated_text)} characters")
+            logger.warning(
+                f"Text truncated from {len(sanitized_text)} to {len(truncated_text)} characters"
+            )
 
         # Build prompt based on document type
         system_prompt = self._get_system_prompt(document_type)
         user_prompt = self._build_user_prompt(truncated_text, document_type)
 
-        logger.info(f"Sending {len(truncated_text)} characters to OpenAI for analysis")
+        logger.info(f"Sending {len(truncated_text)} characters to Claude for analysis")
 
         # Use the gateway for the API call (includes retry, timeout, etc.)
         result = self._gateway.complete(
@@ -158,7 +162,7 @@ class AIService:
         )
 
         if result.is_failure:
-            logger.error(f"OpenAI API error: {result.error.message}")
+            logger.error(f"AI API error: {result.error.message}")
             raise Exception(f"AI analysis failed: {result.error.message}")
 
         # Extract response
@@ -171,9 +175,9 @@ class AIService:
         logger.info(f"Analysis complete. Used {tokens_used} tokens")
 
         return {
-            'analysis': analysis,
-            'model': self.model,
-            'tokens_used': tokens_used,
+            "analysis": analysis,
+            "model": self.model,
+            "tokens_used": tokens_used,
         }
 
     def _get_system_prompt(self, document_type: str) -> str:
@@ -181,7 +185,7 @@ class AIService:
         Get system prompt tailored to document type
         """
         # Use enhanced prompt for decision letters
-        if document_type == 'decision_letter':
+        if document_type == "decision_letter":
             return RATING_DECISION_SYSTEM_PROMPT
 
         base_prompt = """You are an expert VA benefits advisor helping veterans understand their documents and claims.
@@ -200,9 +204,9 @@ Never:
 - Use overly technical jargon"""
 
         document_specific = {
-            'medical_records': "\n\nFocus on: Diagnoses mentioned, treatment history, service connection evidence, any gaps in medical evidence.",
-            'nexus_letter': "\n\nFocus on: Medical opinion strength, link to service, supporting evidence cited.",
-            'service_records': "\n\nFocus on: Service dates, events/injuries documented, potential service connection events.",
+            "medical_records": "\n\nFocus on: Diagnoses mentioned, treatment history, service connection evidence, any gaps in medical evidence.",
+            "nexus_letter": "\n\nFocus on: Medical opinion strength, link to service, supporting evidence cited.",
+            "service_records": "\n\nFocus on: Service dates, events/injuries documented, potential service connection events.",
         }
 
         return base_prompt + document_specific.get(document_type, "")
@@ -212,10 +216,9 @@ Never:
         Build user prompt with document text
         """
         # Use enhanced prompt for decision letters with actionable insights
-        if document_type == 'decision_letter':
+        if document_type == "decision_letter":
             return RATING_DECISION_USER_PROMPT.format(
-                text=text,
-                today=datetime.now().strftime("%B %d, %Y")
+                text=text, today=datetime.now().strftime("%B %d, %Y")
             )
 
         return f"""Analyze this VA-related document and provide:
@@ -255,7 +258,7 @@ Provide your analysis in clear sections as outlined above."""
         # In future, could parse into more structured JSON
 
         return {
-            'summary': analysis_text,
-            'raw_response': analysis_text,
-            'structured': True,  # Flag for template to know this is structured
+            "summary": analysis_text,
+            "raw_response": analysis_text,
+            "structured": True,  # Flag for template to know this is structured
         }

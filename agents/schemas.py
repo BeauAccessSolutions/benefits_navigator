@@ -9,13 +9,14 @@ from typing import Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
-
 # =============================================================================
 # DECISION LETTER ANALYZER SCHEMAS
 # =============================================================================
 
+
 class GrantedCondition(BaseModel):
     """A condition that was granted in a VA decision."""
+
     condition: str
     rating: int = Field(ge=0, le=100)
     effective_date: Optional[str] = None
@@ -25,6 +26,7 @@ class GrantedCondition(BaseModel):
 
 class DeniedCondition(BaseModel):
     """A condition that was denied in a VA decision."""
+
     condition: str
     denial_reason: str
     denial_category: Literal[
@@ -38,6 +40,7 @@ class DeniedCondition(BaseModel):
 
 class DeferredCondition(BaseModel):
     """A condition that was deferred in a VA decision."""
+
     condition: str
     reason: str
     expected_action: Optional[str] = None
@@ -45,6 +48,7 @@ class DeferredCondition(BaseModel):
 
 class AppealOption(BaseModel):
     """An appeal option available to the veteran."""
+
     type: str
     best_for: str
     deadline: str
@@ -54,6 +58,7 @@ class AppealOption(BaseModel):
 
 class DecisionLetterAnalysisResponse(BaseModel):
     """Complete response from decision letter analysis."""
+
     decision_date: Optional[str] = None
     conditions_granted: List[GrantedCondition] = Field(default_factory=list)
     conditions_denied: List[DeniedCondition] = Field(default_factory=list)
@@ -70,8 +75,10 @@ class DecisionLetterAnalysisResponse(BaseModel):
 # EVIDENCE GAP ANALYZER SCHEMAS
 # =============================================================================
 
+
 class EvidenceGap(BaseModel):
     """An identified gap in evidence."""
+
     condition: str
     gap_type: str
     m21_requirement: Optional[str] = None
@@ -83,6 +90,7 @@ class EvidenceGap(BaseModel):
 
 class ConditionStrength(BaseModel):
     """Strength assessment for a specific condition."""
+
     current_strength: Literal["strong", "moderate", "weak"]
     current_disability_evidence: Literal["strong", "moderate", "weak"] = "moderate"
     in_service_evidence: Literal["strong", "moderate", "weak"] = "moderate"
@@ -94,6 +102,7 @@ class ConditionStrength(BaseModel):
 
 class EvidenceRecommendation(BaseModel):
     """A recommendation for gathering evidence."""
+
     action: str
     priority: int
     condition: str
@@ -103,6 +112,7 @@ class EvidenceRecommendation(BaseModel):
 
 class TemplateSuggestion(BaseModel):
     """A suggested template for the veteran."""
+
     template: str
     for_condition: str
     purpose: str
@@ -110,6 +120,7 @@ class TemplateSuggestion(BaseModel):
 
 class EvidenceGapAnalysisResponse(BaseModel):
     """Complete response from evidence gap analysis."""
+
     evidence_gaps: List[EvidenceGap] = Field(default_factory=list)
     strength_assessment: Dict[str, ConditionStrength] = Field(default_factory=dict)
     recommendations: List[EvidenceRecommendation] = Field(default_factory=list)
@@ -123,8 +134,10 @@ class EvidenceGapAnalysisResponse(BaseModel):
 # PERSONAL STATEMENT GENERATOR SCHEMAS
 # =============================================================================
 
+
 class PersonalStatementResponse(BaseModel):
     """Response from personal statement generation."""
+
     statement: str
     word_count: int = 0
     key_points_covered: List[str] = Field(default_factory=list)
@@ -137,8 +150,10 @@ class PersonalStatementResponse(BaseModel):
 # DENIAL DECODER SCHEMAS
 # =============================================================================
 
+
 class RequiredEvidence(BaseModel):
     """Evidence required to overcome a denial."""
+
     type: str
     description: str
     priority: Literal["critical", "important", "helpful"]
@@ -148,6 +163,7 @@ class RequiredEvidence(BaseModel):
 
 class DenialDecoderResponse(BaseModel):
     """Response from denial decoder enhanced guidance."""
+
     required_evidence: List[RequiredEvidence] = Field(default_factory=list)
     suggested_actions: List[str] = Field(default_factory=list)
     va_standard: str = ""
@@ -158,8 +174,10 @@ class DenialDecoderResponse(BaseModel):
 # RATING DECISION ANALYZER SCHEMAS
 # =============================================================================
 
+
 class RatedCondition(BaseModel):
     """A condition with its rating from a rating decision."""
+
     name: str
     diagnostic_code: Optional[str] = None
     rating_percentage: int = Field(ge=0, le=100)
@@ -174,6 +192,7 @@ class RatedCondition(BaseModel):
 
 class IncreaseOpportunity(BaseModel):
     """An opportunity to increase a rating."""
+
     condition: str
     current_rating: int
     current_diagnostic_code: Optional[str] = None
@@ -189,6 +208,7 @@ class IncreaseOpportunity(BaseModel):
 
 class SecondaryCondition(BaseModel):
     """A potential secondary condition to claim."""
+
     potential_condition: str
     connect_to: str
     medical_rationale: str
@@ -198,6 +218,7 @@ class SecondaryCondition(BaseModel):
 
 class RatingError(BaseModel):
     """A potential error in a rating decision."""
+
     condition: str
     error_type: Literal["procedural", "factual", "legal"]
     description: str
@@ -207,6 +228,7 @@ class RatingError(BaseModel):
 
 class EffectiveDateIssue(BaseModel):
     """A potential effective date issue."""
+
     condition: str
     current_effective_date: str
     potential_earlier_date: str
@@ -216,6 +238,7 @@ class EffectiveDateIssue(BaseModel):
 
 class DeadlineTracker(BaseModel):
     """Deadline tracking information."""
+
     decision_date: Optional[str] = None
     appeal_deadline: Optional[str] = None
     appeal_deadline_passed: bool = False
@@ -227,6 +250,7 @@ class DeadlineTracker(BaseModel):
 
 class BenefitUnlocked(BaseModel):
     """A benefit unlocked by the current rating."""
+
     benefit: str
     eligibility_basis: str
     how_to_claim: str
@@ -235,6 +259,7 @@ class BenefitUnlocked(BaseModel):
 
 class ExamPrepTip(BaseModel):
     """C&P exam preparation guidance."""
+
     condition: str
     exam_type: str
     what_examiner_looks_for: List[str] = Field(default_factory=list)
@@ -245,6 +270,7 @@ class ExamPrepTip(BaseModel):
 
 class PriorityAction(BaseModel):
     """A prioritized action item."""
+
     priority: int
     action: str
     why: str
@@ -254,6 +280,7 @@ class PriorityAction(BaseModel):
 
 class ConfidenceFactor(BaseModel):
     """A factor affecting confidence in the analysis."""
+
     type: Literal["info", "warning", "limitation"]
     aspect: str
     message: str
@@ -261,6 +288,7 @@ class ConfidenceFactor(BaseModel):
 
 class ConfidenceScoring(BaseModel):
     """Confidence scoring for the analysis."""
+
     overall_confidence: int = Field(ge=0, le=100, default=0)
     extraction_quality: int = Field(ge=0, le=100, default=0)
     document_completeness: int = Field(ge=0, le=100, default=0)
@@ -270,6 +298,7 @@ class ConfidenceScoring(BaseModel):
 
 class RatingExtractionResponse(BaseModel):
     """Response from rating decision extraction (phase 1)."""
+
     veteran_name: Optional[str] = None
     file_number: Optional[str] = None
     decision_date: Optional[str] = None
@@ -282,6 +311,7 @@ class RatingExtractionResponse(BaseModel):
 
 class RatingAnalysisResponse(BaseModel):
     """Response from rating decision analysis (phase 2)."""
+
     confidence_scoring: ConfidenceScoring = Field(default_factory=ConfidenceScoring)
     increase_opportunities: List[IncreaseOpportunity] = Field(default_factory=list)
     secondary_conditions: List[SecondaryCondition] = Field(default_factory=list)
@@ -297,8 +327,10 @@ class RatingAnalysisResponse(BaseModel):
 # DOCUMENT ANALYSIS SCHEMA (for AIService)
 # =============================================================================
 
+
 class DocumentAnalysisResponse(BaseModel):
     """Generic document analysis response."""
+
     summary: str
     key_points: List[str] = Field(default_factory=list)
     document_type: Optional[str] = None

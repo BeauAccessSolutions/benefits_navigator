@@ -79,7 +79,9 @@ class M21TOCCrawler:
         self.visited_urls: Set[str] = set()
         self.failed_urls: Set[str] = set()
 
-    def crawl_page(self, page, url: str, depth: int = 0, max_depth: int = 3) -> Dict[str, dict]:
+    def crawl_page(
+        self, page, url: str, depth: int = 0, max_depth: int = 3
+    ) -> Dict[str, dict]:
         """
         Crawl a single page and extract article IDs from links.
 
@@ -104,43 +106,46 @@ class M21TOCCrawler:
 
         try:
             logger.info(f"[Depth {depth}] Crawling: {url[:80]}...")
-            page.goto(url, wait_until='networkidle', timeout=30000)
+            page.goto(url, wait_until="networkidle", timeout=30000)
             time.sleep(self.rate_limit)
 
             # Get page title for context
             page_title = page.title()
 
             # Find all links on the page
-            links = page.query_selector_all('a[href]')
+            links = page.query_selector_all("a[href]")
 
             urls_to_crawl = []
 
             for link in links:
                 try:
-                    href = link.get_attribute('href')
+                    href = link.get_attribute("href")
                     text = link.inner_text().strip()
 
                     if not href:
                         continue
 
                     # Make absolute URL if needed
-                    if href.startswith('/'):
+                    if href.startswith("/"):
                         href = f"https://www.knowva.ebenefits.va.gov{href}"
 
                     # Only process KnowVA URLs
-                    if 'knowva.ebenefits.va.gov' not in href:
+                    if "knowva.ebenefits.va.gov" not in href:
                         continue
 
                     ids = extract_knowva_ids(href)
 
                     # If it's a content page (article)
-                    if ids['article_id'] and ids['article_id'] not in self.discovered_articles:
+                    if (
+                        ids["article_id"]
+                        and ids["article_id"] not in self.discovered_articles
+                    ):
                         article_data = {
-                            'article_id': ids['article_id'],
-                            'url': href,
-                            'title': text,
-                            'found_on': url,
-                            'depth': depth
+                            "article_id": ids["article_id"],
+                            "url": href,
+                            "title": text,
+                            "found_on": url,
+                            "depth": depth,
                         }
 
                         # Try to parse M21-1 reference from title
@@ -148,18 +153,27 @@ class M21TOCCrawler:
                         if ref_data:
                             article_data.update(ref_data)
 
-                        new_articles[ids['article_id']] = article_data
-                        self.discovered_articles[ids['article_id']] = article_data
-                        logger.info(f"  Found article: {ids['article_id']} - {text[:50]}...")
+                        new_articles[ids["article_id"]] = article_data
+                        self.discovered_articles[ids["article_id"]] = article_data
+                        logger.info(
+                            f"  Found article: {ids['article_id']} - {text[:50]}..."
+                        )
 
                     # If it's a topic page, queue for crawling
-                    if ids['topic_id'] and ids['topic_id'] not in self.discovered_topics:
-                        self.discovered_topics.add(ids['topic_id'])
+                    if (
+                        ids["topic_id"]
+                        and ids["topic_id"] not in self.discovered_topics
+                    ):
+                        self.discovered_topics.add(ids["topic_id"])
                         if href not in self.visited_urls:
                             urls_to_crawl.append(href)
 
                     # Also crawl content pages that might have sub-links
-                    if ids['article_id'] and 'M21-1' in text and href not in self.visited_urls:
+                    if (
+                        ids["article_id"]
+                        and "M21-1" in text
+                        and href not in self.visited_urls
+                    ):
                         urls_to_crawl.append(href)
 
                 except Exception as e:
@@ -170,7 +184,9 @@ class M21TOCCrawler:
             for crawl_url in urls_to_crawl[:50]:  # Limit to prevent infinite crawl
                 if crawl_url not in self.visited_urls:
                     time.sleep(self.rate_limit)
-                    sub_articles = self.crawl_page(page, crawl_url, depth + 1, max_depth)
+                    sub_articles = self.crawl_page(
+                        page, crawl_url, depth + 1, max_depth
+                    )
                     new_articles.update(sub_articles)
 
         except Exception as e:
@@ -182,7 +198,7 @@ class M21TOCCrawler:
     def _parse_reference(self, text: str) -> dict:
         """Parse M21-1 reference from link text."""
         # Pattern: M21-1, Part I, Subpart i, Chapter 1, Section A - Title
-        pattern = r'M21-1.*?Part\s+([IVX]+).*?Subpart\s+([ivx]+).*?Chapter\s+(\d+).*?Section\s+([A-Z])'
+        pattern = r"M21-1.*?Part\s+([IVX]+).*?Subpart\s+([ivx]+).*?Chapter\s+(\d+).*?Section\s+([A-Z])"
         match = re.search(pattern, text, re.IGNORECASE)
 
         if match:
@@ -192,15 +208,17 @@ class M21TOCCrawler:
             section = match.group(4).upper()
 
             return {
-                'part': part,
-                'subpart': subpart,
-                'chapter': chapter,
-                'section': section,
-                'reference': f"{part}.{subpart}.{chapter}.{section}"
+                "part": part,
+                "subpart": subpart,
+                "chapter": chapter,
+                "section": section,
+                "reference": f"{part}.{subpart}.{chapter}.{section}",
             }
 
         # Try chapter-only pattern (no section)
-        chapter_pattern = r'M21-1.*?Part\s+([IVX]+).*?Subpart\s+([ivx]+).*?Chapter\s+(\d+)'
+        chapter_pattern = (
+            r"M21-1.*?Part\s+([IVX]+).*?Subpart\s+([ivx]+).*?Chapter\s+(\d+)"
+        )
         match = re.search(chapter_pattern, text, re.IGNORECASE)
 
         if match:
@@ -209,11 +227,11 @@ class M21TOCCrawler:
             chapter = match.group(3)
 
             return {
-                'part': part,
-                'subpart': subpart,
-                'chapter': chapter,
-                'section': '',
-                'reference': f"{part}.{subpart}.{chapter}"
+                "part": part,
+                "subpart": subpart,
+                "chapter": chapter,
+                "section": "",
+                "reference": f"{part}.{subpart}.{chapter}",
             }
 
         return None
@@ -228,7 +246,7 @@ class M21TOCCrawler:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=self.headless)
             context = browser.new_context(
-                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
             )
             page = context.new_page()
 
@@ -253,7 +271,7 @@ class M21TOCCrawler:
 
         return self.discovered_articles
 
-    def save_results(self, filename: str = 'agents/data/toc_discovered_articles.json'):
+    def save_results(self, filename: str = "agents/data/toc_discovered_articles.json"):
         """Save discovered articles to JSON file."""
         filepath = Path(filename)
         filepath.parent.mkdir(parents=True, exist_ok=True)
@@ -267,11 +285,11 @@ class M21TOCCrawler:
                 "total_topics": len(self.discovered_topics),
                 "pages_visited": len(self.visited_urls),
                 "failed_urls": len(self.failed_urls),
-                "discovery_method": "TOC crawling"
-            }
+                "discovery_method": "TOC crawling",
+            },
         }
 
-        with open(filepath, 'w') as f:
+        with open(filepath, "w") as f:
             json.dump(output, f, indent=2)
 
         logger.info(f"Saved {len(self.discovered_articles)} articles to {filepath}")
@@ -294,14 +312,14 @@ def discover_all_from_toc(headless: bool = True, save: bool = True) -> Dict[str,
     logger.info("Starting M21-1 TOC discovery...")
     articles = crawler.discover_all()
 
-    logger.info(f"\n=== Discovery Complete ===")
+    logger.info("\n=== Discovery Complete ===")
     logger.info(f"Total articles discovered: {len(articles)}")
     logger.info(f"Total topics found: {len(crawler.discovered_topics)}")
     logger.info(f"Pages visited: {len(crawler.visited_urls)}")
 
     if save:
         filepath = crawler.save_results()
-        logger.info(f"\nTo scrape all discovered articles:")
+        logger.info("\nTo scrape all discovered articles:")
         logger.info(f"  python manage.py scrape_m21 --import-from-file {filepath}")
 
     return articles
@@ -311,10 +329,16 @@ def main():
     """CLI entry point."""
     import argparse
 
-    parser = argparse.ArgumentParser(description='Discover M21-1 articles from TOC')
-    parser.add_argument('--no-headless', action='store_true', help='Show browser window')
-    parser.add_argument('--output', '-o', default='agents/data/toc_discovered_articles.json',
-                        help='Output JSON file')
+    parser = argparse.ArgumentParser(description="Discover M21-1 articles from TOC")
+    parser.add_argument(
+        "--no-headless", action="store_true", help="Show browser window"
+    )
+    parser.add_argument(
+        "--output",
+        "-o",
+        default="agents/data/toc_discovered_articles.json",
+        help="Output JSON file",
+    )
 
     args = parser.parse_args()
 
@@ -322,12 +346,14 @@ def main():
 
     if articles:
         print(f"\n✓ Discovered {len(articles)} articles")
-        print(f"✓ Saved to agents/data/toc_discovered_articles.json")
+        print("✓ Saved to agents/data/toc_discovered_articles.json")
         print("\nTo scrape all discovered articles:")
-        print("  python manage.py scrape_m21 --import-from-file agents/data/toc_discovered_articles.json")
+        print(
+            "  python manage.py scrape_m21 --import-from-file agents/data/toc_discovered_articles.json"
+        )
     else:
         print("\n✗ No articles discovered")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
