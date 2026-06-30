@@ -4,6 +4,7 @@ Django settings for benefits_navigator project.
 
 import os
 import ssl
+import sys
 from pathlib import Path
 import environ
 
@@ -391,8 +392,12 @@ CSP_CONNECT_SRC = ("'self'",)
 CSP_FRAME_ANCESTORS = ("'none'",)
 CSP_FORM_ACTION = ("'self'",)
 
+# Detect test runs (CI runs with DEBUG=False) so production-only HTTP->HTTPS
+# redirects don't turn every test-client request into a 301.
+TESTING = "pytest" in sys.modules or "test" in sys.argv
+
 # Production-only settings (skip SSL redirect in staging - DO handles SSL at edge)
-if not DEBUG:
+if not DEBUG and not TESTING:
     # Only enable SSL redirect in production, not staging
     # DO App Platform handles SSL termination and uses HTTP for internal health checks
     STAGING = env.bool("STAGING", default=False)
