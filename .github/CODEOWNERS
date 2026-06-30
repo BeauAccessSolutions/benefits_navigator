@@ -1,0 +1,41 @@
+# CODEOWNERS — auto-request review when security-sensitive surfaces change.
+#
+# This is the GitHub-native analog of a "review trigger": editing any path
+# below auto-assigns the listed owner as a required reviewer. To make review
+# BLOCKING (not just requested), enable branch protection on `main` with
+# "Require review from Code Owners" — that part must be configured in the
+# GitHub UI (Settings → Branches), it cannot live in this file.
+#
+# Replace @Beaudoin0zach with a team handle (e.g. @org/security) once there
+# is more than one maintainer.
+
+# Default owner for everything (fallback).
+*                                   @Beaudoin0zach
+
+# --- PII / PHI encryption & data protection -------------------------------
+/core/encryption.py                 @Beaudoin0zach
+/core/signed_urls.py                @Beaudoin0zach
+/core/middleware.py                 @Beaudoin0zach
+
+# --- AI gateway & prompt-injection surface --------------------------------
+/agents/ai_gateway.py               @Beaudoin0zach
+/agents/schemas.py                  @Beaudoin0zach
+
+# --- Auth, subscriptions, billing (Stripe) --------------------------------
+/accounts/                          @Beaudoin0zach
+
+# --- Async tasks handling user data (acks_late / PII rules) ---------------
+/claims/tasks.py                    @Beaudoin0zach
+/core/tasks.py                      @Beaudoin0zach
+
+# --- Config, secrets surface, feature flags -------------------------------
+/benefits_navigator/settings.py     @Beaudoin0zach
+/.do/                               @Beaudoin0zach
+/.env.example                       @Beaudoin0zach
+
+# --- Database schema (irreversible in prod) -------------------------------
+**/migrations/                      @Beaudoin0zach
+
+# --- Supply chain & CI ----------------------------------------------------
+/requirements.txt                   @Beaudoin0zach
+/.github/                           @Beaudoin0zach
