@@ -22,7 +22,6 @@ from decimal import Decimal
 from typing import Optional
 
 from django.conf import settings
-from openai import OpenAI
 
 from agents.services import BaseAgent
 from agents.reference_data import (
@@ -447,8 +446,8 @@ class RatingDecisionAnalyzer(BaseAgent):
         Initialize the analyzer.
 
         Args:
-            model: Model to use (defaults to settings.OPENAI_MODEL)
-                   Use gpt-4o for best results, gpt-3.5-turbo for cost savings
+            model: Model to use (defaults to the gateway's configured
+                   Anthropic model, e.g. claude-opus-4-8)
         """
         super().__init__()
         if model:
