@@ -16,13 +16,10 @@ Covers:
 
 import pytest
 from datetime import date, timedelta
-from decimal import Decimal
-from unittest.mock import patch, MagicMock
 
 from django.test import TestCase, Client, RequestFactory
 from django.urls import reverse
 from django.contrib.auth import get_user_model
-from django.utils import timezone
 
 from core.models import (
     JourneyStage,
@@ -39,6 +36,7 @@ User = get_user_model()
 # =============================================================================
 # JOURNEY STAGE MODEL TESTS
 # =============================================================================
+
 
 class TestJourneyStageModel(TestCase):
     """Tests for the JourneyStage model."""
@@ -87,9 +85,7 @@ class TestJourneyStageModel(TestCase):
         """JourneyStage accepts valid icon choices."""
         for icon, _ in JourneyStage.ICON_CHOICES:
             stage = JourneyStage.objects.create(
-                code=f"stage_{icon}",
-                name=f"Stage {icon}",
-                icon=icon
+                code=f"stage_{icon}", name=f"Stage {icon}", icon=icon
             )
             self.assertEqual(stage.icon, icon)
 
@@ -97,9 +93,7 @@ class TestJourneyStageModel(TestCase):
         """JourneyStage accepts valid color choices."""
         for color, _ in JourneyStage.COLOR_CHOICES:
             stage = JourneyStage.objects.create(
-                code=f"stage_{color}",
-                name=f"Stage {color}",
-                color=color
+                code=f"stage_{color}", name=f"Stage {color}", color=color
             )
             self.assertEqual(stage.color, color)
 
@@ -108,13 +102,13 @@ class TestJourneyStageModel(TestCase):
 # USER JOURNEY EVENT MODEL TESTS
 # =============================================================================
 
+
 class TestUserJourneyEventModel(TestCase):
     """Tests for the UserJourneyEvent model."""
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email="test@example.com",
-            password="TestPass123!"
+            email="test@example.com", password="TestPass123!"
         )
         self.stage = JourneyStage.objects.create(
             code="claim_filed",
@@ -204,13 +198,13 @@ class TestUserJourneyEventModel(TestCase):
 # JOURNEY MILESTONE MODEL TESTS
 # =============================================================================
 
+
 class TestJourneyMilestoneModel(TestCase):
     """Tests for the JourneyMilestone model."""
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email="test@example.com",
-            password="TestPass123!"
+            email="test@example.com", password="TestPass123!"
         )
 
     def test_milestone_creation(self):
@@ -279,13 +273,13 @@ class TestJourneyMilestoneModel(TestCase):
 # DEADLINE MODEL TESTS
 # =============================================================================
 
+
 class TestDeadlineModel(TestCase):
     """Tests for the Deadline model."""
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email="test@example.com",
-            password="TestPass123!"
+            email="test@example.com", password="TestPass123!"
         )
 
     def test_deadline_creation(self):
@@ -411,13 +405,13 @@ class TestDeadlineModel(TestCase):
 # AUDIT LOG MODEL TESTS
 # =============================================================================
 
+
 class TestAuditLogModel(TestCase):
     """Tests for the AuditLog model."""
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email="test@example.com",
-            password="TestPass123!"
+            email="test@example.com", password="TestPass123!"
         )
         self.factory = RequestFactory()
 
@@ -450,40 +444,40 @@ class TestAuditLogModel(TestCase):
 
     def test_audit_log_classmethod(self):
         """AuditLog.log() convenience method works."""
-        request = self.factory.get('/')
+        request = self.factory.get("/")
         request.user = self.user
-        request.META['REMOTE_ADDR'] = '10.0.0.1'
-        request.META['HTTP_USER_AGENT'] = 'Test Browser'
+        request.META["REMOTE_ADDR"] = "10.0.0.1"
+        request.META["HTTP_USER_AGENT"] = "Test Browser"
 
         log = AuditLog.log(
-            action='pii_view',
+            action="pii_view",
             request=request,
-            resource_type='UserProfile',
+            resource_type="UserProfile",
             resource_id=1,
-            details={'field': 'va_file_number'},
+            details={"field": "va_file_number"},
         )
 
-        self.assertEqual(log.action, 'pii_view')
-        self.assertEqual(log.ip_address, '10.0.0.1')
-        self.assertEqual(log.resource_type, 'UserProfile')
-        self.assertEqual(log.details['field'], 'va_file_number')
+        self.assertEqual(log.action, "pii_view")
+        self.assertEqual(log.ip_address, "10.0.0.1")
+        self.assertEqual(log.resource_type, "UserProfile")
+        self.assertEqual(log.details["field"], "va_file_number")
 
     def test_audit_log_gets_user_from_request(self):
         """AuditLog.log() extracts user from request if not provided."""
-        request = self.factory.get('/')
+        request = self.factory.get("/")
         request.user = self.user
 
-        log = AuditLog.log(action='login', request=request)
+        log = AuditLog.log(action="login", request=request)
         self.assertEqual(log.user, self.user)
 
     def test_audit_log_extracts_ip_from_x_forwarded_for(self):
         """AuditLog extracts IP from X-Forwarded-For header."""
-        request = self.factory.get('/')
+        request = self.factory.get("/")
         request.user = self.user
-        request.META['HTTP_X_FORWARDED_FOR'] = '1.2.3.4, 5.6.7.8'
+        request.META["HTTP_X_FORWARDED_FOR"] = "1.2.3.4, 5.6.7.8"
 
-        log = AuditLog.log(action='login', request=request)
-        self.assertEqual(log.ip_address, '1.2.3.4')
+        log = AuditLog.log(action="login", request=request)
+        self.assertEqual(log.ip_address, "1.2.3.4")
 
     def test_audit_log_ordering(self):
         """AuditLogs are ordered by timestamp descending."""
@@ -516,6 +510,7 @@ class TestAuditLogModel(TestCase):
 # DATA RETENTION POLICY MODEL TESTS
 # =============================================================================
 
+
 class TestDataRetentionPolicyModel(TestCase):
     """Tests for the DataRetentionPolicy model."""
 
@@ -543,19 +538,22 @@ class TestDataRetentionPolicyModel(TestCase):
 # CORE VIEW TESTS
 # =============================================================================
 
+
 @pytest.mark.django_db
 class TestHomeView:
     """Tests for the home page view."""
 
     def test_home_page_loads(self, client):
         """Home page loads successfully."""
-        response = client.get(reverse('home'))
+        response = client.get(reverse("home"))
         assert response.status_code == 200
 
     def test_home_page_contains_title(self, client):
         """Home page contains expected title."""
-        response = client.get(reverse('home'))
-        assert b'VA Benefits Navigator' in response.content or response.status_code == 200
+        response = client.get(reverse("home"))
+        assert (
+            b"VA Benefits Navigator" in response.content or response.status_code == 200
+        )
 
 
 @pytest.mark.django_db
@@ -564,22 +562,24 @@ class TestDashboardView:
 
     def test_dashboard_requires_login(self, client):
         """Dashboard requires authentication."""
-        response = client.get(reverse('dashboard'))
+        response = client.get(reverse("dashboard"))
         assert response.status_code == 302
-        assert 'login' in response.url.lower()
+        assert "login" in response.url.lower()
 
     def test_dashboard_loads_for_authenticated_user(self, authenticated_client):
         """Dashboard loads for authenticated user."""
-        response = authenticated_client.get(reverse('dashboard'))
+        response = authenticated_client.get(reverse("dashboard"))
         assert response.status_code == 200
 
-    def test_dashboard_shows_user_data(self, authenticated_client, document, exam_checklist, appeal):
+    def test_dashboard_shows_user_data(
+        self, authenticated_client, document, exam_checklist, appeal
+    ):
         """Dashboard displays user's documents, checklists, and appeals."""
-        response = authenticated_client.get(reverse('dashboard'))
+        response = authenticated_client.get(reverse("dashboard"))
         assert response.status_code == 200
-        assert 'documents' in response.context
-        assert 'checklists' in response.context
-        assert 'appeals' in response.context
+        assert "documents" in response.context
+        assert "checklists" in response.context
+        assert "appeals" in response.context
 
 
 @pytest.mark.django_db
@@ -588,21 +588,23 @@ class TestJourneyDashboardView:
 
     def test_journey_dashboard_requires_login(self, client):
         """Journey dashboard requires authentication."""
-        response = client.get(reverse('core:journey_dashboard'))
+        response = client.get(reverse("core:journey_dashboard"))
         assert response.status_code == 302
 
     def test_journey_dashboard_loads(self, authenticated_client):
         """Journey dashboard loads for authenticated user."""
-        response = authenticated_client.get(reverse('core:journey_dashboard'))
+        response = authenticated_client.get(reverse("core:journey_dashboard"))
         assert response.status_code == 200
 
-    def test_journey_dashboard_shows_timeline(self, authenticated_client, journey_event, milestone, deadline):
+    def test_journey_dashboard_shows_timeline(
+        self, authenticated_client, journey_event, milestone, deadline
+    ):
         """Journey dashboard shows timeline data."""
-        response = authenticated_client.get(reverse('core:journey_dashboard'))
+        response = authenticated_client.get(reverse("core:journey_dashboard"))
         assert response.status_code == 200
-        assert 'timeline' in response.context
-        assert 'deadlines' in response.context
-        assert 'milestones' in response.context
+        assert "timeline" in response.context
+        assert "deadlines" in response.context
+        assert "milestones" in response.context
 
 
 @pytest.mark.django_db
@@ -611,39 +613,47 @@ class TestMilestoneViews:
 
     def test_add_milestone_requires_login(self, client):
         """Add milestone requires authentication."""
-        response = client.get(reverse('core:add_milestone'))
+        response = client.get(reverse("core:add_milestone"))
         assert response.status_code == 302
 
     def test_add_milestone_get_shows_form(self, authenticated_client):
         """GET request shows milestone form."""
-        response = authenticated_client.get(reverse('core:add_milestone'))
+        response = authenticated_client.get(reverse("core:add_milestone"))
         assert response.status_code == 200
-        assert 'milestone_types' in response.context
+        assert "milestone_types" in response.context
 
     def test_add_milestone_post_creates_milestone(self, authenticated_client, user):
         """POST request creates new milestone."""
-        response = authenticated_client.post(reverse('core:add_milestone'), {
-            'milestone_type': 'claim_filed',
-            'title': 'Filed my claim',
-            'date': date.today().isoformat(),
-            'notes': 'Finally got it done!',
-        })
+        response = authenticated_client.post(
+            reverse("core:add_milestone"),
+            {
+                "milestone_type": "claim_filed",
+                "title": "Filed my claim",
+                "date": date.today().isoformat(),
+                "notes": "Finally got it done!",
+            },
+        )
         assert response.status_code == 302  # Redirect on success
-        assert JourneyMilestone.objects.filter(user=user, title='Filed my claim').exists()
+        assert JourneyMilestone.objects.filter(
+            user=user, title="Filed my claim"
+        ).exists()
 
     def test_add_milestone_requires_title(self, authenticated_client):
         """Milestone creation requires title."""
-        response = authenticated_client.post(reverse('core:add_milestone'), {
-            'milestone_type': 'claim_filed',
-            'title': '',  # Empty title
-            'date': date.today().isoformat(),
-        })
+        response = authenticated_client.post(
+            reverse("core:add_milestone"),
+            {
+                "milestone_type": "claim_filed",
+                "title": "",  # Empty title
+                "date": date.today().isoformat(),
+            },
+        )
         assert response.status_code == 302  # Redirects with error message
 
     def test_delete_milestone(self, authenticated_client, milestone):
         """Milestone can be deleted."""
         response = authenticated_client.post(
-            reverse('core:delete_milestone', kwargs={'pk': milestone.pk})
+            reverse("core:delete_milestone", kwargs={"pk": milestone.pk})
         )
         assert response.status_code == 302
         assert not JourneyMilestone.objects.filter(pk=milestone.pk).exists()
@@ -655,32 +665,35 @@ class TestDeadlineViews:
 
     def test_add_deadline_requires_login(self, client):
         """Add deadline requires authentication."""
-        response = client.get(reverse('core:add_deadline'))
+        response = client.get(reverse("core:add_deadline"))
         assert response.status_code == 302
 
     def test_add_deadline_get_shows_form(self, authenticated_client):
         """GET request shows deadline form."""
-        response = authenticated_client.get(reverse('core:add_deadline'))
+        response = authenticated_client.get(reverse("core:add_deadline"))
         assert response.status_code == 200
-        assert 'priority_choices' in response.context
+        assert "priority_choices" in response.context
 
     def test_add_deadline_post_creates_deadline(self, authenticated_client, user):
         """POST request creates new deadline."""
-        response = authenticated_client.post(reverse('core:add_deadline'), {
-            'title': 'Submit appeal',
-            'deadline_date': (date.today() + timedelta(days=60)).isoformat(),
-            'priority': 'high',
-            'description': 'File HLR before deadline',
-        })
+        response = authenticated_client.post(
+            reverse("core:add_deadline"),
+            {
+                "title": "Submit appeal",
+                "deadline_date": (date.today() + timedelta(days=60)).isoformat(),
+                "priority": "high",
+                "description": "File HLR before deadline",
+            },
+        )
         assert response.status_code == 302
-        assert Deadline.objects.filter(user=user, title='Submit appeal').exists()
+        assert Deadline.objects.filter(user=user, title="Submit appeal").exists()
 
     def test_toggle_deadline(self, authenticated_client, deadline):
         """Deadline completion can be toggled."""
         assert not deadline.is_completed
 
         response = authenticated_client.post(
-            reverse('core:toggle_deadline', kwargs={'pk': deadline.pk})
+            reverse("core:toggle_deadline", kwargs={"pk": deadline.pk})
         )
         assert response.status_code == 200
 
@@ -690,7 +703,7 @@ class TestDeadlineViews:
     def test_delete_deadline(self, authenticated_client, deadline):
         """Deadline can be deleted."""
         response = authenticated_client.post(
-            reverse('core:delete_deadline', kwargs={'pk': deadline.pk})
+            reverse("core:delete_deadline", kwargs={"pk": deadline.pk})
         )
         assert response.status_code == 302
         assert not Deadline.objects.filter(pk=deadline.pk).exists()
@@ -700,11 +713,14 @@ class TestDeadlineViews:
 # ACCESS CONTROL TESTS
 # =============================================================================
 
+
 @pytest.mark.django_db
 class TestAccessControl:
     """Tests for access control on core views."""
 
-    def test_user_cannot_access_other_users_deadline(self, authenticated_client, other_user):
+    def test_user_cannot_access_other_users_deadline(
+        self, authenticated_client, other_user
+    ):
         """User cannot toggle another user's deadline."""
         other_deadline = Deadline.objects.create(
             user=other_user,
@@ -712,11 +728,13 @@ class TestAccessControl:
             deadline_date=date.today() + timedelta(days=30),
         )
         response = authenticated_client.post(
-            reverse('core:toggle_deadline', kwargs={'pk': other_deadline.pk})
+            reverse("core:toggle_deadline", kwargs={"pk": other_deadline.pk})
         )
         assert response.status_code == 404
 
-    def test_user_cannot_delete_other_users_milestone(self, authenticated_client, other_user):
+    def test_user_cannot_delete_other_users_milestone(
+        self, authenticated_client, other_user
+    ):
         """User cannot delete another user's milestone."""
         other_milestone = JourneyMilestone.objects.create(
             user=other_user,
@@ -725,7 +743,7 @@ class TestAccessControl:
             date=date.today(),
         )
         response = authenticated_client.post(
-            reverse('core:delete_milestone', kwargs={'pk': other_milestone.pk})
+            reverse("core:delete_milestone", kwargs={"pk": other_milestone.pk})
         )
         assert response.status_code == 404
 
@@ -734,6 +752,7 @@ class TestAccessControl:
 # JOURNEY TIMELINE BUILDER TESTS
 # =============================================================================
 
+
 class TestTimelineBuilder(TestCase):
     """Tests for the TimelineBuilder service."""
 
@@ -741,8 +760,7 @@ class TestTimelineBuilder(TestCase):
         from core.journey import TimelineBuilder
 
         self.user = User.objects.create_user(
-            email="test@example.com",
-            password="TestPass123!"
+            email="test@example.com", password="TestPass123!"
         )
         self.builder = TimelineBuilder(self.user)
         self.stage = JourneyStage.objects.create(
@@ -814,13 +832,14 @@ class TestTimelineBuilder(TestCase):
         )
 
         stats = self.builder.get_stats()
-        self.assertIn('milestone_count', stats)
-        self.assertIn('deadline_count', stats)
+        self.assertIn("milestone_count", stats)
+        self.assertIn("deadline_count", stats)
 
 
 # =============================================================================
 # CONTENT SECURITY POLICY (CSP) TESTS
 # =============================================================================
+
 
 @pytest.mark.django_db
 class TestCSPHeaders:
@@ -841,58 +860,58 @@ class TestCSPHeaders:
 
     def test_csp_header_present(self, client):
         """CSP header is present in responses."""
-        response = client.get(reverse('home'))
+        response = client.get(reverse("home"))
         assert response.status_code == 200
-        assert 'Content-Security-Policy' in response.headers
+        assert "Content-Security-Policy" in response.headers
 
     def test_csp_default_src_self(self, client):
         """CSP default-src is set to 'self'."""
-        response = client.get(reverse('home'))
-        csp = response.headers.get('Content-Security-Policy', '')
+        response = client.get(reverse("home"))
+        csp = response.headers.get("Content-Security-Policy", "")
         assert "default-src 'self'" in csp
 
     def test_csp_style_src_self_only(self, client):
         """CSP style-src is self-only — Tailwind is now served from static file, not CDN."""
-        response = client.get(reverse('home'))
-        csp = response.headers.get('Content-Security-Policy', '')
-        assert 'cdn.tailwindcss.com' not in csp
+        response = client.get(reverse("home"))
+        csp = response.headers.get("Content-Security-Policy", "")
+        assert "cdn.tailwindcss.com" not in csp
         assert "style-src 'self'" in csp
 
     def test_csp_allows_htmx_cdn(self, client):
         """CSP allows HTMX from unpkg.com CDN."""
-        response = client.get(reverse('home'))
-        csp = response.headers.get('Content-Security-Policy', '')
-        assert 'unpkg.com' in csp
+        response = client.get(reverse("home"))
+        csp = response.headers.get("Content-Security-Policy", "")
+        assert "unpkg.com" in csp
 
     def test_csp_allows_data_urls_for_images(self, client):
         """CSP allows data: URLs for images."""
-        response = client.get(reverse('home'))
-        csp = response.headers.get('Content-Security-Policy', '')
-        assert 'img-src' in csp
-        assert 'data:' in csp
+        response = client.get(reverse("home"))
+        csp = response.headers.get("Content-Security-Policy", "")
+        assert "img-src" in csp
+        assert "data:" in csp
 
     def test_csp_allows_google_fonts(self, client):
         """CSP allows fonts from Google."""
-        response = client.get(reverse('home'))
-        csp = response.headers.get('Content-Security-Policy', '')
-        assert 'fonts.gstatic.com' in csp
+        response = client.get(reverse("home"))
+        csp = response.headers.get("Content-Security-Policy", "")
+        assert "fonts.gstatic.com" in csp
 
     def test_csp_blocks_framing(self, client):
         """CSP prevents page from being framed (clickjacking protection)."""
-        response = client.get(reverse('home'))
-        csp = response.headers.get('Content-Security-Policy', '')
+        response = client.get(reverse("home"))
+        csp = response.headers.get("Content-Security-Policy", "")
         assert "frame-ancestors 'none'" in csp
 
     def test_csp_form_action_self(self, client):
         """CSP restricts form submissions to same origin."""
-        response = client.get(reverse('home'))
-        csp = response.headers.get('Content-Security-Policy', '')
+        response = client.get(reverse("home"))
+        csp = response.headers.get("Content-Security-Policy", "")
         assert "form-action 'self'" in csp
 
     def test_csp_connect_src_self(self, client):
         """CSP restricts AJAX/fetch to same origin (for HTMX)."""
-        response = client.get(reverse('home'))
-        csp = response.headers.get('Content-Security-Policy', '')
+        response = client.get(reverse("home"))
+        csp = response.headers.get("Content-Security-Policy", "")
         assert "connect-src 'self'" in csp
 
 
@@ -905,18 +924,23 @@ class TestCSPFunctionality:
 
     def test_homepage_renders_with_csp(self, client):
         """Homepage renders correctly with CSP enabled."""
-        response = client.get(reverse('home'))
+        response = client.get(reverse("home"))
         assert response.status_code == 200
         # Page should contain expected content
-        assert b'VA Benefits Navigator' in response.content or b'Sign' in response.content
+        assert (
+            b"VA Benefits Navigator" in response.content or b"Sign" in response.content
+        )
 
     def test_login_form_works_with_csp(self, client, user, user_password):
         """Login form submission works with CSP form-action restriction."""
         # Forms should work since form-action allows 'self'
-        response = client.post(reverse('account_login'), {
-            'login': user.email,
-            'password': user_password,
-        })
+        response = client.post(
+            reverse("account_login"),
+            {
+                "login": user.email,
+                "password": user_password,
+            },
+        )
         # Should redirect on successful login (302) - form submission worked
         assert response.status_code == 302
 
@@ -924,8 +948,8 @@ class TestCSPFunctionality:
         """HTMX AJAX requests work with CSP connect-src restriction."""
         # HTMX makes fetch/XHR requests to same origin, which should work
         response = authenticated_client.post(
-            reverse('core:toggle_deadline', kwargs={'pk': deadline.pk}),
-            HTTP_HX_REQUEST='true',  # Simulate HTMX request
+            reverse("core:toggle_deadline", kwargs={"pk": deadline.pk}),
+            HTTP_HX_REQUEST="true",  # Simulate HTMX request
         )
         # Should succeed - connect-src allows 'self'
         assert response.status_code == 200
@@ -933,34 +957,45 @@ class TestCSPFunctionality:
     def test_rating_calculator_htmx_works(self, client):
         """Rating calculator HTMX endpoint works with CSP."""
         import json
+
         response = client.post(
-            reverse('examprep:calculate_rating'),
+            reverse("examprep:calculate_rating"),
             {
-                'ratings': json.dumps([
-                    {'percentage': 50, 'description': 'PTSD', 'is_bilateral': False},
-                    {'percentage': 30, 'description': 'Back', 'is_bilateral': False},
-                ]),
-                'has_spouse': 'false',
-                'children_under_18': '0',
-                'dependent_parents': '0',
+                "ratings": json.dumps(
+                    [
+                        {
+                            "percentage": 50,
+                            "description": "PTSD",
+                            "is_bilateral": False,
+                        },
+                        {
+                            "percentage": 30,
+                            "description": "Back",
+                            "is_bilateral": False,
+                        },
+                    ]
+                ),
+                "has_spouse": "false",
+                "children_under_18": "0",
+                "dependent_parents": "0",
             },
-            HTTP_HX_REQUEST='true',
+            HTTP_HX_REQUEST="true",
         )
         # Should work - HTMX requests go to same origin
         assert response.status_code == 200
 
     def test_dashboard_loads_with_csp(self, authenticated_client):
         """Dashboard page loads correctly with CSP."""
-        response = authenticated_client.get(reverse('dashboard'))
+        response = authenticated_client.get(reverse("dashboard"))
         assert response.status_code == 200
         # Should render without CSP blocking resources
-        assert b'Dashboard' in response.content or response.status_code == 200
+        assert b"Dashboard" in response.content or response.status_code == 200
 
     def test_journey_dashboard_htmx_partial(self, authenticated_client):
         """Journey timeline HTMX partial works with CSP."""
         response = authenticated_client.get(
-            reverse('core:journey_timeline'),
-            HTTP_HX_REQUEST='true',
+            reverse("core:journey_timeline"),
+            HTTP_HX_REQUEST="true",
         )
         # Partial should load - same-origin request
         assert response.status_code == 200
@@ -972,19 +1007,23 @@ class TestSecurityHeaders:
 
     def test_x_content_type_options_header(self, client):
         """X-Content-Type-Options header prevents MIME sniffing."""
-        response = client.get(reverse('home'))
-        assert response.headers.get('X-Content-Type-Options') == 'nosniff'
+        response = client.get(reverse("home"))
+        assert response.headers.get("X-Content-Type-Options") == "nosniff"
 
     def test_x_frame_options_header(self, client):
         """X-Frame-Options header prevents clickjacking."""
-        response = client.get(reverse('home'))
-        assert response.headers.get('X-Frame-Options') == 'DENY'
+        response = client.get(reverse("home"))
+        assert response.headers.get("X-Frame-Options") == "DENY"
 
     def test_referrer_policy_header(self, client):
         """Referrer-Policy header is set."""
-        response = client.get(reverse('home'))
-        referrer = response.headers.get('Referrer-Policy', '')
-        assert 'strict-origin' in referrer.lower() or 'same-origin' in referrer.lower() or referrer != ''
+        response = client.get(reverse("home"))
+        referrer = response.headers.get("Referrer-Policy", "")
+        assert (
+            "strict-origin" in referrer.lower()
+            or "same-origin" in referrer.lower()
+            or referrer != ""
+        )
 
 
 class TestCSPConfiguration(TestCase):
@@ -993,47 +1032,54 @@ class TestCSPConfiguration(TestCase):
     def test_csp_middleware_enabled(self):
         """CSP middleware is in MIDDLEWARE setting."""
         from django.conf import settings
-        assert 'csp.middleware.CSPMiddleware' in settings.MIDDLEWARE
+
+        assert "csp.middleware.CSPMiddleware" in settings.MIDDLEWARE
 
     def test_csp_default_src_configured(self):
         """CSP_DEFAULT_SRC is configured."""
         from django.conf import settings
-        assert hasattr(settings, 'CSP_DEFAULT_SRC')
+
+        assert hasattr(settings, "CSP_DEFAULT_SRC")
         assert "'self'" in settings.CSP_DEFAULT_SRC
 
     def test_csp_script_src_includes_htmx_cdn(self):
         """CSP_SCRIPT_SRC includes unpkg.com for HTMX (Tailwind CDN removed)."""
         from django.conf import settings
-        assert hasattr(settings, 'CSP_SCRIPT_SRC')
+
+        assert hasattr(settings, "CSP_SCRIPT_SRC")
         script_src = settings.CSP_SCRIPT_SRC
-        assert not any('cdn.tailwindcss.com' in src for src in script_src)
-        assert any('unpkg.com' in src for src in script_src)
+        assert not any("cdn.tailwindcss.com" in src for src in script_src)
+        assert any("unpkg.com" in src for src in script_src)
 
     def test_csp_style_src_self_only(self):
         """CSP_STYLE_SRC is self-only — Tailwind served from static file, no CDN needed."""
         from django.conf import settings
-        assert hasattr(settings, 'CSP_STYLE_SRC')
+
+        assert hasattr(settings, "CSP_STYLE_SRC")
         style_src = settings.CSP_STYLE_SRC
-        assert not any('cdn.tailwindcss.com' in src for src in style_src)
-        assert not any('unsafe-inline' in src for src in style_src)
+        assert not any("cdn.tailwindcss.com" in src for src in style_src)
+        assert not any("unsafe-inline" in src for src in style_src)
         assert "'self'" in style_src
 
     def test_csp_connect_src_for_htmx(self):
         """CSP_CONNECT_SRC allows same-origin for HTMX."""
         from django.conf import settings
-        assert hasattr(settings, 'CSP_CONNECT_SRC')
+
+        assert hasattr(settings, "CSP_CONNECT_SRC")
         assert "'self'" in settings.CSP_CONNECT_SRC
 
     def test_csp_frame_ancestors_blocks_framing(self):
         """CSP_FRAME_ANCESTORS prevents framing."""
         from django.conf import settings
-        assert hasattr(settings, 'CSP_FRAME_ANCESTORS')
+
+        assert hasattr(settings, "CSP_FRAME_ANCESTORS")
         assert "'none'" in settings.CSP_FRAME_ANCESTORS
 
     def test_csp_form_action_restricts_forms(self):
         """CSP_FORM_ACTION restricts form targets."""
         from django.conf import settings
-        assert hasattr(settings, 'CSP_FORM_ACTION')
+
+        assert hasattr(settings, "CSP_FORM_ACTION")
         assert "'self'" in settings.CSP_FORM_ACTION
 
 
@@ -1041,15 +1087,16 @@ class TestCSPConfiguration(TestCase):
 # DOCUMENT ANALYSIS NOTIFICATION TESTS
 # =============================================================================
 
+
 class TestDocumentAnalysisNotification(TestCase):
     """Tests for document analysis complete email notifications."""
 
     def setUp(self):
         from accounts.models import NotificationPreferences
+
         self.client = Client()
         self.user = User.objects.create_user(
-            email="docuser@example.com",
-            password="TestPass123!"
+            email="docuser@example.com", password="TestPass123!"
         )
         # Delete any existing preferences to start fresh
         NotificationPreferences.objects.filter(user=self.user).delete()
@@ -1062,8 +1109,7 @@ class TestDocumentAnalysisNotification(TestCase):
 
         # Create notification preferences
         prefs, _ = NotificationPreferences.objects.get_or_create(
-            user=self.user,
-            defaults={'email_enabled': True, 'document_analysis': True}
+            user=self.user, defaults={"email_enabled": True, "document_analysis": True}
         )
         prefs.email_enabled = True
         prefs.document_analysis = True
@@ -1072,21 +1118,22 @@ class TestDocumentAnalysisNotification(TestCase):
         # Create a completed document
         doc = Document.objects.create(
             user=self.user,
-            document_type='decision_letter',
-            file_name='test_decision.pdf',
-            status='completed',
-            ai_summary='Test summary of the document.',
+            document_type="decision_letter",
+            file_name="test_decision.pdf",
+            status="completed",
+            ai_summary="Test summary of the document.",
             page_count=5,
         )
 
         # Call the task
         from django.core import mail
+
         result = send_document_analysis_complete_email(doc.id)
 
         # Check email was sent
         self.assertEqual(len(mail.outbox), 1)
-        self.assertIn('Decision Letter', mail.outbox[0].subject)
-        self.assertIn('docuser@example.com', mail.outbox[0].to)
+        self.assertIn("Decision Letter", mail.outbox[0].subject)
+        self.assertIn("docuser@example.com", mail.outbox[0].to)
 
     def test_send_document_analysis_email_respects_disabled_preference(self):
         """Task doesn't send email when notification is disabled."""
@@ -1096,8 +1143,7 @@ class TestDocumentAnalysisNotification(TestCase):
 
         # Create notification preferences with document_analysis disabled
         prefs, _ = NotificationPreferences.objects.get_or_create(
-            user=self.user,
-            defaults={'email_enabled': True, 'document_analysis': False}
+            user=self.user, defaults={"email_enabled": True, "document_analysis": False}
         )
         prefs.email_enabled = True
         prefs.document_analysis = False  # Disabled
@@ -1106,18 +1152,19 @@ class TestDocumentAnalysisNotification(TestCase):
         # Create a completed document
         doc = Document.objects.create(
             user=self.user,
-            document_type='medical_records',
-            file_name='test_medical.pdf',
-            status='completed',
+            document_type="medical_records",
+            file_name="test_medical.pdf",
+            status="completed",
         )
 
         # Call the task
         from django.core import mail
+
         result = send_document_analysis_complete_email(doc.id)
 
         # Check no email was sent
         self.assertEqual(len(mail.outbox), 0)
-        self.assertIn('disabled', result)
+        self.assertIn("disabled", result)
 
     def test_send_document_analysis_email_respects_master_switch(self):
         """Task doesn't send email when email_enabled is False."""
@@ -1127,8 +1174,7 @@ class TestDocumentAnalysisNotification(TestCase):
 
         # Create notification preferences with master switch off
         prefs, _ = NotificationPreferences.objects.get_or_create(
-            user=self.user,
-            defaults={'email_enabled': False, 'document_analysis': True}
+            user=self.user, defaults={"email_enabled": False, "document_analysis": True}
         )
         prefs.email_enabled = False  # Master switch off
         prefs.document_analysis = True
@@ -1137,13 +1183,14 @@ class TestDocumentAnalysisNotification(TestCase):
         # Create a completed document
         doc = Document.objects.create(
             user=self.user,
-            document_type='nexus_letter',
-            file_name='nexus.pdf',
-            status='completed',
+            document_type="nexus_letter",
+            file_name="nexus.pdf",
+            status="completed",
         )
 
         # Call the task
         from django.core import mail
+
         result = send_document_analysis_complete_email(doc.id)
 
         # Check no email was sent
@@ -1157,18 +1204,21 @@ class TestDocumentAnalysisNotification(TestCase):
 
         # Ensure no preferences exist
         NotificationPreferences.objects.filter(user=self.user).delete()
-        self.assertFalse(NotificationPreferences.objects.filter(user=self.user).exists())
+        self.assertFalse(
+            NotificationPreferences.objects.filter(user=self.user).exists()
+        )
 
         # Create a completed document
         doc = Document.objects.create(
             user=self.user,
-            document_type='buddy_statement',
-            file_name='buddy.pdf',
-            status='completed',
+            document_type="buddy_statement",
+            file_name="buddy.pdf",
+            status="completed",
         )
 
         # Call the task
         from django.core import mail
+
         result = send_document_analysis_complete_email(doc.id)
 
         # Check preferences were created
@@ -1182,7 +1232,7 @@ class TestDocumentAnalysisNotification(TestCase):
         from core.tasks import send_document_analysis_complete_email
 
         result = send_document_analysis_complete_email(99999)
-        self.assertIn('not found', result)
+        self.assertIn("not found", result)
 
     def test_notification_preference_should_send_method(self):
         """Test the should_send_document_analysis_notification method."""
@@ -1190,8 +1240,7 @@ class TestDocumentAnalysisNotification(TestCase):
 
         # Test with all enabled
         prefs, _ = NotificationPreferences.objects.get_or_create(
-            user=self.user,
-            defaults={'email_enabled': True, 'document_analysis': True}
+            user=self.user, defaults={"email_enabled": True, "document_analysis": True}
         )
         prefs.email_enabled = True
         prefs.document_analysis = True
@@ -1217,7 +1266,11 @@ class TestDocumentAnalysisNotification(TestCase):
 
         prefs, _ = NotificationPreferences.objects.get_or_create(
             user=self.user,
-            defaults={'email_enabled': True, 'document_analysis': True, 'emails_sent_count': 5}
+            defaults={
+                "email_enabled": True,
+                "document_analysis": True,
+                "emails_sent_count": 5,
+            },
         )
         prefs.email_enabled = True
         prefs.document_analysis = True
@@ -1226,12 +1279,11 @@ class TestDocumentAnalysisNotification(TestCase):
 
         doc = Document.objects.create(
             user=self.user,
-            document_type='other',
-            file_name='test.pdf',
-            status='completed',
+            document_type="other",
+            file_name="test.pdf",
+            status="completed",
         )
 
-        from django.core import mail
         send_document_analysis_complete_email(doc.id)
 
         # Refresh and check tracking updated
@@ -1246,20 +1298,19 @@ class TestDocumentAnalysisNotification(TestCase):
         from accounts.models import NotificationPreferences
 
         prefs, _ = NotificationPreferences.objects.get_or_create(
-            user=self.user,
-            defaults={'email_enabled': True, 'document_analysis': True}
+            user=self.user, defaults={"email_enabled": True, "document_analysis": True}
         )
         prefs.email_enabled = True
         prefs.document_analysis = True
         prefs.save()
 
         doc_types = [
-            ('decision_letter', 'VA Decision Letter'),
-            ('medical_records', 'Medical Records'),
-            ('service_records', 'Service Records'),
-            ('nexus_letter', 'Medical Nexus/Opinion Letter'),
-            ('buddy_statement', 'Buddy Statement'),
-            ('other', 'Document'),
+            ("decision_letter", "VA Decision Letter"),
+            ("medical_records", "Medical Records"),
+            ("service_records", "Service Records"),
+            ("nexus_letter", "Medical Nexus/Opinion Letter"),
+            ("buddy_statement", "Buddy Statement"),
+            ("other", "Document"),
         ]
 
         from django.core import mail
@@ -1270,8 +1321,8 @@ class TestDocumentAnalysisNotification(TestCase):
             doc = Document.objects.create(
                 user=self.user,
                 document_type=doc_type,
-                file_name=f'test_{doc_type}.pdf',
-                status='completed',
+                file_name=f"test_{doc_type}.pdf",
+                status="completed",
             )
 
             send_document_analysis_complete_email(doc.id)
@@ -1284,42 +1335,43 @@ class TestDocumentAnalysisNotification(TestCase):
 # SITEMAP AND ROBOTS.TXT TESTS
 # =============================================================================
 
+
 class TestRobotsTxt(TestCase):
     """Tests for robots.txt"""
 
     def test_robots_txt_accessible(self):
         """robots.txt is accessible."""
-        response = self.client.get('/robots.txt')
+        response = self.client.get("/robots.txt")
         self.assertEqual(response.status_code, 200)
 
     def test_robots_txt_content_type(self):
         """robots.txt has correct content type."""
-        response = self.client.get('/robots.txt')
-        self.assertEqual(response['Content-Type'], 'text/plain')
+        response = self.client.get("/robots.txt")
+        self.assertEqual(response["Content-Type"], "text/plain")
 
     def test_robots_txt_contains_sitemap(self):
         """robots.txt references sitemap.xml."""
-        response = self.client.get('/robots.txt')
-        self.assertIn(b'Sitemap:', response.content)
-        self.assertIn(b'sitemap.xml', response.content)
+        response = self.client.get("/robots.txt")
+        self.assertIn(b"Sitemap:", response.content)
+        self.assertIn(b"sitemap.xml", response.content)
 
     def test_robots_txt_disallows_admin(self):
         """robots.txt disallows admin access."""
-        response = self.client.get('/robots.txt')
-        self.assertIn(b'Disallow: /admin/', response.content)
+        response = self.client.get("/robots.txt")
+        self.assertIn(b"Disallow: /admin/", response.content)
 
     def test_robots_txt_disallows_accounts(self):
         """robots.txt disallows accounts/private areas."""
-        response = self.client.get('/robots.txt')
-        self.assertIn(b'Disallow: /accounts/', response.content)
-        self.assertIn(b'Disallow: /dashboard/', response.content)
-        self.assertIn(b'Disallow: /claims/', response.content)
+        response = self.client.get("/robots.txt")
+        self.assertIn(b"Disallow: /accounts/", response.content)
+        self.assertIn(b"Disallow: /dashboard/", response.content)
+        self.assertIn(b"Disallow: /claims/", response.content)
 
     def test_robots_txt_allows_public_content(self):
         """robots.txt allows public content areas."""
-        response = self.client.get('/robots.txt')
-        self.assertIn(b'Allow: /exam-prep/', response.content)
-        self.assertIn(b'Allow: /appeals/', response.content)
+        response = self.client.get("/robots.txt")
+        self.assertIn(b"Allow: /exam-prep/", response.content)
+        self.assertIn(b"Allow: /appeals/", response.content)
 
 
 class TestSitemap(TestCase):
@@ -1327,40 +1379,41 @@ class TestSitemap(TestCase):
 
     def test_sitemap_accessible(self):
         """sitemap.xml is accessible."""
-        response = self.client.get('/sitemap.xml')
+        response = self.client.get("/sitemap.xml")
         self.assertEqual(response.status_code, 200)
 
     def test_sitemap_content_type(self):
         """sitemap.xml has correct content type."""
-        response = self.client.get('/sitemap.xml')
-        self.assertIn('xml', response['Content-Type'])
+        response = self.client.get("/sitemap.xml")
+        self.assertIn("xml", response["Content-Type"])
 
     def test_sitemap_contains_urls(self):
         """sitemap.xml contains URL entries."""
-        response = self.client.get('/sitemap.xml')
+        response = self.client.get("/sitemap.xml")
         content = response.content.decode()
-        self.assertIn('<urlset', content)
-        self.assertIn('<url>', content)
-        self.assertIn('<loc>', content)
+        self.assertIn("<urlset", content)
+        self.assertIn("<url>", content)
+        self.assertIn("<loc>", content)
 
     def test_sitemap_contains_static_pages(self):
         """sitemap.xml includes static pages."""
-        response = self.client.get('/sitemap.xml')
+        response = self.client.get("/sitemap.xml")
         content = response.content.decode()
         # Check for key static pages
-        self.assertIn('/exam-prep/', content)
-        self.assertIn('/appeals/', content)
+        self.assertIn("/exam-prep/", content)
+        self.assertIn("/appeals/", content)
 
     def test_sitemap_contains_rating_calculator(self):
         """sitemap.xml includes rating calculator."""
-        response = self.client.get('/sitemap.xml')
+        response = self.client.get("/sitemap.xml")
         content = response.content.decode()
-        self.assertIn('rating-calculator', content)
+        self.assertIn("rating-calculator", content)
 
     def test_sitemap_valid_xml(self):
         """sitemap.xml is valid XML."""
         import xml.etree.ElementTree as ET
-        response = self.client.get('/sitemap.xml')
+
+        response = self.client.get("/sitemap.xml")
         # This will raise an exception if XML is invalid
         ET.fromstring(response.content)
 
@@ -1369,69 +1422,70 @@ class TestSitemap(TestCase):
 # META TAGS AND OPEN GRAPH TESTS
 # =============================================================================
 
+
 class TestMetaTags(TestCase):
     """Tests for meta descriptions and Open Graph tags."""
 
     def test_home_page_has_meta_description(self):
         """Home page has custom meta description."""
-        response = self.client.get('/')
+        response = self.client.get("/")
         content = response.content.decode()
         self.assertIn('meta name="description"', content)
-        self.assertIn('maximize VA disability ratings', content)
+        self.assertIn("maximize VA disability ratings", content)
 
     def test_home_page_has_og_tags(self):
         """Home page has Open Graph tags."""
-        response = self.client.get('/')
+        response = self.client.get("/")
         content = response.content.decode()
-        self.assertIn('og:title', content)
-        self.assertIn('og:description', content)
-        self.assertIn('og:type', content)
-        self.assertIn('og:url', content)
+        self.assertIn("og:title", content)
+        self.assertIn("og:description", content)
+        self.assertIn("og:type", content)
+        self.assertIn("og:url", content)
 
     def test_home_page_has_twitter_cards(self):
         """Home page has Twitter Card meta tags."""
-        response = self.client.get('/')
+        response = self.client.get("/")
         content = response.content.decode()
-        self.assertIn('twitter:card', content)
-        self.assertIn('twitter:title', content)
-        self.assertIn('twitter:description', content)
+        self.assertIn("twitter:card", content)
+        self.assertIn("twitter:title", content)
+        self.assertIn("twitter:description", content)
 
     def test_rating_calculator_has_meta_description(self):
         """Rating calculator has custom meta description."""
-        response = self.client.get('/exam-prep/rating-calculator/')
+        response = self.client.get("/exam-prep/rating-calculator/")
         content = response.content.decode()
-        self.assertIn('VA disability rating calculator', content)
+        self.assertIn("VA disability rating calculator", content)
 
     def test_exam_guides_has_meta_description(self):
         """Exam guides list has custom meta description."""
-        response = self.client.get('/exam-prep/')
+        response = self.client.get("/exam-prep/")
         content = response.content.decode()
-        self.assertIn('Compensation & Pension exam', content)
+        self.assertIn("Compensation & Pension exam", content)
 
     def test_glossary_has_meta_description(self):
         """Glossary has custom meta description."""
-        response = self.client.get('/exam-prep/glossary/')
+        response = self.client.get("/exam-prep/glossary/")
         content = response.content.decode()
-        self.assertIn('VA terms', content)
+        self.assertIn("VA terms", content)
 
     def test_appeals_has_meta_description(self):
         """Appeals page has custom meta description."""
-        response = self.client.get('/appeals/')
+        response = self.client.get("/appeals/")
         content = response.content.decode()
-        self.assertIn('appeals', content.lower())
+        self.assertIn("appeals", content.lower())
 
     def test_canonical_url_present(self):
         """Pages have canonical URL tags."""
-        response = self.client.get('/')
+        response = self.client.get("/")
         content = response.content.decode()
         self.assertIn('rel="canonical"', content)
 
     def test_robots_meta_tag_present(self):
         """Pages have robots meta tag."""
-        response = self.client.get('/')
+        response = self.client.get("/")
         content = response.content.decode()
         self.assertIn('name="robots"', content)
-        self.assertIn('index, follow', content)
+        self.assertIn("index, follow", content)
 
 
 class TestStructuredData(TestCase):
@@ -1439,38 +1493,38 @@ class TestStructuredData(TestCase):
 
     def test_home_page_has_website_schema(self):
         """Home page has WebSite schema."""
-        response = self.client.get('/')
+        response = self.client.get("/")
         content = response.content.decode()
-        self.assertIn('application/ld+json', content)
+        self.assertIn("application/ld+json", content)
         self.assertIn('"@type": "WebSite"', content)
 
     def test_home_page_has_search_action(self):
         """Home page WebSite schema includes SearchAction."""
-        response = self.client.get('/')
+        response = self.client.get("/")
         content = response.content.decode()
-        self.assertIn('SearchAction', content)
+        self.assertIn("SearchAction", content)
 
     def test_glossary_page_loads(self):
         """Glossary list page loads correctly."""
-        response = self.client.get('/exam-prep/glossary/')
+        response = self.client.get("/exam-prep/glossary/")
         self.assertEqual(response.status_code, 200)
 
     def test_rating_calculator_has_base_schema(self):
         """Rating calculator has base WebSite schema."""
-        response = self.client.get('/exam-prep/rating-calculator/')
+        response = self.client.get("/exam-prep/rating-calculator/")
         content = response.content.decode()
-        self.assertIn('application/ld+json', content)
-        self.assertIn('@context', content)
+        self.assertIn("application/ld+json", content)
+        self.assertIn("@context", content)
 
     def test_appeals_page_has_schema(self):
         """Appeals page has structured data."""
-        response = self.client.get('/appeals/')
+        response = self.client.get("/appeals/")
         content = response.content.decode()
-        self.assertIn('application/ld+json', content)
+        self.assertIn("application/ld+json", content)
 
     def test_secondary_conditions_hub_loads(self):
         """Secondary conditions hub loads correctly."""
-        response = self.client.get('/exam-prep/secondary-conditions/')
+        response = self.client.get("/exam-prep/secondary-conditions/")
         self.assertEqual(response.status_code, 200)
 
 
@@ -1478,24 +1532,25 @@ class TestStructuredData(TestCase):
 # SIGNED URL TESTS
 # =============================================================================
 
+
 class TestSignedURLGenerator(TestCase):
     """Tests for the SignedURLGenerator utility."""
 
     def setUp(self):
         from core.signed_urls import SignedURLGenerator
-        self.generator = SignedURLGenerator(secret_key='test-secret-key')
+
+        self.generator = SignedURLGenerator(secret_key="test-secret-key")
         self.user = User.objects.create_user(
-            email="signedurl@example.com",
-            password="TestPass123!"
+            email="signedurl@example.com", password="TestPass123!"
         )
 
     def test_generate_token_returns_string(self):
         """generate_token returns a non-empty string."""
         token = self.generator.generate_token(
-            resource_type='document',
+            resource_type="document",
             resource_id=123,
             user_id=456,
-            action='download',
+            action="download",
         )
         self.assertIsInstance(token, str)
         self.assertTrue(len(token) > 0)
@@ -1503,40 +1558,40 @@ class TestSignedURLGenerator(TestCase):
     def test_token_contains_signature(self):
         """Token contains a signature component."""
         token = self.generator.generate_token(
-            resource_type='document',
+            resource_type="document",
             resource_id=123,
             user_id=456,
         )
-        self.assertIn('.', token)
-        parts = token.split('.')
+        self.assertIn(".", token)
+        parts = token.split(".")
         self.assertEqual(len(parts), 2)
 
     def test_validate_token_returns_data(self):
         """validate_token returns expected data for valid token."""
         token = self.generator.generate_token(
-            resource_type='document',
+            resource_type="document",
             resource_id=123,
             user_id=456,
-            action='download',
+            action="download",
         )
         data = self.generator.validate_token(token)
-        self.assertEqual(data['resource_type'], 'document')
-        self.assertEqual(data['resource_id'], 123)
-        self.assertEqual(data['user_id'], 456)
-        self.assertEqual(data['action'], 'download')
+        self.assertEqual(data["resource_type"], "document")
+        self.assertEqual(data["resource_id"], 123)
+        self.assertEqual(data["user_id"], 456)
+        self.assertEqual(data["action"], "download")
 
     def test_validate_token_raises_on_tampered_signature(self):
         """validate_token raises InvalidTokenError for tampered signature."""
         from core.signed_urls import InvalidTokenError
 
         token = self.generator.generate_token(
-            resource_type='document',
+            resource_type="document",
             resource_id=123,
             user_id=456,
         )
         # Tamper with the signature
-        parts = token.split('.')
-        tampered_token = parts[0] + '.tampered_signature'
+        parts = token.split(".")
+        tampered_token = parts[0] + ".tampered_signature"
 
         with self.assertRaises(InvalidTokenError):
             self.generator.validate_token(tampered_token)
@@ -1548,7 +1603,7 @@ class TestSignedURLGenerator(TestCase):
 
         # Generate token with very short expiration
         token = self.generator.generate_token(
-            resource_type='document',
+            resource_type="document",
             resource_id=123,
             user_id=456,
             expires_minutes=0,  # Will be 0 minutes, essentially expired
@@ -1565,49 +1620,49 @@ class TestSignedURLGenerator(TestCase):
         from core.signed_urls import InvalidTokenError
 
         with self.assertRaises(InvalidTokenError):
-            self.generator.validate_token('not-a-valid-token')
+            self.generator.validate_token("not-a-valid-token")
 
         with self.assertRaises(InvalidTokenError):
-            self.generator.validate_token('')
+            self.generator.validate_token("")
 
     def test_generate_url_creates_valid_path(self):
         """generate_url creates a URL with the token."""
         url = self.generator.generate_url(
-            resource_type='document',
+            resource_type="document",
             resource_id=123,
             user_id=456,
-            action='download',
+            action="download",
         )
-        self.assertIn('/claims/document/s/', url)
-        self.assertIn('/download/', url)
+        self.assertIn("/claims/document/s/", url)
+        self.assertIn("/download/", url)
 
     def test_generate_url_view_action(self):
         """generate_url with view action creates view URL."""
         url = self.generator.generate_url(
-            resource_type='document',
+            resource_type="document",
             resource_id=123,
             user_id=456,
-            action='view',
+            action="view",
         )
-        self.assertIn('/view/', url)
+        self.assertIn("/view/", url)
 
     def test_token_with_extra_data(self):
         """Token can include extra data."""
         token = self.generator.generate_token(
-            resource_type='document',
+            resource_type="document",
             resource_id=123,
             user_id=456,
-            extra_data={'vso_id': 789},
+            extra_data={"vso_id": 789},
         )
         data = self.generator.validate_token(token)
-        self.assertIsNotNone(data['extra_data'])
-        self.assertEqual(data['extra_data']['vso_id'], 789)
+        self.assertIsNotNone(data["extra_data"])
+        self.assertEqual(data["extra_data"]["vso_id"], 789)
 
     def test_max_expiration_enforced(self):
         """Expiration time is capped at MAX_EXPIRES_MINUTES."""
         # Request 48 hours (2880 minutes) - should be capped at 24 hours (1440)
         token = self.generator.generate_token(
-            resource_type='document',
+            resource_type="document",
             resource_id=123,
             user_id=456,
             expires_minutes=2880,
@@ -1615,8 +1670,9 @@ class TestSignedURLGenerator(TestCase):
         data = self.generator.validate_token(token)
 
         import time
+
         max_expected = int(time.time()) + (1440 * 60) + 5  # 24 hours + 5 second buffer
-        self.assertLessEqual(data['expires_at'], max_expected)
+        self.assertLessEqual(data["expires_at"], max_expected)
 
 
 class TestSignedURLConvenienceFunctions(TestCase):
@@ -1624,8 +1680,7 @@ class TestSignedURLConvenienceFunctions(TestCase):
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email="convenience@example.com",
-            password="TestPass123!"
+            email="convenience@example.com", password="TestPass123!"
         )
 
     def test_get_signed_url_generator_returns_singleton(self):
@@ -1641,27 +1696,27 @@ class TestSignedURLConvenienceFunctions(TestCase):
         from core.signed_urls import generate_signed_url
 
         url = generate_signed_url(
-            resource_type='document',
+            resource_type="document",
             resource_id=123,
             user_id=456,
-            action='download',
+            action="download",
             expires_minutes=30,
         )
-        self.assertIn('/claims/document/s/', url)
+        self.assertIn("/claims/document/s/", url)
 
     def test_validate_signed_token_function(self):
         """validate_signed_token convenience function works."""
-        from core.signed_urls import generate_signed_url, validate_signed_token, get_signed_url_generator
+        from core.signed_urls import validate_signed_token, get_signed_url_generator
 
         generator = get_signed_url_generator()
         token = generator.generate_token(
-            resource_type='document',
+            resource_type="document",
             resource_id=123,
             user_id=456,
         )
 
         data = validate_signed_token(token)
-        self.assertEqual(data['resource_id'], 123)
+        self.assertEqual(data["resource_id"], 123)
 
 
 @pytest.mark.django_db
@@ -1674,13 +1729,13 @@ class TestSignedURLViews:
 
         generator = get_signed_url_generator()
         token = generator.generate_token(
-            resource_type='document',
+            resource_type="document",
             resource_id=document_with_file.pk,
             user_id=document_with_file.user_id,
-            action='download',
+            action="download",
         )
 
-        response = client.get(f'/claims/document/s/{token}/download/')
+        response = client.get(f"/claims/document/s/{token}/download/")
         assert response.status_code == 200
 
     def test_signed_view_with_valid_token(self, client, user, document_with_file):
@@ -1689,13 +1744,13 @@ class TestSignedURLViews:
 
         generator = get_signed_url_generator()
         token = generator.generate_token(
-            resource_type='document',
+            resource_type="document",
             resource_id=document_with_file.pk,
             user_id=document_with_file.user_id,
-            action='view',
+            action="view",
         )
 
-        response = client.get(f'/claims/document/s/{token}/view/')
+        response = client.get(f"/claims/document/s/{token}/view/")
         assert response.status_code == 200
 
     def test_signed_download_with_expired_token(self, client, document_with_file):
@@ -1704,25 +1759,26 @@ class TestSignedURLViews:
 
         generator = get_signed_url_generator()
         token = generator.generate_token(
-            resource_type='document',
+            resource_type="document",
             resource_id=document_with_file.pk,
             user_id=document_with_file.user_id,
-            action='download',
+            action="download",
             expires_minutes=0,  # Already expired
         )
 
         import time
+
         time.sleep(0.1)
 
-        response = client.get(f'/claims/document/s/{token}/download/')
+        response = client.get(f"/claims/document/s/{token}/download/")
         assert response.status_code == 403
-        assert b'expired' in response.content
+        assert b"expired" in response.content
 
     def test_signed_download_with_invalid_token(self, client):
         """Invalid token returns forbidden."""
-        response = client.get('/claims/document/s/invalid-token/download/')
+        response = client.get("/claims/document/s/invalid-token/download/")
         assert response.status_code == 403
-        assert b'Invalid' in response.content
+        assert b"Invalid" in response.content
 
     def test_signed_download_wrong_action(self, client, document_with_file):
         """Token with wrong action type returns forbidden."""
@@ -1731,15 +1787,15 @@ class TestSignedURLViews:
         generator = get_signed_url_generator()
         # Generate view token but try to use it for download
         token = generator.generate_token(
-            resource_type='document',
+            resource_type="document",
             resource_id=document_with_file.pk,
             user_id=document_with_file.user_id,
-            action='view',  # Wrong action
+            action="view",  # Wrong action
         )
 
-        response = client.get(f'/claims/document/s/{token}/download/')
+        response = client.get(f"/claims/document/s/{token}/download/")
         assert response.status_code == 403
-        assert b'Invalid link type' in response.content
+        assert b"Invalid link type" in response.content
 
     def test_signed_download_wrong_resource_type(self, client, document_with_file):
         """Token with wrong resource type returns forbidden."""
@@ -1747,15 +1803,15 @@ class TestSignedURLViews:
 
         generator = get_signed_url_generator()
         token = generator.generate_token(
-            resource_type='not_document',  # Wrong type
+            resource_type="not_document",  # Wrong type
             resource_id=document_with_file.pk,
             user_id=document_with_file.user_id,
-            action='download',
+            action="download",
         )
 
-        response = client.get(f'/claims/document/s/{token}/download/')
+        response = client.get(f"/claims/document/s/{token}/download/")
         assert response.status_code == 403
-        assert b'Invalid resource type' in response.content
+        assert b"Invalid resource type" in response.content
 
     def test_signed_download_nonexistent_document(self, client, user):
         """Token for nonexistent document returns 404."""
@@ -1763,13 +1819,13 @@ class TestSignedURLViews:
 
         generator = get_signed_url_generator()
         token = generator.generate_token(
-            resource_type='document',
+            resource_type="document",
             resource_id=99999,  # Doesn't exist
             user_id=user.pk,
-            action='download',
+            action="download",
         )
 
-        response = client.get(f'/claims/document/s/{token}/download/')
+        response = client.get(f"/claims/document/s/{token}/download/")
         assert response.status_code == 404
 
     def test_signed_download_creates_audit_log(self, client, document_with_file):
@@ -1778,23 +1834,23 @@ class TestSignedURLViews:
 
         generator = get_signed_url_generator()
         token = generator.generate_token(
-            resource_type='document',
+            resource_type="document",
             resource_id=document_with_file.pk,
             user_id=document_with_file.user_id,
-            action='download',
+            action="download",
         )
 
-        response = client.get(f'/claims/document/s/{token}/download/')
+        response = client.get(f"/claims/document/s/{token}/download/")
         assert response.status_code == 200
 
         # Check audit log was created
         log = AuditLog.objects.filter(
-            action='document_download',
-            resource_type='Document',
+            action="document_download",
+            resource_type="Document",
             resource_id=document_with_file.pk,
         ).first()
         assert log is not None
-        assert log.details.get('access_type') == 'signed_url'
+        assert log.details.get("access_type") == "signed_url"
 
 
 class TestDocumentModelSignedURLMethods(TestCase):
@@ -1802,28 +1858,28 @@ class TestDocumentModelSignedURLMethods(TestCase):
 
     def setUp(self):
         from claims.models import Document
+
         self.user = User.objects.create_user(
-            email="docmodel@example.com",
-            password="TestPass123!"
+            email="docmodel@example.com", password="TestPass123!"
         )
         self.document = Document.objects.create(
             user=self.user,
-            file_name='test.pdf',
-            document_type='decision_letter',
-            status='completed',
+            file_name="test.pdf",
+            document_type="decision_letter",
+            status="completed",
         )
 
     def test_get_signed_download_url(self):
         """get_signed_download_url returns a valid signed URL."""
         url = self.document.get_signed_download_url()
-        self.assertIn('/claims/document/s/', url)
-        self.assertIn('/download/', url)
+        self.assertIn("/claims/document/s/", url)
+        self.assertIn("/download/", url)
 
     def test_get_signed_view_url(self):
         """get_signed_view_url returns a valid signed URL."""
         url = self.document.get_signed_view_url()
-        self.assertIn('/claims/document/s/', url)
-        self.assertIn('/view/', url)
+        self.assertIn("/claims/document/s/", url)
+        self.assertIn("/view/", url)
 
     def test_signed_urls_are_different(self):
         """Download and view signed URLs are different."""

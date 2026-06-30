@@ -10,10 +10,10 @@ def site_settings(request):
     Add site-wide settings to template context
     """
     return {
-        'SITE_NAME': settings.SITE_NAME,
-        'SITE_DESCRIPTION': settings.SITE_DESCRIPTION,
-        'SUPPORT_EMAIL': settings.SUPPORT_EMAIL,
-        'DEBUG': settings.DEBUG,
+        "SITE_NAME": settings.SITE_NAME,
+        "SITE_DESCRIPTION": settings.SITE_DESCRIPTION,
+        "SUPPORT_EMAIL": settings.SUPPORT_EMAIL,
+        "DEBUG": settings.DEBUG,
     }
 
 
@@ -31,15 +31,15 @@ def user_usage(request):
     - {{ user_usage.ai_analyses_remaining }}
     """
     if not request.user.is_authenticated:
-        return {'user_usage': None}
+        return {"user_usage": None}
 
     from accounts.models import UsageTracking
 
     try:
         usage, _ = UsageTracking.objects.get_or_create(user=request.user)
-        return {'user_usage': usage.get_usage_summary()}
+        return {"user_usage": usage.get_usage_summary()}
     except Exception:
-        return {'user_usage': None}
+        return {"user_usage": None}
 
 
 def tier_limits(request):
@@ -53,11 +53,13 @@ def tier_limits(request):
     - {{ tier_limits.free_ai_analyses }}
     """
     return {
-        'tier_limits': {
-            'free_documents': getattr(settings, 'FREE_TIER_DOCUMENTS_PER_MONTH', 3),
-            'free_storage_mb': getattr(settings, 'FREE_TIER_MAX_STORAGE_MB', 100),
-            'free_denial_decodes': getattr(settings, 'FREE_TIER_DENIAL_DECODES_PER_MONTH', 2),
-            'free_ai_analyses': getattr(settings, 'FREE_TIER_AI_ANALYSES_PER_MONTH', 5),
+        "tier_limits": {
+            "free_documents": getattr(settings, "FREE_TIER_DOCUMENTS_PER_MONTH", 3),
+            "free_storage_mb": getattr(settings, "FREE_TIER_MAX_STORAGE_MB", 100),
+            "free_denial_decodes": getattr(
+                settings, "FREE_TIER_DENIAL_DECODES_PER_MONTH", 2
+            ),
+            "free_ai_analyses": getattr(settings, "FREE_TIER_AI_ANALYSES_PER_MONTH", 5),
         }
     }
 
@@ -78,7 +80,7 @@ def feature_flags(request):
     from core.features import get_enabled_features
 
     return {
-        'features': get_enabled_features(),
+        "features": get_enabled_features(),
     }
 
 
@@ -97,25 +99,29 @@ def vso_access(request):
     """
     if not request.user.is_authenticated:
         return {
-            'is_vso_staff': False,
-            'user_organization': None,
+            "is_vso_staff": False,
+            "user_organization": None,
         }
 
     try:
-        membership = request.user.memberships.filter(
-            role__in=['admin', 'caseworker'],
-            is_active=True,
-            organization__is_active=True
-        ).select_related('organization').first()
+        membership = (
+            request.user.memberships.filter(
+                role__in=["admin", "caseworker"],
+                is_active=True,
+                organization__is_active=True,
+            )
+            .select_related("organization")
+            .first()
+        )
 
         return {
-            'is_vso_staff': membership is not None,
-            'user_organization': membership.organization if membership else None,
+            "is_vso_staff": membership is not None,
+            "user_organization": membership.organization if membership else None,
         }
     except Exception:
         return {
-            'is_vso_staff': False,
-            'user_organization': None,
+            "is_vso_staff": False,
+            "user_organization": None,
         }
 
 
@@ -138,12 +144,12 @@ def pilot_mode(request):
         {% endif %}
     """
     context = {
-        'pilot_mode': getattr(settings, 'PILOT_MODE', False),
-        'pilot_billing_disabled': getattr(settings, 'PILOT_BILLING_DISABLED', False),
-        'is_pilot_user': False,
+        "pilot_mode": getattr(settings, "PILOT_MODE", False),
+        "pilot_billing_disabled": getattr(settings, "PILOT_BILLING_DISABLED", False),
+        "is_pilot_user": False,
     }
 
     if request.user.is_authenticated:
-        context['is_pilot_user'] = getattr(request.user, 'is_pilot_user', False)
+        context["is_pilot_user"] = getattr(request.user, "is_pilot_user", False)
 
     return context

@@ -14,11 +14,13 @@ import time
 import re
 import logging
 from typing import Dict, List, Optional, Tuple
-from datetime import datetime
-from urllib.parse import quote
 
 from bs4 import BeautifulSoup
-from playwright.sync_api import sync_playwright, Page, TimeoutError as PlaywrightTimeoutError
+from playwright.sync_api import (
+    sync_playwright,
+    Page,
+    TimeoutError as PlaywrightTimeoutError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -65,9 +67,7 @@ class KnowVAScraper:
         self.last_request_time = time.time()
 
     def scrape_section(
-        self,
-        article_id: str,
-        max_retries: int = None
+        self, article_id: str, max_retries: int = None
     ) -> Optional[Dict]:
         """
         Scrape a single M21-1 section from KnowVA.
@@ -88,8 +88,8 @@ class KnowVAScraper:
                 with sync_playwright() as p:
                     browser = p.chromium.launch(headless=self.headless)
                     context = browser.new_context(
-                        user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                        viewport={'width': 1920, 'height': 1080}
+                        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                        viewport={"width": 1920, "height": 1080},
                     )
                     page = context.new_page()
 
@@ -98,7 +98,9 @@ class KnowVAScraper:
                     logger.info(f"Fetching {url} (attempt {attempt + 1}/{max_retries})")
 
                     # Navigate to page
-                    response = page.goto(url, wait_until='networkidle', timeout=self.PAGE_LOAD_TIMEOUT)
+                    response = page.goto(
+                        url, wait_until="networkidle", timeout=self.PAGE_LOAD_TIMEOUT
+                    )
 
                     if response and response.status >= 400:
                         logger.error(f"HTTP {response.status} for article {article_id}")
@@ -117,7 +119,9 @@ class KnowVAScraper:
                     browser.close()
 
                     if data:
-                        logger.info(f"Successfully scraped article {article_id}: {data.get('title', 'Unknown')}")
+                        logger.info(
+                            f"Successfully scraped article {article_id}: {data.get('title', 'Unknown')}"
+                        )
                         return data
                     else:
                         logger.warning(f"No data extracted from article {article_id}")
@@ -140,7 +144,9 @@ class KnowVAScraper:
                     continue
                 return None
 
-        logger.error(f"Failed to scrape article {article_id} after {max_retries} attempts")
+        logger.error(
+            f"Failed to scrape article {article_id} after {max_retries} attempts"
+        )
         return None
 
     def _parse_page(self, page: Page, article_id: str, url: str) -> Optional[Dict]:
@@ -158,12 +164,12 @@ class KnowVAScraper:
         try:
             # Get page title - try multiple selectors
             title = None
-            for selector in ['h1', '.article-title', '.page-title', 'title']:
+            for selector in ["h1", ".article-title", ".page-title", "title"]:
                 try:
                     title_elem = page.query_selector(selector)
                     if title_elem:
                         title = title_elem.inner_text().strip()
-                        if title and not title.startswith('KnowVA'):
+                        if title and not title.startswith("KnowVA"):
                             break
                 except:
                     continue
@@ -175,12 +181,12 @@ class KnowVAScraper:
             content_html = None
             content_text = None
             for selector in [
-                '.article-content',
-                '.article-body',
-                '.content-body',
-                'article',
-                '#content',
-                'main'
+                ".article-content",
+                ".article-body",
+                ".content-body",
+                "article",
+                "#content",
+                "main",
             ]:
                 try:
                     content_elem = page.query_selector(selector)
@@ -197,13 +203,15 @@ class KnowVAScraper:
                 return None
 
             # Parse structured content
-            soup = BeautifulSoup(content_html, 'html.parser') if content_html else None
-            topics = self._extract_topics(soup, content_text, reference_data) if soup else []
+            soup = BeautifulSoup(content_html, "html.parser") if content_html else None
+            topics = (
+                self._extract_topics(soup, content_text, reference_data) if soup else []
+            )
             references = self._extract_references(content_text)
 
             # Try to find last updated date
             last_updated = None
-            for selector in ['.last-updated', '.update-date', '.modified-date']:
+            for selector in [".last-updated", ".update-date", ".modified-date"]:
                 try:
                     date_elem = page.query_selector(selector)
                     if date_elem:
@@ -218,20 +226,22 @@ class KnowVAScraper:
             overview = self._extract_overview(content_text, topics)
 
             return {
-                'article_id': article_id,
-                'url': url,
-                'title': title or 'Unknown',
-                'content': content_text,
-                'content_html': content_html,
-                'overview': overview,
-                'topics': topics,
-                'references': references,
-                'last_updated': last_updated,
-                **reference_data
+                "article_id": article_id,
+                "url": url,
+                "title": title or "Unknown",
+                "content": content_text,
+                "content_html": content_html,
+                "overview": overview,
+                "topics": topics,
+                "references": references,
+                "last_updated": last_updated,
+                **reference_data,
             }
 
         except Exception as e:
-            logger.error(f"Error parsing page for article {article_id}: {e}", exc_info=True)
+            logger.error(
+                f"Error parsing page for article {article_id}: {e}", exc_info=True
+            )
             return None
 
     def _parse_m21_reference(self, title: str) -> Dict:
@@ -244,7 +254,7 @@ class KnowVAScraper:
             Dict with parsed reference components
         """
         # Pattern: M21-1, Part ROMAN, Subpart roman, Chapter NUM, Section LETTER - Title
-        pattern = r'M21-1,?\s*Part\s+([IVX]+),?\s*Subpart\s+([ivx]+),?\s*Chapter\s+(\d+),?\s*Section\s+([A-Z])\s*[-–—]\s*(.+?)$'
+        pattern = r"M21-1,?\s*Part\s+([IVX]+),?\s*Subpart\s+([ivx]+),?\s*Chapter\s+(\d+),?\s*Section\s+([A-Z])\s*[-–—]\s*(.+?)$"
         match = re.search(pattern, title, re.IGNORECASE)
 
         if match:
@@ -255,25 +265,23 @@ class KnowVAScraper:
             section_title = match.group(5).strip()
 
             return {
-                'part': part,
-                'part_number': self._roman_to_int(part),
-                'subpart': subpart,
-                'chapter': chapter,
-                'section': section,
-                'section_title': section_title,
-                'reference': f"M21-1.{part}.{subpart}.{chapter}.{section}",
-                'full_reference': f"M21-1, Part {part}, Subpart {subpart}, Chapter {chapter}, Section {section}",
-                'part_title': self._get_part_title(part)
+                "part": part,
+                "part_number": self._roman_to_int(part),
+                "subpart": subpart,
+                "chapter": chapter,
+                "section": section,
+                "section_title": section_title,
+                "reference": f"M21-1.{part}.{subpart}.{chapter}.{section}",
+                "full_reference": f"M21-1, Part {part}, Subpart {subpart}, Chapter {chapter}, Section {section}",
+                "part_title": self._get_part_title(part),
             }
         else:
             logger.warning(f"Could not parse M21 reference from title: {title}")
-            return {
-                'section_title': title,
-                'reference': '',
-                'full_reference': ''
-            }
+            return {"section_title": title, "reference": "", "full_reference": ""}
 
-    def _extract_topics(self, soup: BeautifulSoup, content_text: str, reference_data: Dict) -> List[Dict]:
+    def _extract_topics(
+        self, soup: BeautifulSoup, content_text: str, reference_data: Dict
+    ) -> List[Dict]:
         """
         Extract structured topics from section content.
 
@@ -281,17 +289,17 @@ class KnowVAScraper:
         """
         topics = []
 
-        if not reference_data.get('part'):
+        if not reference_data.get("part"):
             return topics
 
         # Build topic code pattern
         # Example: I.i.1.A.1.a.
-        part = reference_data.get('part', '')
-        subpart = reference_data.get('subpart', '')
-        chapter = reference_data.get('chapter', '')
-        section = reference_data.get('section', '')
+        part = reference_data.get("part", "")
+        subpart = reference_data.get("subpart", "")
+        chapter = reference_data.get("chapter", "")
+        section = reference_data.get("section", "")
 
-        topic_pattern = rf'{re.escape(part)}\.{re.escape(subpart)}\.{re.escape(chapter)}\.{re.escape(section)}\.(\d+)\.([a-z])\.\s*(.+?)(?:\n|$)'
+        topic_pattern = rf"{re.escape(part)}\.{re.escape(subpart)}\.{re.escape(chapter)}\.{re.escape(section)}\.(\d+)\.([a-z])\.\s*(.+?)(?:\n|$)"
 
         matches = re.finditer(topic_pattern, content_text, re.MULTILINE)
 
@@ -307,13 +315,15 @@ class KnowVAScraper:
             topic_content = ""
             # This is simplified - could be enhanced to extract actual content
 
-            topics.append({
-                'code': topic_code,
-                'topic_num': topic_num,
-                'subtopic': subtopic,
-                'title': topic_title,
-                'content': topic_content
-            })
+            topics.append(
+                {
+                    "code": topic_code,
+                    "topic_num": topic_num,
+                    "subtopic": subtopic,
+                    "title": topic_title,
+                    "content": topic_content,
+                }
+            )
 
         return topics
 
@@ -327,18 +337,23 @@ class KnowVAScraper:
             return ""
 
         # If we have topics, extract text before first topic
-        if topics and topics[0].get('title'):
-            first_topic_title = topics[0]['title']
+        if topics and topics[0].get("title"):
+            first_topic_title = topics[0]["title"]
             idx = content_text.find(first_topic_title)
             if idx > 0:
                 overview = content_text[:idx].strip()
                 # Clean up common headers
-                overview = re.sub(r'^(Overview|Introduction|In This Section)[\s:]*', '', overview, flags=re.IGNORECASE)
+                overview = re.sub(
+                    r"^(Overview|Introduction|In This Section)[\s:]*",
+                    "",
+                    overview,
+                    flags=re.IGNORECASE,
+                )
                 return overview[:1000]  # Limit length
 
         # Otherwise, take first few paragraphs (up to 1000 chars)
-        paragraphs = content_text.split('\n\n')
-        overview = '\n\n'.join(paragraphs[:3])
+        paragraphs = content_text.split("\n\n")
+        overview = "\n\n".join(paragraphs[:3])
         return overview[:1000]
 
     def _extract_references(self, content: str) -> List[str]:
@@ -348,7 +363,7 @@ class KnowVAScraper:
         references = []
 
         # M21-1 references: "M21-1, Part I, Subpart ii, ..."
-        m21_pattern = r'M21-1,?\s*Part\s+[IVX]+,?\s*Subpart\s+[ivx]+,?[\s\w,]+'
+        m21_pattern = r"M21-1,?\s*Part\s+[IVX]+,?\s*Subpart\s+[ivx]+,?[\s\w,]+"
         m21_matches = re.finditer(m21_pattern, content)
         for match in m21_matches:
             ref = match.group().strip()
@@ -356,7 +371,7 @@ class KnowVAScraper:
                 references.append(ref)
 
         # CFR references: "38 CFR 3.102"
-        cfr_pattern = r'38\s+CFR\s+[\d\.]+'
+        cfr_pattern = r"38\s+CFR\s+[\d\.]+"
         cfr_matches = re.finditer(cfr_pattern, content)
         for match in cfr_matches:
             ref = match.group().strip()
@@ -369,7 +384,7 @@ class KnowVAScraper:
         """Parse date from various formats."""
         # This is simplified - could use python-dateutil for better parsing
         # For now, just extract something that looks like a date
-        date_pattern = r'(\d{1,2}/\d{1,2}/\d{2,4})|(\w+ \d{1,2},? \d{4})'
+        date_pattern = r"(\d{1,2}/\d{1,2}/\d{2,4})|(\w+ \d{1,2},? \d{4})"
         match = re.search(date_pattern, date_text)
         if match:
             return match.group()
@@ -377,7 +392,7 @@ class KnowVAScraper:
 
     def _roman_to_int(self, roman: str) -> int:
         """Convert Roman numeral to integer."""
-        values = {'I': 1, 'V': 5, 'X': 10, 'L': 50, 'C': 100}
+        values = {"I": 1, "V": 5, "X": 10, "L": 50, "C": 100}
         result = 0
         prev = 0
         for char in reversed(roman.upper()):
@@ -392,27 +407,25 @@ class KnowVAScraper:
     def _get_part_title(self, part_num: str) -> str:
         """Get the title for a part number."""
         titles = {
-            'I': "Claimants' Rights and Claims Processing Centers and Programs",
-            'II': "Intake, Claims Establishment, Jurisdiction, and File Maintenance",
-            'III': "The Development Process",
-            'IV': "Examinations",
-            'V': "The Rating Process",
-            'VI': "The Authorization Process",
-            'VII': "Dependency",
-            'VIII': "Special Compensation Issues",
-            'IX': "Pension, Survivors' Pension, and Parent's DIC",
-            'X': "Benefits Administration and Oversight",
-            'XI': "Notice of Death, Benefits Payable at Death, and Burial Benefits",
-            'XII': "DIC and Other Survivor's Benefits",
-            'XIII': "Eligibility Determinations and Information Sharing",
-            'XIV': "Matching Programs"
+            "I": "Claimants' Rights and Claims Processing Centers and Programs",
+            "II": "Intake, Claims Establishment, Jurisdiction, and File Maintenance",
+            "III": "The Development Process",
+            "IV": "Examinations",
+            "V": "The Rating Process",
+            "VI": "The Authorization Process",
+            "VII": "Dependency",
+            "VIII": "Special Compensation Issues",
+            "IX": "Pension, Survivors' Pension, and Parent's DIC",
+            "X": "Benefits Administration and Oversight",
+            "XI": "Notice of Death, Benefits Payable at Death, and Burial Benefits",
+            "XII": "DIC and Other Survivor's Benefits",
+            "XIII": "Eligibility Determinations and Information Sharing",
+            "XIV": "Matching Programs",
         }
         return titles.get(part_num.upper(), f"Part {part_num}")
 
     def scrape_multiple(
-        self,
-        article_ids: List[str],
-        progress_callback: Optional[callable] = None
+        self, article_ids: List[str], progress_callback: Optional[callable] = None
     ) -> Tuple[List[Dict], List[str]]:
         """
         Scrape multiple sections.
@@ -439,7 +452,9 @@ class KnowVAScraper:
             else:
                 failed.append(article_id)
 
-            logger.info(f"Progress: {idx}/{total} - Success: {len(successful)}, Failed: {len(failed)}")
+            logger.info(
+                f"Progress: {idx}/{total} - Success: {len(successful)}, Failed: {len(failed)}"
+            )
 
         return successful, failed
 
@@ -449,39 +464,34 @@ class KnowVAScraper:
 # Source: M21-1 Adjudication Procedures Manual Table of Contents
 KNOWN_ARTICLE_IDS = {
     # Part I - Claimants' Rights and Claims Processing Centers
-    'I.i.1.A': '554400000181474',  # Duty to Notify and Duty to Assist
-    'I.i.1.B': '554400000181476',  # Due Process
-    'I.i.2.A': '554400000181477',  # Power of Attorney (POA)
-    'I.i.2.B': '554400000181479',  # Representative's Right to Notification
-    'I.i.2.C': '554400000181482',  # System Updates for POA Appointments
-    'I.ii.1.A': '554400000181483',  # Structure of the VSC
-    'I.ii.1.B': '554400000181484',  # Organization of PMCs
-    'I.ii.1.C': '554400000181485',  # PMC Procedures
-
+    "I.i.1.A": "554400000181474",  # Duty to Notify and Duty to Assist
+    "I.i.1.B": "554400000181476",  # Due Process
+    "I.i.2.A": "554400000181477",  # Power of Attorney (POA)
+    "I.i.2.B": "554400000181479",  # Representative's Right to Notification
+    "I.i.2.C": "554400000181482",  # System Updates for POA Appointments
+    "I.ii.1.A": "554400000181483",  # Structure of the VSC
+    "I.ii.1.B": "554400000181484",  # Organization of PMCs
+    "I.ii.1.C": "554400000181485",  # PMC Procedures
     # Part II - Intake, Claims Establishment, Jurisdiction
-    'II.i.1.A': '554400000174855',  # Centralized Mail (CM) Intake
-    'II.i.1.B': '554400000174856',  # VCIP Shipping
-    'II.i.2.A': '554400000174858',  # Process Overview for Screening Mail
-    'II.i.2.B': '554400000174859',  # Recording Date of Receipt
-    'II.i.2.C': '554400000174860',  # Mail Management
-    'II.i.2.D': '554400000174861',  # Handling Specific Types of Mail
-    'II.iii.1.A': '554400000174869',  # Applications for Benefits
-    'II.iii.1.B': '554400000174870',  # Screening Applications
-    'II.iii.1.C': '554400000174871',  # Substantial Completeness
-    'II.iii.2.A': '554400000174872',  # Intent to File
-    'II.iii.2.B': '554400000174873',  # Supplemental Claims
-
+    "II.i.1.A": "554400000174855",  # Centralized Mail (CM) Intake
+    "II.i.1.B": "554400000174856",  # VCIP Shipping
+    "II.i.2.A": "554400000174858",  # Process Overview for Screening Mail
+    "II.i.2.B": "554400000174859",  # Recording Date of Receipt
+    "II.i.2.C": "554400000174860",  # Mail Management
+    "II.i.2.D": "554400000174861",  # Handling Specific Types of Mail
+    "II.iii.1.A": "554400000174869",  # Applications for Benefits
+    "II.iii.1.B": "554400000174870",  # Screening Applications
+    "II.iii.1.C": "554400000174871",  # Substantial Completeness
+    "II.iii.2.A": "554400000174872",  # Intent to File
+    "II.iii.2.B": "554400000174873",  # Supplemental Claims
     # Part III - The Development Process
-    'III.ii.2.B': '554400000014119',  # Procedures for Obtaining STRs
-
+    "III.ii.2.B": "554400000014119",  # Procedures for Obtaining STRs
     # Part IV - Examinations
-    'IV.i.1.A': '554400000180494',  # Duty to Assist With Examination
-
+    "IV.i.1.A": "554400000180494",  # Duty to Assist With Examination
     # Part V - The Rating Process
-    'V.ii.4.A': '554400000180492',  # Effective Dates
-
+    "V.ii.4.A": "554400000180492",  # Effective Dates
     # Part VIII - Special Compensation Issues
-    'VIII.i.1.A': '554400000177422',  # Herbicide Exposure Claims
+    "VIII.i.1.A": "554400000177422",  # Herbicide Exposure Claims
 }
 
 

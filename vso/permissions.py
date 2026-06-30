@@ -14,16 +14,14 @@ from django.shortcuts import redirect
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
-from django.http import HttpResponseForbidden
-
-from accounts.models import OrganizationMembership
 
 
 class Roles:
     """Role constants matching OrganizationMembership.ROLE_CHOICES"""
-    ADMIN = 'admin'
-    CASEWORKER = 'caseworker'
-    VETERAN = 'veteran'
+
+    ADMIN = "admin"
+    CASEWORKER = "caseworker"
+    VETERAN = "veteran"
 
     # Role groups for permission checks
     VSO_STAFF = [ADMIN, CASEWORKER]
@@ -48,7 +46,7 @@ def get_user_roles(user, organization=None):
     if organization:
         memberships = memberships.filter(organization=organization)
 
-    return set(memberships.values_list('role', flat=True))
+    return set(memberships.values_list("role", flat=True))
 
 
 def has_role(user, roles, organization=None):
@@ -100,10 +98,8 @@ def get_user_staff_organizations(user):
         return Organization.objects.none()
 
     org_ids = user.memberships.filter(
-        is_active=True,
-        organization__is_active=True,
-        role__in=Roles.VSO_STAFF
-    ).values_list('organization_id', flat=True)
+        is_active=True, organization__is_active=True, role__in=Roles.VSO_STAFF
+    ).values_list("organization_id", flat=True)
 
     return Organization.objects.filter(id__in=org_ids)
 
@@ -123,10 +119,7 @@ def get_user_organization_membership(user, organization=None, roles=None):
     if not user.is_authenticated:
         return None
 
-    memberships = user.memberships.filter(
-        is_active=True,
-        organization__is_active=True
-    )
+    memberships = user.memberships.filter(is_active=True, organization__is_active=True)
 
     if organization:
         memberships = memberships.filter(organization=organization)
@@ -136,7 +129,7 @@ def get_user_organization_membership(user, organization=None, roles=None):
             roles = [roles]
         memberships = memberships.filter(role__in=roles)
 
-    return memberships.select_related('organization').first()
+    return memberships.select_related("organization").first()
 
 
 def can_access_case(user, case):
@@ -195,7 +188,8 @@ def can_access_shared_document(user, shared_document):
 # Decorators
 # ============================================================================
 
-def role_required(roles, redirect_url='home', message=None):
+
+def role_required(roles, redirect_url="home", message=None):
     """
     Decorator that requires user to have one of the specified roles.
 
@@ -224,6 +218,7 @@ def role_required(roles, redirect_url='home', message=None):
             return redirect(redirect_url)
 
         return wrapper
+
     return decorator
 
 
@@ -235,8 +230,8 @@ def vso_staff_required(view_func):
     """
     return role_required(
         Roles.VSO_STAFF,
-        redirect_url='claims:document_list',
-        message="You don't have permission to access the VSO dashboard."
+        redirect_url="claims:document_list",
+        message="You don't have permission to access the VSO dashboard.",
     )(view_func)
 
 
@@ -246,12 +241,14 @@ def organization_admin_required(view_func):
     """
     return role_required(
         [Roles.ADMIN],
-        redirect_url='vso:dashboard',
-        message="This action requires administrator privileges."
+        redirect_url="vso:dashboard",
+        message="This action requires administrator privileges.",
     )(view_func)
 
 
-def owns_resource_or_vso_staff(model_class, pk_kwarg='pk', user_field='user', org_field=None):
+def owns_resource_or_vso_staff(
+    model_class, pk_kwarg="pk", user_field="user", org_field=None
+):
     """
     Decorator that checks if user owns the resource OR is VSO staff with access.
 
@@ -268,6 +265,7 @@ def owns_resource_or_vso_staff(model_class, pk_kwarg='pk', user_field='user', or
         def document_view(request, pk):
             ...
     """
+
     def decorator(view_func):
         @wraps(view_func)
         @login_required
@@ -287,7 +285,7 @@ def owns_resource_or_vso_staff(model_class, pk_kwarg='pk', user_field='user', or
 
             # If org_field is specified, use that path
             if org_field:
-                parts = org_field.split('__')
+                parts = org_field.split("__")
                 resource_org = obj
                 for part in parts:
                     resource_org = getattr(resource_org, part, None)
@@ -295,7 +293,7 @@ def owns_resource_or_vso_staff(model_class, pk_kwarg='pk', user_field='user', or
                         break
 
             # Check if resource has case_shares (for documents)
-            if resource_org is None and hasattr(obj, 'case_shares'):
+            if resource_org is None and hasattr(obj, "case_shares"):
                 # Get organizations from related case shares
                 user_staff_orgs = get_user_staff_organizations(request.user)
                 has_access = obj.case_shares.filter(
@@ -306,7 +304,7 @@ def owns_resource_or_vso_staff(model_class, pk_kwarg='pk', user_field='user', or
 
             # Check if resource has a direct organization field
             if resource_org is None:
-                resource_org = getattr(obj, 'organization', None)
+                resource_org = getattr(obj, "organization", None)
 
             # If we have an organization, check scoped VSO staff access
             if resource_org and is_vso_staff(request.user, organization=resource_org):
@@ -315,12 +313,14 @@ def owns_resource_or_vso_staff(model_class, pk_kwarg='pk', user_field='user', or
             raise PermissionDenied("You don't have permission to access this resource.")
 
         return wrapper
+
     return decorator
 
 
 # ============================================================================
 # Mixins for Class-Based Views
 # ============================================================================
+
 
 class RoleRequiredMixin:
     """
@@ -331,13 +331,14 @@ class RoleRequiredMixin:
             required_roles = [Roles.ADMIN, Roles.CASEWORKER]
             permission_denied_message = "Custom message"
     """
+
     required_roles = []
     permission_denied_message = "You don't have permission to access this page."
-    permission_denied_redirect = 'home'
+    permission_denied_redirect = "home"
 
     def dispatch(self, request, *args, **kwargs):
         if not request.user.is_authenticated:
-            return redirect('account_login')
+            return redirect("account_login")
 
         if not has_role(request.user, self.required_roles):
             messages.error(request, self.permission_denied_message)
@@ -348,21 +349,24 @@ class RoleRequiredMixin:
 
 class VSOStaffRequiredMixin(RoleRequiredMixin):
     """Mixin that requires VSO staff access."""
+
     required_roles = Roles.VSO_STAFF
     permission_denied_message = "You don't have permission to access the VSO dashboard."
-    permission_denied_redirect = 'claims:document_list'
+    permission_denied_redirect = "claims:document_list"
 
 
 class OrganizationAdminRequiredMixin(RoleRequiredMixin):
     """Mixin that requires organization admin access."""
+
     required_roles = [Roles.ADMIN]
     permission_denied_message = "This action requires administrator privileges."
-    permission_denied_redirect = 'vso:dashboard'
+    permission_denied_redirect = "vso:dashboard"
 
 
 # ============================================================================
 # Template Helpers
 # ============================================================================
+
 
 def get_permission_context(user):
     """
@@ -372,20 +376,19 @@ def get_permission_context(user):
     """
     if not user.is_authenticated:
         return {
-            'is_vso_staff': False,
-            'is_org_admin': False,
-            'user_roles': set(),
-            'user_organizations': [],
+            "is_vso_staff": False,
+            "is_org_admin": False,
+            "user_roles": set(),
+            "user_organizations": [],
         }
 
     memberships = user.memberships.filter(
-        is_active=True,
-        organization__is_active=True
-    ).select_related('organization')
+        is_active=True, organization__is_active=True
+    ).select_related("organization")
 
     return {
-        'is_vso_staff': any(m.role in Roles.VSO_STAFF for m in memberships),
-        'is_org_admin': any(m.role == Roles.ADMIN for m in memberships),
-        'user_roles': set(m.role for m in memberships),
-        'user_organizations': [m.organization for m in memberships],
+        "is_vso_staff": any(m.role in Roles.VSO_STAFF for m in memberships),
+        "is_org_admin": any(m.role == Roles.ADMIN for m in memberships),
+        "user_roles": set(m.role for m in memberships),
+        "user_organizations": [m.organization for m in memberships],
     }

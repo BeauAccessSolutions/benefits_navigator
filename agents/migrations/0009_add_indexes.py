@@ -7,30 +7,40 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('agents', '0008_remove_raw_text_fields'),
-        ('claims', '0004_add_condition_tags'),
+        ("agents", "0008_remove_raw_text_fields"),
+        ("claims", "0004_add_condition_tags"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
         migrations.AddIndex(
-            model_name='agentinteraction',
-            index=models.Index(fields=['user', 'created_at'], name='agents_agen_user_id_2eee11_idx'),
+            model_name="agentinteraction",
+            index=models.Index(
+                fields=["user", "created_at"], name="agents_agen_user_id_2eee11_idx"
+            ),
         ),
         migrations.AddIndex(
-            model_name='agentinteraction',
-            index=models.Index(fields=['user', 'agent_type'], name='agents_agen_user_id_d7eff1_idx'),
+            model_name="agentinteraction",
+            index=models.Index(
+                fields=["user", "agent_type"], name="agents_agen_user_id_d7eff1_idx"
+            ),
         ),
         migrations.AddIndex(
-            model_name='agentinteraction',
-            index=models.Index(fields=['user', 'status'], name='agents_agen_user_id_51f2ce_idx'),
+            model_name="agentinteraction",
+            index=models.Index(
+                fields=["user", "status"], name="agents_agen_user_id_51f2ce_idx"
+            ),
         ),
         migrations.AddIndex(
-            model_name='decisionletteranalysis',
-            index=models.Index(fields=['user', 'created_at'], name='agents_deci_user_id_b34a98_idx'),
+            model_name="decisionletteranalysis",
+            index=models.Index(
+                fields=["user", "created_at"], name="agents_deci_user_id_b34a98_idx"
+            ),
         ),
         migrations.AddIndex(
-            model_name='evidencegapanalysis',
-            index=models.Index(fields=['user', 'created_at'], name='agents_evid_user_id_0049d4_idx'),
+            model_name="evidencegapanalysis",
+            index=models.Index(
+                fields=["user", "created_at"], name="agents_evid_user_id_0049d4_idx"
+            ),
         ),
     ]

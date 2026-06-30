@@ -7,15 +7,13 @@ hit external services (OpenAI, etc.).
 
 import json
 import time
-from io import BytesIO
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import Client, override_settings
-
+from django.test import Client
 
 # Disable SSL redirect for benchmarks (CI runs with DEBUG=False)
 pytestmark = pytest.mark.usefixtures("disable_ssl_redirect")
@@ -25,6 +23,7 @@ pytestmark = pytest.mark.usefixtures("disable_ssl_redirect")
 def disable_ssl_redirect(settings):
     """Disable SSL redirect for benchmark tests."""
     settings.SECURE_SSL_REDIRECT = False
+
 
 User = get_user_model()
 
@@ -39,9 +38,9 @@ BENCHMARK_RESULTS = {}
 def record_benchmark(name: str, duration: float):
     """Record a benchmark result."""
     BENCHMARK_RESULTS[name] = {
-        'name': name,
-        'time': duration,
-        'mean': duration,
+        "name": name,
+        "time": duration,
+        "mean": duration,
     }
 
 
@@ -53,10 +52,10 @@ def save_benchmark_results(request):
     # Save results after session
     results_file = Path("benchmark-results.json")
     results = {
-        'tests': BENCHMARK_RESULTS,
-        'timestamp': time.time(),
+        "tests": BENCHMARK_RESULTS,
+        "timestamp": time.time(),
     }
-    with open(results_file, 'w') as f:
+    with open(results_file, "w") as f:
         json.dump(results, f, indent=2)
 
 
@@ -64,21 +63,22 @@ def save_benchmark_results(request):
 # User Fixtures
 # =============================================================================
 
+
 @pytest.fixture
 def benchmark_user(db):
     """Create a user for benchmark tests."""
     user, _ = User.objects.get_or_create(
-        email='benchmark@test.com',
+        email="benchmark@test.com",
         defaults={
-            'first_name': 'Benchmark',
-            'last_name': 'User',
-        }
+            "first_name": "Benchmark",
+            "last_name": "User",
+        },
     )
-    user.set_password('BenchmarkPassword123!')
+    user.set_password("BenchmarkPassword123!")
     user.save()
 
     # Grant AI consent
-    if hasattr(user, 'profile'):
+    if hasattr(user, "profile"):
         user.profile.ai_processing_consent = True
         user.profile.save()
 
@@ -89,13 +89,14 @@ def benchmark_user(db):
 def authenticated_client(db, benchmark_user):
     """Create an authenticated client for benchmark tests."""
     client = Client()
-    client.login(email='benchmark@test.com', password='BenchmarkPassword123!')
+    client.login(email="benchmark@test.com", password="BenchmarkPassword123!")
     return client
 
 
 # =============================================================================
 # Mock Fixtures
 # =============================================================================
+
 
 @pytest.fixture
 def mock_openai():
@@ -105,17 +106,19 @@ def mock_openai():
     """
     block = MagicMock()
     block.type = "text"
-    block.text = json.dumps({
-        'summary': 'Test analysis summary',
-        'key_findings': ['Finding 1', 'Finding 2'],
-    })
+    block.text = json.dumps(
+        {
+            "summary": "Test analysis summary",
+            "key_findings": ["Finding 1", "Finding 2"],
+        }
+    )
     mock_response = MagicMock()
     mock_response.content = [block]
     mock_response.stop_reason = "end_turn"
     mock_response.usage.input_tokens = 60
     mock_response.usage.output_tokens = 40
 
-    with patch('anthropic.Anthropic') as mock_client:
+    with patch("anthropic.Anthropic") as mock_client:
         mock_client.return_value.messages.create.return_value = mock_response
         yield mock_client
 
@@ -123,8 +126,8 @@ def mock_openai():
 @pytest.fixture
 def mock_celery():
     """Mock Celery to prevent async task execution."""
-    with patch('claims.tasks.process_document_task.delay') as mock_task:
-        mock_task.return_value = MagicMock(id='test-task-id')
+    with patch("claims.tasks.process_document_task.delay") as mock_task:
+        mock_task.return_value = MagicMock(id="test-task-id")
         yield mock_task
 
 
@@ -148,7 +151,5 @@ startxref
 %%EOF"""
 
     return SimpleUploadedFile(
-        name="benchmark_test.pdf",
-        content=pdf_content,
-        content_type="application/pdf"
+        name="benchmark_test.pdf", content=pdf_content, content_type="application/pdf"
     )

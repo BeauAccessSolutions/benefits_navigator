@@ -5,17 +5,19 @@ from django.db import migrations
 
 def backfill_organization(apps, schema_editor):
     """Backfill organization from case for existing SharedAnalysis records."""
-    SharedAnalysis = apps.get_model('vso', 'SharedAnalysis')
+    SharedAnalysis = apps.get_model("vso", "SharedAnalysis")
 
-    for analysis in SharedAnalysis.objects.filter(organization__isnull=True).select_related('case'):
+    for analysis in SharedAnalysis.objects.filter(
+        organization__isnull=True
+    ).select_related("case"):
         if analysis.case and analysis.case.organization_id:
             analysis.organization_id = analysis.case.organization_id
-            analysis.save(update_fields=['organization'])
+            analysis.save(update_fields=["organization"])
 
 
 def reverse_backfill(apps, schema_editor):
     """Reverse - set all organization to NULL."""
-    SharedAnalysis = apps.get_model('vso', 'SharedAnalysis')
+    SharedAnalysis = apps.get_model("vso", "SharedAnalysis")
     SharedAnalysis.objects.all().update(organization=None)
 
 

@@ -43,13 +43,13 @@ User = get_user_model()
 # AGENT INTERACTION MODEL TESTS
 # =============================================================================
 
+
 class TestAgentInteractionModel(TestCase):
     """Tests for the AgentInteraction model."""
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email="test@example.com",
-            password="TestPass123!"
+            email="test@example.com", password="TestPass123!"
         )
 
     def test_interaction_creation(self):
@@ -73,7 +73,7 @@ class TestAgentInteractionModel(TestCase):
 
     def test_interaction_agent_type_choices(self):
         """AgentInteraction accepts valid agent type choices."""
-        valid_types = ['decision_analyzer', 'evidence_gap', 'statement_generator']
+        valid_types = ["decision_analyzer", "evidence_gap", "statement_generator"]
         for atype in valid_types:
             interaction = AgentInteraction.objects.create(
                 user=self.user,
@@ -83,7 +83,7 @@ class TestAgentInteractionModel(TestCase):
 
     def test_interaction_status_choices(self):
         """AgentInteraction accepts valid status choices."""
-        valid_statuses = ['pending', 'processing', 'completed', 'failed']
+        valid_statuses = ["pending", "processing", "completed", "failed"]
         for status in valid_statuses:
             interaction = AgentInteraction.objects.create(
                 user=self.user,
@@ -109,13 +109,13 @@ class TestAgentInteractionModel(TestCase):
 # DECISION LETTER ANALYSIS MODEL TESTS
 # =============================================================================
 
+
 class TestDecisionLetterAnalysisModel(TestCase):
     """Tests for the DecisionLetterAnalysis model."""
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email="test@example.com",
-            password="TestPass123!"
+            email="test@example.com", password="TestPass123!"
         )
         self.interaction = AgentInteraction.objects.create(
             user=self.user,
@@ -193,13 +193,13 @@ class TestDecisionLetterAnalysisModel(TestCase):
 # DENIAL DECODING MODEL TESTS
 # =============================================================================
 
+
 class TestDenialDecodingModel(TestCase):
     """Tests for the DenialDecoding model."""
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email="test@example.com",
-            password="TestPass123!"
+            email="test@example.com", password="TestPass123!"
         )
         self.interaction = AgentInteraction.objects.create(
             user=self.user,
@@ -287,13 +287,13 @@ class TestDenialDecodingModel(TestCase):
 # EVIDENCE GAP ANALYSIS MODEL TESTS
 # =============================================================================
 
+
 class TestEvidenceGapAnalysisModel(TestCase):
     """Tests for the EvidenceGapAnalysis model."""
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email="test@example.com",
-            password="TestPass123!"
+            email="test@example.com", password="TestPass123!"
         )
         self.interaction = AgentInteraction.objects.create(
             user=self.user,
@@ -326,8 +326,16 @@ class TestEvidenceGapAnalysisModel(TestCase):
             interaction=self.interaction,
             user=self.user,
             evidence_gaps=[
-                {"condition": "PTSD", "missing": "Nexus letter", "priority": "critical"},
-                {"condition": "Sleep Apnea", "missing": "Sleep study", "priority": "critical"},
+                {
+                    "condition": "PTSD",
+                    "missing": "Nexus letter",
+                    "priority": "critical",
+                },
+                {
+                    "condition": "Sleep Apnea",
+                    "missing": "Sleep study",
+                    "priority": "critical",
+                },
             ],
         )
         self.assertEqual(len(analysis.evidence_gaps), 2)
@@ -346,13 +354,13 @@ class TestEvidenceGapAnalysisModel(TestCase):
 # PERSONAL STATEMENT MODEL TESTS
 # =============================================================================
 
+
 class TestPersonalStatementModel(TestCase):
     """Tests for the PersonalStatement model."""
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email="test@example.com",
-            password="TestPass123!"
+            email="test@example.com", password="TestPass123!"
         )
         self.interaction = AgentInteraction.objects.create(
             user=self.user,
@@ -411,7 +419,7 @@ class TestPersonalStatementModel(TestCase):
 
     def test_statement_type_choices(self):
         """PersonalStatement accepts valid type choices."""
-        valid_types = ['initial', 'increase', 'secondary', 'appeal']
+        valid_types = ["initial", "increase", "secondary", "appeal"]
         for i, stype in enumerate(valid_types):
             # Each statement needs a unique interaction (OneToOne relationship)
             interaction = AgentInteraction.objects.create(
@@ -430,6 +438,7 @@ class TestPersonalStatementModel(TestCase):
 # =============================================================================
 # M21 MANUAL SECTION MODEL TESTS
 # =============================================================================
+
 
 class TestM21ManualSectionModel(TestCase):
     """Tests for the M21ManualSection model."""
@@ -511,6 +520,7 @@ class TestM21ManualSectionModel(TestCase):
 # M21 SCRAPE JOB MODEL TESTS
 # =============================================================================
 
+
 class TestM21ScrapeJobModel(TestCase):
     """Tests for the M21ScrapeJob model."""
 
@@ -546,13 +556,14 @@ class TestM21ScrapeJobModel(TestCase):
 # AGENT VIEW TESTS
 # =============================================================================
 
+
 @pytest.mark.django_db
 class TestAgentHomeView:
     """Tests for the agents home view."""
 
     def test_agents_home_loads(self, client):
         """Agents home page loads."""
-        response = client.get(reverse('agents:home'))
+        response = client.get(reverse("agents:home"))
         assert response.status_code == 200
 
 
@@ -562,24 +573,27 @@ class TestAgentHistoryView:
 
     def test_history_requires_login(self, client):
         """Agent history requires authentication."""
-        response = client.get(reverse('agents:history'))
+        response = client.get(reverse("agents:history"))
         assert response.status_code == 302
 
     def test_history_loads(self, authenticated_client):
         """Agent history loads for authenticated user."""
-        response = authenticated_client.get(reverse('agents:history'))
+        response = authenticated_client.get(reverse("agents:history"))
         assert response.status_code == 200
 
-    def test_history_shows_user_interactions(self, authenticated_client, agent_interaction):
+    def test_history_shows_user_interactions(
+        self, authenticated_client, agent_interaction
+    ):
         """Agent history shows user's interactions."""
-        response = authenticated_client.get(reverse('agents:history'))
+        response = authenticated_client.get(reverse("agents:history"))
         assert response.status_code == 200
-        assert 'interactions' in response.context
+        assert "interactions" in response.context
 
 
 # =============================================================================
 # DECISION ANALYZER VIEW TESTS
 # =============================================================================
+
 
 @pytest.mark.django_db
 class TestDecisionAnalyzerViews:
@@ -587,18 +601,20 @@ class TestDecisionAnalyzerViews:
 
     def test_analyzer_requires_login(self, client):
         """Decision analyzer requires authentication."""
-        response = client.get(reverse('agents:decision_analyzer'))
+        response = client.get(reverse("agents:decision_analyzer"))
         assert response.status_code == 302
 
     def test_analyzer_loads(self, authenticated_client):
         """Decision analyzer page loads."""
-        response = authenticated_client.get(reverse('agents:decision_analyzer'))
+        response = authenticated_client.get(reverse("agents:decision_analyzer"))
         assert response.status_code == 200
 
     def test_analyzer_result_loads(self, authenticated_client, decision_analysis):
         """Decision analyzer result page loads."""
         response = authenticated_client.get(
-            reverse('agents:decision_analyzer_result', kwargs={'pk': decision_analysis.pk})
+            reverse(
+                "agents:decision_analyzer_result", kwargs={"pk": decision_analysis.pk}
+            )
         )
         assert response.status_code == 200
 
@@ -613,7 +629,7 @@ class TestDecisionAnalyzerViews:
             user=other_user,
         )
         response = authenticated_client.get(
-            reverse('agents:decision_analyzer_result', kwargs={'pk': other_analysis.pk})
+            reverse("agents:decision_analyzer_result", kwargs={"pk": other_analysis.pk})
         )
         assert response.status_code == 404
 
@@ -622,18 +638,19 @@ class TestDecisionAnalyzerViews:
 # EVIDENCE GAP ANALYZER VIEW TESTS
 # =============================================================================
 
+
 @pytest.mark.django_db
 class TestEvidenceGapViews:
     """Tests for evidence gap analyzer views."""
 
     def test_gap_analyzer_requires_login(self, client):
         """Evidence gap analyzer requires authentication."""
-        response = client.get(reverse('agents:evidence_gap'))
+        response = client.get(reverse("agents:evidence_gap"))
         assert response.status_code == 302
 
     def test_gap_analyzer_loads(self, authenticated_client):
         """Evidence gap analyzer page loads."""
-        response = authenticated_client.get(reverse('agents:evidence_gap'))
+        response = authenticated_client.get(reverse("agents:evidence_gap"))
         assert response.status_code == 200
 
 
@@ -641,24 +658,26 @@ class TestEvidenceGapViews:
 # STATEMENT GENERATOR VIEW TESTS
 # =============================================================================
 
+
 @pytest.mark.django_db
 class TestStatementGeneratorViews:
     """Tests for personal statement generator views."""
 
     def test_generator_requires_login(self, client):
         """Statement generator requires authentication."""
-        response = client.get(reverse('agents:statement_generator'))
+        response = client.get(reverse("agents:statement_generator"))
         assert response.status_code == 302
 
     def test_generator_loads(self, authenticated_client):
         """Statement generator page loads."""
-        response = authenticated_client.get(reverse('agents:statement_generator'))
+        response = authenticated_client.get(reverse("agents:statement_generator"))
         assert response.status_code == 200
 
 
 # =============================================================================
 # AGENT SERVICE TESTS (MOCKED)
 # =============================================================================
+
 
 class TestDecisionLetterAnalyzerService(TestCase):
     """Tests for the DecisionLetterAnalyzer service."""
@@ -667,23 +686,26 @@ class TestDecisionLetterAnalyzerService(TestCase):
         """DecisionLetterAnalyzer can be initialized without an API key
         (client construction is lazy — only real calls need credentials)."""
         from agents.services import DecisionLetterAnalyzer
+
         analyzer = DecisionLetterAnalyzer()
         self.assertIsNotNone(analyzer)
 
-    @patch('agents.ai_gateway.Anthropic')
+    @patch("agents.ai_gateway.Anthropic")
     def test_analyzer_analyze_mocked(self, mock_anthropic):
         """DecisionLetterAnalyzer analyzes text with mocked Claude client."""
         from agents.services import DecisionLetterAnalyzer
 
         block = MagicMock()
         block.type = "text"
-        block.text = json.dumps({
-            'granted': [{'condition': 'Tinnitus', 'rating': 10}],
-            'denied': [{'condition': 'PTSD', 'reason': 'No nexus'}],
-            'deferred': [],
-            'summary': 'Test summary',
-            'appeal_options': [],
-        })
+        block.text = json.dumps(
+            {
+                "granted": [{"condition": "Tinnitus", "rating": 10}],
+                "denied": [{"condition": "PTSD", "reason": "No nexus"}],
+                "deferred": [],
+                "summary": "Test summary",
+                "appeal_options": [],
+            }
+        )
         mock_response = MagicMock()
         mock_response.content = [block]
         mock_response.stop_reason = "end_turn"
@@ -704,6 +726,7 @@ class TestEvidenceGapAnalyzerService(TestCase):
     def test_gap_analyzer_initialization(self):
         """EvidenceGapAnalyzer can be initialized."""
         from agents.services import EvidenceGapAnalyzer
+
         analyzer = EvidenceGapAnalyzer()
         self.assertIsNotNone(analyzer)
 
@@ -714,6 +737,7 @@ class TestPersonalStatementGeneratorService(TestCase):
     def test_generator_initialization(self):
         """PersonalStatementGenerator can be initialized."""
         from agents.services import PersonalStatementGenerator
+
         generator = PersonalStatementGenerator()
         self.assertIsNotNone(generator)
 
@@ -721,6 +745,7 @@ class TestPersonalStatementGeneratorService(TestCase):
 # =============================================================================
 # DENIAL DECODER SERVICE TESTS
 # =============================================================================
+
 
 class TestDenialDecoderService(TestCase):
     """Tests for the DenialDecoderService."""
@@ -741,6 +766,7 @@ class TestDenialDecoderService(TestCase):
     def test_decoder_initialization(self):
         """DenialDecoderService can be initialized."""
         from agents.services import DenialDecoderService
+
         service = DenialDecoderService()
         self.assertIsNotNone(service)
 
@@ -748,6 +774,7 @@ class TestDenialDecoderService(TestCase):
 # =============================================================================
 # EVIDENCE CHECKLIST GENERATOR TESTS
 # =============================================================================
+
 
 class TestEvidenceChecklistGenerator(TestCase):
     """Tests for the EvidenceChecklistGenerator service."""
@@ -767,6 +794,7 @@ class TestEvidenceChecklistGenerator(TestCase):
     def test_generator_initialization(self):
         """EvidenceChecklistGenerator can be initialized."""
         from agents.services import EvidenceChecklistGenerator
+
         generator = EvidenceChecklistGenerator()
         self.assertIsNotNone(generator)
 
@@ -774,6 +802,7 @@ class TestEvidenceChecklistGenerator(TestCase):
 # =============================================================================
 # M21 REFERENCE DATA TESTS
 # =============================================================================
+
 
 class TestM21ReferenceData(TestCase):
     """Tests for M21 reference data functions."""
@@ -815,7 +844,7 @@ class TestM21ReferenceData(TestCase):
         section = get_m21_section_from_db("M21-1.V.ii.2.A.ref")
         if section:  # May return None if not found by exact match
             # Returns a dict, not a model object
-            self.assertEqual(section['title'], "Service Connection")
+            self.assertEqual(section["title"], "Service Connection")
 
     def test_get_m21_sections_by_part(self):
         """get_m21_sections_by_part retrieves sections in a part."""
@@ -829,13 +858,14 @@ class TestM21ReferenceData(TestCase):
         from agents.reference_data import get_m21_stats
 
         stats = get_m21_stats()
-        self.assertIn('total', stats)
-        self.assertEqual(stats['total'], 2)
+        self.assertIn("total", stats)
+        self.assertEqual(stats["total"], 2)
 
 
 # =============================================================================
 # ACCESS CONTROL TESTS
 # =============================================================================
+
 
 @pytest.mark.django_db
 class TestAgentAccessControl:
@@ -852,11 +882,13 @@ class TestAgentAccessControl:
             user=other_user,
         )
         response = authenticated_client.get(
-            reverse('agents:decision_analyzer_result', kwargs={'pk': other_analysis.pk})
+            reverse("agents:decision_analyzer_result", kwargs={"pk": other_analysis.pk})
         )
         assert response.status_code == 404
 
-    def test_user_cannot_view_other_gap_analysis(self, authenticated_client, other_user):
+    def test_user_cannot_view_other_gap_analysis(
+        self, authenticated_client, other_user
+    ):
         """Users cannot view other user's evidence gap analysis."""
         other_interaction = AgentInteraction.objects.create(
             user=other_user,
@@ -867,7 +899,7 @@ class TestAgentAccessControl:
             user=other_user,
         )
         response = authenticated_client.get(
-            reverse('agents:evidence_gap_result', kwargs={'pk': other_analysis.pk})
+            reverse("agents:evidence_gap_result", kwargs={"pk": other_analysis.pk})
         )
         assert response.status_code == 404
 
@@ -876,13 +908,13 @@ class TestAgentAccessControl:
 # INTEGRATION TESTS
 # =============================================================================
 
+
 class TestAgentWorkflow(TestCase):
     """Integration tests for agent workflows."""
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email="test@example.com",
-            password="TestPass123!"
+            email="test@example.com", password="TestPass123!"
         )
         self.client = Client()
         self.client.login(email="test@example.com", password="TestPass123!")
@@ -905,12 +937,8 @@ class TestAgentWorkflow(TestCase):
             interaction=interaction,
             user=self.user,
             decision_date=date.today() - timedelta(days=30),
-            conditions_granted=[
-                {"condition": "Tinnitus", "rating": 10}
-            ],
-            conditions_denied=[
-                {"condition": "PTSD", "reason": "No nexus evidence"}
-            ],
+            conditions_granted=[{"condition": "Tinnitus", "rating": 10}],
+            conditions_denied=[{"condition": "PTSD", "reason": "No nexus evidence"}],
             summary="Your claim for tinnitus was granted. PTSD was denied.",
             appeal_options=[
                 {"type": "HLR", "deadline": "2025-01-01"},
@@ -983,7 +1011,9 @@ class TestAgentWorkflow(TestCase):
         statement.save()
 
         # 4. Finalize
-        statement.final_statement = statement.generated_statement + "\n\nSigned,\nVeteran"
+        statement.final_statement = (
+            statement.generated_statement + "\n\nSigned,\nVeteran"
+        )
         statement.is_finalized = True
         statement.save()
 
@@ -1001,6 +1031,7 @@ class TestAgentWorkflow(TestCase):
 # AI CONSENT ENFORCEMENT TESTS
 # =============================================================================
 
+
 @pytest.mark.agent
 class TestAIConsentEnforcement(TestCase):
     """Tests for AI consent enforcement in agent views."""
@@ -1008,8 +1039,7 @@ class TestAIConsentEnforcement(TestCase):
     def setUp(self):
         self.client = Client()
         self.user = User.objects.create_user(
-            email="consent_test@example.com",
-            password="TestPass123!"
+            email="consent_test@example.com", password="TestPass123!"
         )
         self.client.login(username="consent_test@example.com", password="TestPass123!")
 
@@ -1020,13 +1050,15 @@ class TestAIConsentEnforcement(TestCase):
         self.user.profile.save()
 
         response = self.client.post(
-            reverse('agents:decision_analyzer_submit'),
-            {'letter_text': 'Test decision letter content with enough text to pass validation.'},
+            reverse("agents:decision_analyzer_submit"),
+            {
+                "letter_text": "Test decision letter content with enough text to pass validation."
+            },
         )
 
         # Should redirect to privacy settings
         self.assertEqual(response.status_code, 302)
-        self.assertIn('privacy', response.url)
+        self.assertIn("privacy", response.url)
 
     def test_decision_analyzer_submit_with_consent_processes(self):
         """Decision analyzer submit processes with consent granted."""
@@ -1035,13 +1067,15 @@ class TestAIConsentEnforcement(TestCase):
         self.user.profile.save()
 
         response = self.client.post(
-            reverse('agents:decision_analyzer_submit'),
-            {'letter_text': 'This is a short text'},  # Too short, will redirect with error
+            reverse("agents:decision_analyzer_submit"),
+            {
+                "letter_text": "This is a short text"
+            },  # Too short, will redirect with error
         )
 
         # Should redirect to decision_analyzer (validation error), not privacy settings
         self.assertEqual(response.status_code, 302)
-        self.assertNotIn('privacy', response.url)
+        self.assertNotIn("privacy", response.url)
 
     def test_evidence_gap_submit_without_consent_redirects(self):
         """Evidence gap submit redirects to privacy settings without consent."""
@@ -1049,12 +1083,12 @@ class TestAIConsentEnforcement(TestCase):
         self.user.profile.save()
 
         response = self.client.post(
-            reverse('agents:evidence_gap_submit'),
-            {'conditions': ['PTSD']},
+            reverse("agents:evidence_gap_submit"),
+            {"conditions": ["PTSD"]},
         )
 
         self.assertEqual(response.status_code, 302)
-        self.assertIn('privacy', response.url)
+        self.assertIn("privacy", response.url)
 
     def test_evidence_gap_submit_with_consent_processes(self):
         """Evidence gap submit processes with consent granted."""
@@ -1062,13 +1096,13 @@ class TestAIConsentEnforcement(TestCase):
         self.user.profile.save()
 
         response = self.client.post(
-            reverse('agents:evidence_gap_submit'),
+            reverse("agents:evidence_gap_submit"),
             {},  # Missing conditions, will redirect with error
         )
 
         # Should redirect to evidence_gap (validation error), not privacy settings
         self.assertEqual(response.status_code, 302)
-        self.assertNotIn('privacy', response.url)
+        self.assertNotIn("privacy", response.url)
 
     def test_statement_generator_submit_without_consent_redirects(self):
         """Statement generator submit redirects to privacy settings without consent."""
@@ -1076,18 +1110,18 @@ class TestAIConsentEnforcement(TestCase):
         self.user.profile.save()
 
         response = self.client.post(
-            reverse('agents:statement_generator_submit'),
+            reverse("agents:statement_generator_submit"),
             {
-                'condition': 'PTSD',
-                'statement_type': 'initial',
-                'in_service_event': 'Combat',
-                'current_symptoms': 'Nightmares',
-                'daily_impact': 'Difficulty sleeping',
+                "condition": "PTSD",
+                "statement_type": "initial",
+                "in_service_event": "Combat",
+                "current_symptoms": "Nightmares",
+                "daily_impact": "Difficulty sleeping",
             },
         )
 
         self.assertEqual(response.status_code, 302)
-        self.assertIn('privacy', response.url)
+        self.assertIn("privacy", response.url)
 
     def test_statement_generator_submit_with_consent_processes(self):
         """Statement generator submit processes with consent granted."""
@@ -1095,13 +1129,13 @@ class TestAIConsentEnforcement(TestCase):
         self.user.profile.save()
 
         response = self.client.post(
-            reverse('agents:statement_generator_submit'),
+            reverse("agents:statement_generator_submit"),
             {},  # Missing fields, will redirect with error
         )
 
         # Should redirect to statement_generator (validation error), not privacy settings
         self.assertEqual(response.status_code, 302)
-        self.assertNotIn('privacy', response.url)
+        self.assertNotIn("privacy", response.url)
 
     def test_consent_check_handles_missing_profile(self):
         """Consent check handles user without profile gracefully."""
@@ -1109,11 +1143,10 @@ class TestAIConsentEnforcement(TestCase):
 
         # Create user without profile (delete the auto-created one)
         new_user = User.objects.create_user(
-            email="no_profile@example.com",
-            password="TestPass123!"
+            email="no_profile@example.com", password="TestPass123!"
         )
         # Delete the auto-created profile
-        if hasattr(new_user, 'profile'):
+        if hasattr(new_user, "profile"):
             new_user.profile.delete()
 
         # Refresh from DB

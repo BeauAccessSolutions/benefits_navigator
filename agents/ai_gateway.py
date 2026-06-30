@@ -13,7 +13,6 @@ This module provides a single entry point for all Claude API calls with:
 - PII-safe logging
 """
 
-import json
 import logging
 import re
 import time
@@ -36,16 +35,18 @@ from pydantic import BaseModel, ValidationError
 
 logger = logging.getLogger(__name__)
 
-T = TypeVar('T')
-U = TypeVar('U')
+T = TypeVar("T")
+U = TypeVar("U")
 
 
 # =============================================================================
 # ERROR TYPES
 # =============================================================================
 
+
 class ErrorCode(Enum):
     """Standard error codes for AI gateway operations."""
+
     TIMEOUT = "timeout"
     RATE_LIMITED = "rate_limited"
     API_ERROR = "api_error"
@@ -58,6 +59,7 @@ class ErrorCode(Enum):
 @dataclass
 class GatewayError:
     """Structured error from AI gateway operations."""
+
     code: ErrorCode
     message: str
     retryable: bool
@@ -66,17 +68,18 @@ class GatewayError:
 
     def to_dict(self) -> dict:
         return {
-            'code': self.code.value,
-            'message': self.message,
-            'retryable': self.retryable,
-            'details': self.details,
-            'timestamp': self.timestamp.isoformat(),
+            "code": self.code.value,
+            "message": self.message,
+            "retryable": self.retryable,
+            "details": self.details,
+            "timestamp": self.timestamp.isoformat(),
         }
 
 
 # =============================================================================
 # RESULT TYPE
 # =============================================================================
+
 
 @dataclass
 class Result(Generic[T]):
@@ -93,10 +96,11 @@ class Result(Generic[T]):
         else:
             handle_error(result.error)
     """
+
     _value: Optional[T] = None
     _error: Optional[GatewayError] = None
     tokens_used: int = 0
-    cost_estimate: Decimal = Decimal('0')
+    cost_estimate: Decimal = Decimal("0")
     duration_ms: int = 0
 
     @property
@@ -110,7 +114,9 @@ class Result(Generic[T]):
     @property
     def value(self) -> T:
         if self._error is not None:
-            raise ValueError(f"Cannot access value on failed result: {self._error.message}")
+            raise ValueError(
+                f"Cannot access value on failed result: {self._error.message}"
+            )
         return self._value
 
     @property
@@ -124,21 +130,23 @@ class Result(Generic[T]):
         cls,
         value: T,
         tokens: int = 0,
-        cost: Decimal = Decimal('0'),
-        duration_ms: int = 0
-    ) -> 'Result[T]':
-        return cls(_value=value, tokens_used=tokens, cost_estimate=cost, duration_ms=duration_ms)
+        cost: Decimal = Decimal("0"),
+        duration_ms: int = 0,
+    ) -> "Result[T]":
+        return cls(
+            _value=value,
+            tokens_used=tokens,
+            cost_estimate=cost,
+            duration_ms=duration_ms,
+        )
 
     @classmethod
     def failure(
-        cls,
-        error: GatewayError,
-        tokens: int = 0,
-        duration_ms: int = 0
-    ) -> 'Result[T]':
+        cls, error: GatewayError, tokens: int = 0, duration_ms: int = 0
+    ) -> "Result[T]":
         return cls(_error=error, tokens_used=tokens, duration_ms=duration_ms)
 
-    def map(self, fn: Callable[[T], U]) -> 'Result[U]':
+    def map(self, fn: Callable[[T], U]) -> "Result[U]":
         """Transform the value if successful, propagate error if not."""
         if self.is_success:
             try:
@@ -146,14 +154,14 @@ class Result(Generic[T]):
                     fn(self._value),
                     self.tokens_used,
                     self.cost_estimate,
-                    self.duration_ms
+                    self.duration_ms,
                 )
             except Exception as e:
-                return Result.failure(GatewayError(
-                    code=ErrorCode.UNKNOWN,
-                    message=str(e),
-                    retryable=False
-                ))
+                return Result.failure(
+                    GatewayError(
+                        code=ErrorCode.UNKNOWN, message=str(e), retryable=False
+                    )
+                )
         return Result.failure(self._error, self.tokens_used, self.duration_ms)
 
 
@@ -161,9 +169,11 @@ class Result(Generic[T]):
 # RESPONSE TYPES
 # =============================================================================
 
+
 @dataclass
 class CompletionResponse:
     """Raw completion response from OpenAI."""
+
     content: str
     tokens_used: int
     model: str
@@ -173,6 +183,7 @@ class CompletionResponse:
 @dataclass
 class StructuredResponse(Generic[T]):
     """Structured response validated against a Pydantic schema."""
+
     data: T
     tokens_used: int
     model: str
@@ -229,7 +240,7 @@ def sanitize_input(text: str) -> str:
                 re.escape(pattern),
                 f"[REDACTED: {pattern[:10]}...]",
                 text,
-                flags=re.IGNORECASE
+                flags=re.IGNORECASE,
             )
 
     return text
@@ -239,9 +250,11 @@ def sanitize_input(text: str) -> str:
 # GATEWAY CONFIGURATION
 # =============================================================================
 
+
 @dataclass
 class GatewayConfig:
     """Configuration for AI Gateway."""
+
     model: str = "claude-opus-4-8"
     max_tokens: int = 8192
     # Retained for call-site compatibility; Claude 4.7+ models do not accept
@@ -254,22 +267,23 @@ class GatewayConfig:
     retry_max_delay: float = 60.0
 
     @classmethod
-    def from_settings(cls) -> 'GatewayConfig':
+    def from_settings(cls) -> "GatewayConfig":
         """Create config from Django settings."""
         return cls(
-            model=getattr(settings, 'ANTHROPIC_MODEL', 'claude-opus-4-8'),
-            max_tokens=getattr(settings, 'ANTHROPIC_MAX_TOKENS', 8192),
-            adaptive_thinking=getattr(settings, 'ANTHROPIC_ADAPTIVE_THINKING', True),
-            timeout_seconds=getattr(settings, 'ANTHROPIC_TIMEOUT_SECONDS', 120),
-            max_retries=getattr(settings, 'ANTHROPIC_MAX_RETRIES', 3),
-            retry_base_delay=getattr(settings, 'ANTHROPIC_RETRY_BASE_DELAY', 1.0),
-            retry_max_delay=getattr(settings, 'ANTHROPIC_RETRY_MAX_DELAY', 60.0),
+            model=getattr(settings, "ANTHROPIC_MODEL", "claude-opus-4-8"),
+            max_tokens=getattr(settings, "ANTHROPIC_MAX_TOKENS", 8192),
+            adaptive_thinking=getattr(settings, "ANTHROPIC_ADAPTIVE_THINKING", True),
+            timeout_seconds=getattr(settings, "ANTHROPIC_TIMEOUT_SECONDS", 120),
+            max_retries=getattr(settings, "ANTHROPIC_MAX_RETRIES", 3),
+            retry_base_delay=getattr(settings, "ANTHROPIC_RETRY_BASE_DELAY", 1.0),
+            retry_max_delay=getattr(settings, "ANTHROPIC_RETRY_MAX_DELAY", 60.0),
         )
 
 
 # =============================================================================
 # AI GATEWAY
 # =============================================================================
+
 
 class AIGateway:
     """
@@ -335,11 +349,13 @@ class AIGateway:
         kwargs = dict(
             model=model,
             max_tokens=max_tokens,
-            system=[{
-                "type": "text",
-                "text": system_prompt,
-                "cache_control": {"type": "ephemeral"},
-            }],
+            system=[
+                {
+                    "type": "text",
+                    "text": system_prompt,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
             messages=[{"role": "user", "content": user_prompt}],
         )
         if self.config.adaptive_thinking:
@@ -385,12 +401,13 @@ class AIGateway:
         for attempt in range(self.config.max_retries + 1):
             try:
                 response = self.client.messages.create(
-                    **self._request_kwargs(system_prompt, user_prompt, model, max_tokens)
+                    **self._request_kwargs(
+                        system_prompt, user_prompt, model, max_tokens
+                    )
                 )
 
                 content = "".join(
-                    block.text for block in response.content
-                    if block.type == "text"
+                    block.text for block in response.content if block.type == "text"
                 )
                 input_tokens = response.usage.input_tokens if response.usage else 0
                 output_tokens = response.usage.output_tokens if response.usage else 0
@@ -420,13 +437,17 @@ class AIGateway:
 
             except APITimeoutError as e:
                 last_error = e
-                logger.warning(f"AI timeout (attempt {attempt + 1}/{self.config.max_retries + 1})")
+                logger.warning(
+                    f"AI timeout (attempt {attempt + 1}/{self.config.max_retries + 1})"
+                )
                 if attempt < self.config.max_retries:
                     self._wait_with_backoff(attempt)
 
             except RateLimitError as e:
                 last_error = e
-                logger.warning(f"AI rate limited (attempt {attempt + 1}/{self.config.max_retries + 1})")
+                logger.warning(
+                    f"AI rate limited (attempt {attempt + 1}/{self.config.max_retries + 1})"
+                )
                 if attempt < self.config.max_retries:
                     self._wait_with_backoff(attempt, multiplier=2.0)
 
@@ -440,7 +461,9 @@ class AIGateway:
 
             except APIError as e:
                 last_error = e
-                logger.error(f"AI API error (attempt {attempt + 1}/{self.config.max_retries + 1}): {e}")
+                logger.error(
+                    f"AI API error (attempt {attempt + 1}/{self.config.max_retries + 1}): {e}"
+                )
                 if attempt < self.config.max_retries and self._is_retryable(e):
                     self._wait_with_backoff(attempt)
                 else:
@@ -501,7 +524,9 @@ class AIGateway:
             try:
                 response = self.client.messages.parse(
                     output_format=response_schema,
-                    **self._request_kwargs(system_prompt, user_prompt, model, max_tokens)
+                    **self._request_kwargs(
+                        system_prompt, user_prompt, model, max_tokens
+                    ),
                 )
 
                 input_tokens = response.usage.input_tokens if response.usage else 0
@@ -526,8 +551,7 @@ class AIGateway:
                     )
 
                 raw_content = "".join(
-                    block.text for block in response.content
-                    if block.type == "text"
+                    block.text for block in response.content if block.type == "text"
                 )
 
                 logger.info(
@@ -553,7 +577,7 @@ class AIGateway:
                         code=ErrorCode.VALIDATION_ERROR,
                         message=f"Response validation failed: {e}",
                         retryable=False,
-                        details={'validation_errors': e.errors()},
+                        details={"validation_errors": e.errors()},
                     ),
                     tokens=tokens_used,
                     duration_ms=int((time.time() - start_time) * 1000),
@@ -561,13 +585,17 @@ class AIGateway:
 
             except APITimeoutError as e:
                 last_error = e
-                logger.warning(f"AI timeout (attempt {attempt + 1}/{self.config.max_retries + 1})")
+                logger.warning(
+                    f"AI timeout (attempt {attempt + 1}/{self.config.max_retries + 1})"
+                )
                 if attempt < self.config.max_retries:
                     self._wait_with_backoff(attempt)
 
             except RateLimitError as e:
                 last_error = e
-                logger.warning(f"AI rate limited (attempt {attempt + 1}/{self.config.max_retries + 1})")
+                logger.warning(
+                    f"AI rate limited (attempt {attempt + 1}/{self.config.max_retries + 1})"
+                )
                 if attempt < self.config.max_retries:
                     self._wait_with_backoff(attempt, multiplier=2.0)
 
@@ -581,7 +609,9 @@ class AIGateway:
 
             except APIError as e:
                 last_error = e
-                logger.error(f"AI API error (attempt {attempt + 1}/{self.config.max_retries + 1}): {e}")
+                logger.error(
+                    f"AI API error (attempt {attempt + 1}/{self.config.max_retries + 1}): {e}"
+                )
                 if attempt < self.config.max_retries and self._is_retryable(e):
                     self._wait_with_backoff(attempt)
                 else:
@@ -599,8 +629,8 @@ class AIGateway:
     def _wait_with_backoff(self, attempt: int, multiplier: float = 1.0) -> None:
         """Wait with exponential backoff."""
         delay = min(
-            self.config.retry_base_delay * (2 ** attempt) * multiplier,
-            self.config.retry_max_delay
+            self.config.retry_base_delay * (2**attempt) * multiplier,
+            self.config.retry_max_delay,
         )
         logger.info(f"Waiting {delay:.1f}s before retry")
         time.sleep(delay)
@@ -645,7 +675,9 @@ class AIGateway:
                 retryable=False,
             )
 
-    def _estimate_cost(self, input_tokens: int, output_tokens: int, model: str) -> Decimal:
+    def _estimate_cost(
+        self, input_tokens: int, output_tokens: int, model: str
+    ) -> Decimal:
         """Estimate cost from input/output token usage.
 
         Rates are (input, output) USD per token. Cached-read discounts are
@@ -653,12 +685,21 @@ class AIGateway:
         direction for budget tracking.
         """
         rates = {
-            'claude-opus-4-8': (Decimal('0.000005'), Decimal('0.000025')),    # $5 / $25 per MTok
-            'claude-sonnet-4-6': (Decimal('0.000003'), Decimal('0.000015')),  # $3 / $15 per MTok
-            'claude-haiku-4-5': (Decimal('0.000001'), Decimal('0.000005')),   # $1 / $5 per MTok
+            "claude-opus-4-8": (
+                Decimal("0.000005"),
+                Decimal("0.000025"),
+            ),  # $5 / $25 per MTok
+            "claude-sonnet-4-6": (
+                Decimal("0.000003"),
+                Decimal("0.000015"),
+            ),  # $3 / $15 per MTok
+            "claude-haiku-4-5": (
+                Decimal("0.000001"),
+                Decimal("0.000005"),
+            ),  # $1 / $5 per MTok
         }
         input_rate, output_rate = rates.get(
-            model, (Decimal('0.000005'), Decimal('0.000025'))
+            model, (Decimal("0.000005"), Decimal("0.000025"))
         )
         return (
             Decimal(str(input_tokens)) * input_rate
@@ -689,19 +730,14 @@ def reset_gateway() -> None:
 
 
 def complete(
-    system_prompt: str,
-    user_prompt: str,
-    **kwargs
+    system_prompt: str, user_prompt: str, **kwargs
 ) -> Result[CompletionResponse]:
     """Convenience function for raw completion."""
     return get_gateway().complete(system_prompt, user_prompt, **kwargs)
 
 
 def complete_structured(
-    system_prompt: str,
-    user_prompt: str,
-    response_schema: type[BaseModel],
-    **kwargs
+    system_prompt: str, user_prompt: str, response_schema: type[BaseModel], **kwargs
 ) -> Result[StructuredResponse]:
     """Convenience function for structured completion."""
     return get_gateway().complete_structured(

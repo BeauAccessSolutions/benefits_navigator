@@ -13,7 +13,7 @@ Covers:
 import pytest
 from datetime import date
 
-from django.test import TestCase, Client
+from django.test import TestCase
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 
@@ -31,6 +31,7 @@ User = get_user_model()
 # MODEL TESTS
 # =============================================================================
 
+
 class TestDocumentCategoryModel(TestCase):
     """Tests for the DocumentCategory model."""
 
@@ -40,7 +41,7 @@ class TestDocumentCategoryModel(TestCase):
             name="Disability Claims",
             slug="disability-claims",
             description="Forms for disability claims.",
-            order=1
+            order=1,
         )
         self.assertEqual(category.name, "Disability Claims")
         self.assertEqual(category.slug, "disability-claims")
@@ -49,8 +50,7 @@ class TestDocumentCategoryModel(TestCase):
     def test_category_str_representation(self):
         """DocumentCategory string is the name."""
         category = DocumentCategory.objects.create(
-            name="Test Category",
-            slug="test-category"
+            name="Test Category", slug="test-category"
         )
         self.assertEqual(str(category), "Test Category")
 
@@ -71,8 +71,7 @@ class TestVAFormModel(TestCase):
 
     def setUp(self):
         self.category = DocumentCategory.objects.create(
-            name="Test Category",
-            slug="test-cat"
+            name="Test Category", slug="test-cat"
         )
 
     def test_form_creation(self):
@@ -85,7 +84,7 @@ class TestVAFormModel(TestCase):
             official_url="https://www.va.gov/find-forms/about-form-21-526ez/",
             workflow_stages=["initial_claim"],
             last_updated=date.today(),
-            category=self.category
+            category=self.category,
         )
         self.assertEqual(form.form_number, "21-526EZ")
         self.assertTrue(form.is_active)
@@ -98,7 +97,7 @@ class TestVAFormModel(TestCase):
             description="Test",
             instructions="Test",
             official_url="https://va.gov",
-            last_updated=date.today()
+            last_updated=date.today(),
         )
         self.assertEqual(str(form), "21-4138: Statement in Support of Claim")
 
@@ -110,7 +109,7 @@ class TestVAFormModel(TestCase):
             description="Test",
             instructions="Test",
             official_url="https://va.gov",
-            last_updated=date.today()
+            last_updated=date.today(),
         )
         with self.assertRaises(Exception):
             VAForm.objects.create(
@@ -119,7 +118,7 @@ class TestVAFormModel(TestCase):
                 description="Test",
                 instructions="Test",
                 official_url="https://va.gov",
-                last_updated=date.today()
+                last_updated=date.today(),
             )
 
     def test_form_workflow_stages_json(self):
@@ -131,7 +130,7 @@ class TestVAFormModel(TestCase):
             instructions="Test",
             official_url="https://va.gov",
             workflow_stages=["initial_claim", "supplemental_claim"],
-            last_updated=date.today()
+            last_updated=date.today(),
         )
         self.assertEqual(len(form.workflow_stages), 2)
         self.assertIn("initial_claim", form.workflow_stages)
@@ -148,7 +147,7 @@ class TestCPExamGuideConditionModel(TestCase):
             category="mental_health",
             what_to_expect="The examiner will ask about your symptoms...",
             how_to_prepare="Bring documentation...",
-            tips="Be honest about your worst days..."
+            tips="Be honest about your worst days...",
         )
         self.assertEqual(guide.condition_name, "PTSD")
         self.assertTrue(guide.is_published)
@@ -160,7 +159,7 @@ class TestCPExamGuideConditionModel(TestCase):
             slug="sleep-apnea",
             what_to_expect="Test",
             how_to_prepare="Test",
-            tips="Test"
+            tips="Test",
         )
         self.assertEqual(str(guide), "C&P Guide: Sleep Apnea")
 
@@ -175,8 +174,8 @@ class TestCPExamGuideConditionModel(TestCase):
             key_questions=[
                 "When did your symptoms start?",
                 "How often do you experience symptoms?",
-                "How do symptoms affect your work?"
-            ]
+                "How do symptoms affect your work?",
+            ],
         )
         self.assertEqual(len(guide.key_questions), 3)
 
@@ -193,7 +192,7 @@ class TestLegalReferenceModel(TestCase):
             title="Three elements of service connection",
             summary="Establishes the three elements needed for service connection...",
             relevance="Applies to all service connection claims...",
-            date_issued=date(1995, 5, 1)
+            date_issued=date(1995, 5, 1),
         )
         self.assertEqual(ref.reference_type, "cavc")
         self.assertTrue(ref.is_active)
@@ -207,7 +206,7 @@ class TestLegalReferenceModel(TestCase):
             title="Test Opinion",
             summary="Test",
             relevance="Test",
-            date_issued=date(1994, 1, 1)
+            date_issued=date(1994, 1, 1),
         )
         self.assertIn("OGC 5-94", str(ref))
 
@@ -220,7 +219,7 @@ class TestLegalReferenceModel(TestCase):
             title="Test",
             summary="Test",
             relevance="Test",
-            date_issued=date.today()
+            date_issued=date.today(),
         )
         self.assertIn("educational purposes", ref.disclaimer)
         self.assertIn("legal advice", ref.disclaimer)
@@ -235,7 +234,7 @@ class TestLegalReferenceModel(TestCase):
             summary="Test",
             relevance="Test",
             date_issued=date(1990, 1, 1),
-            is_active=False
+            is_active=False,
         )
         new_ref = LegalReference.objects.create(
             reference_type="cavc",
@@ -244,7 +243,7 @@ class TestLegalReferenceModel(TestCase):
             title="New Decision",
             summary="Test",
             relevance="Test",
-            date_issued=date(2000, 1, 1)
+            date_issued=date(2000, 1, 1),
         )
         old_ref.superseded_by = new_ref
         old_ref.save()
@@ -257,27 +256,26 @@ class TestLegalReferenceModel(TestCase):
 # VIEW TESTS
 # =============================================================================
 
+
 @pytest.mark.django_db
 class TestDocumentationSearchViews:
     """Tests for documentation search views."""
 
     def test_search_page_loads(self, client):
         """Search page loads without error."""
-        response = client.get(reverse('documentation:search'))
+        response = client.get(reverse("documentation:search"))
         assert response.status_code == 200
 
     def test_search_with_query(self, client, va_form):
         """Search returns results for matching query."""
-        response = client.get(
-            reverse('documentation:search') + '?q=disability'
-        )
+        response = client.get(reverse("documentation:search") + "?q=disability")
         assert response.status_code == 200
 
     def test_search_htmx_endpoint(self, client, va_form):
         """HTMX search endpoint returns results."""
         response = client.get(
-            reverse('documentation:search_results_htmx') + '?q=disability',
-            HTTP_HX_REQUEST='true'
+            reverse("documentation:search_results_htmx") + "?q=disability",
+            HTTP_HX_REQUEST="true",
         )
         assert response.status_code == 200
 
@@ -288,20 +286,22 @@ class TestVAFormViews:
 
     def test_form_list_loads(self, client):
         """Form list page loads."""
-        response = client.get(reverse('documentation:form_list'))
+        response = client.get(reverse("documentation:form_list"))
         assert response.status_code == 200
 
     def test_form_detail_loads(self, client, va_form):
         """Form detail page loads."""
         response = client.get(
-            reverse('documentation:form_detail', kwargs={'form_number': va_form.form_number})
+            reverse(
+                "documentation:form_detail", kwargs={"form_number": va_form.form_number}
+            )
         )
         assert response.status_code == 200
 
     def test_form_list_filtered_by_stage(self, client, va_form):
         """Form list can be filtered by workflow stage."""
         response = client.get(
-            reverse('documentation:form_list') + '?stage=initial_claim'
+            reverse("documentation:form_list") + "?stage=initial_claim"
         )
         assert response.status_code == 200
 
@@ -312,20 +312,23 @@ class TestExamGuideViews:
 
     def test_guide_list_loads(self, client):
         """Guide list page loads."""
-        response = client.get(reverse('documentation:exam_guide_list'))
+        response = client.get(reverse("documentation:exam_guide_list"))
         assert response.status_code == 200
 
     def test_guide_detail_loads(self, client, exam_guide_condition):
         """Guide detail page loads."""
         response = client.get(
-            reverse('documentation:exam_guide_detail', kwargs={'slug': exam_guide_condition.slug})
+            reverse(
+                "documentation:exam_guide_detail",
+                kwargs={"slug": exam_guide_condition.slug},
+            )
         )
         assert response.status_code == 200
 
     def test_guide_list_filtered_by_category(self, client, exam_guide_condition):
         """Guide list can be filtered by category."""
         response = client.get(
-            reverse('documentation:exam_guide_list') + '?category=mental_health'
+            reverse("documentation:exam_guide_list") + "?category=mental_health"
         )
         assert response.status_code == 200
 
@@ -337,10 +340,10 @@ class TestExamGuideViews:
             what_to_expect="Test",
             how_to_prepare="Test",
             tips="Test",
-            is_published=False
+            is_published=False,
         )
         response = client.get(
-            reverse('documentation:exam_guide_detail', kwargs={'slug': guide.slug})
+            reverse("documentation:exam_guide_detail", kwargs={"slug": guide.slug})
         )
         assert response.status_code == 404
 
@@ -351,21 +354,24 @@ class TestLegalReferenceViews:
 
     def test_reference_list_loads(self, client):
         """Reference list page loads with disclaimer."""
-        response = client.get(reverse('documentation:legal_reference_list'))
+        response = client.get(reverse("documentation:legal_reference_list"))
         assert response.status_code == 200
-        assert 'disclaimer' in response.context
+        assert "disclaimer" in response.context
 
     def test_reference_detail_loads(self, client, legal_reference):
         """Reference detail page loads."""
         response = client.get(
-            reverse('documentation:legal_reference_detail', kwargs={'pk': legal_reference.pk})
+            reverse(
+                "documentation:legal_reference_detail",
+                kwargs={"pk": legal_reference.pk},
+            )
         )
         assert response.status_code == 200
 
     def test_reference_list_filtered_by_type(self, client, legal_reference):
         """Reference list can be filtered by type."""
         response = client.get(
-            reverse('documentation:legal_reference_list') + '?type=cavc'
+            reverse("documentation:legal_reference_list") + "?type=cavc"
         )
         assert response.status_code == 200
 
@@ -373,6 +379,7 @@ class TestLegalReferenceViews:
 # =============================================================================
 # PYTEST FIXTURES
 # =============================================================================
+
 
 @pytest.fixture
 def va_form(db):
@@ -384,7 +391,7 @@ def va_form(db):
         instructions="Complete all sections",
         official_url="https://va.gov/test",
         workflow_stages=["initial_claim"],
-        last_updated=date.today()
+        last_updated=date.today(),
     )
 
 
@@ -398,7 +405,7 @@ def exam_guide_condition(db):
         what_to_expect="The examiner will ask about symptoms...",
         how_to_prepare="Bring documentation of treatment...",
         tips="Be honest about your worst days",
-        key_questions=["When did symptoms start?", "How often do symptoms occur?"]
+        key_questions=["When did symptoms start?", "How often do symptoms occur?"],
     )
 
 
@@ -412,5 +419,5 @@ def legal_reference(db):
         title="Three elements of service connection",
         summary="Establishes three elements needed for service connection.",
         relevance="Applies to all service connection claims.",
-        date_issued=date(1995, 5, 1)
+        date_issued=date(1995, 5, 1),
     )

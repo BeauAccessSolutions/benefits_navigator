@@ -18,8 +18,6 @@ Covers:
 import json
 import pytest
 from datetime import date, timedelta
-from decimal import Decimal
-from unittest.mock import patch, MagicMock
 
 from django.test import TestCase, Client, override_settings
 from django.urls import reverse
@@ -53,6 +51,7 @@ User = get_user_model()
 # =============================================================================
 # VA MATH CALCULATION TESTS - COMPREHENSIVE SUITE
 # =============================================================================
+
 
 class TestValidateRating(TestCase):
     """Tests for validate_rating function - 38 CFR § 4.25 compliance."""
@@ -183,7 +182,7 @@ class TestCombineMultipleRatings(TestCase):
         result, steps = combine_multiple_ratings([70])
         self.assertEqual(result, 70.0)
         self.assertEqual(len(steps), 1)
-        self.assertEqual(steps[0]['rating'], 70)
+        self.assertEqual(steps[0]["rating"], 70)
 
     def test_two_ratings(self):
         """Two ratings combined correctly."""
@@ -208,8 +207,8 @@ class TestCombineMultipleRatings(TestCase):
         result2, steps2 = combine_multiple_ratings([50, 30, 10])
         self.assertEqual(result1, result2)
         # First step should start with 50
-        self.assertEqual(steps1[0]['rating'], 50)
-        self.assertEqual(steps2[0]['rating'], 50)
+        self.assertEqual(steps1[0]["rating"], 50)
+        self.assertEqual(steps2[0]["rating"], 50)
 
     def test_many_small_ratings(self):
         """Many small ratings combine progressively."""
@@ -232,8 +231,8 @@ class TestCombineMultipleRatings(TestCase):
     def test_steps_include_explanation(self):
         """Steps include explanation text."""
         _, steps = combine_multiple_ratings([50, 30])
-        self.assertIn('explanation', steps[0])
-        self.assertIn('explanation', steps[1])
+        self.assertIn("explanation", steps[0])
+        self.assertIn("explanation", steps[1])
 
     def test_real_world_veteran_scenario(self):
         """Real-world scenario: PTSD 70%, Back 40%, Knee 20%, Tinnitus 10%."""
@@ -295,10 +294,10 @@ class TestRoundToNearest10(TestCase):
     def test_common_combined_ratings(self):
         """Common combined rating values round correctly."""
         test_cases = [
-            (72.0, 70),   # Common 3-rating combo
-            (65.0, 70),   # 50+30 combo
+            (72.0, 70),  # Common 3-rating combo
+            (65.0, 70),  # 50+30 combo
             (87.04, 90),  # 4-rating combo
-            (51.0, 50),   # 30+30 combo
+            (51.0, 50),  # 30+30 combo
             (44.0, 40),
             (46.0, 50),
         ]
@@ -380,7 +379,9 @@ class TestCalculateCombinedRating(TestCase):
         """Bilateral-only ratings apply factor correctly."""
         ratings = [
             DisabilityRating(percentage=30, description="Left Knee", is_bilateral=True),
-            DisabilityRating(percentage=20, description="Right Knee", is_bilateral=True),
+            DisabilityRating(
+                percentage=20, description="Right Knee", is_bilateral=True
+            ),
         ]
         result = calculate_combined_rating(ratings)
         # Combined: 44%, Factor: 4.4%, Total: 48.4% → rounds to 50%
@@ -392,7 +393,9 @@ class TestCalculateCombinedRating(TestCase):
         ratings = [
             DisabilityRating(percentage=50, description="PTSD", is_bilateral=False),
             DisabilityRating(percentage=20, description="Left Knee", is_bilateral=True),
-            DisabilityRating(percentage=10, description="Right Knee", is_bilateral=True),
+            DisabilityRating(
+                percentage=10, description="Right Knee", is_bilateral=True
+            ),
         ]
         result = calculate_combined_rating(ratings)
         # Bilateral: 28% + 2.8% factor = 30.8% → round to 31%
@@ -424,8 +427,12 @@ class TestCalculateCombinedRating(TestCase):
         ratings = [
             DisabilityRating(percentage=70, description="PTSD", is_bilateral=False),
             DisabilityRating(percentage=40, description="Back", is_bilateral=False),
-            DisabilityRating(percentage=20, description="Left Shoulder", is_bilateral=True),
-            DisabilityRating(percentage=20, description="Right Shoulder", is_bilateral=True),
+            DisabilityRating(
+                percentage=20, description="Left Shoulder", is_bilateral=True
+            ),
+            DisabilityRating(
+                percentage=20, description="Right Shoulder", is_bilateral=True
+            ),
             DisabilityRating(percentage=10, description="Tinnitus", is_bilateral=False),
         ]
         result = calculate_combined_rating(ratings)
@@ -486,10 +493,12 @@ class TestEstimateMonthlyCompensation(TestCase):
         for rating in [30, 40, 50, 60, 70, 80, 90, 100]:
             with self.subTest(rating=rating):
                 base = estimate_monthly_compensation(rating, year=2024)
-                with_spouse = estimate_monthly_compensation(rating, spouse=True, year=2024)
+                with_spouse = estimate_monthly_compensation(
+                    rating, spouse=True, year=2024
+                )
                 self.assertGreater(with_spouse, base)
                 # Verify exact spouse addition
-                expected = base + DEPENDENT_RATES_2024['spouse'][rating]
+                expected = base + DEPENDENT_RATES_2024["spouse"][rating]
                 self.assertEqual(with_spouse, expected)
 
     def test_spouse_no_effect_below_30(self):
@@ -497,7 +506,9 @@ class TestEstimateMonthlyCompensation(TestCase):
         for rating in [0, 10, 20]:
             with self.subTest(rating=rating):
                 base = estimate_monthly_compensation(rating, year=2024)
-                with_spouse = estimate_monthly_compensation(rating, spouse=True, year=2024)
+                with_spouse = estimate_monthly_compensation(
+                    rating, spouse=True, year=2024
+                )
                 self.assertEqual(base, with_spouse)
 
     def test_children_add_at_30_percent_and_above(self):
@@ -511,14 +522,20 @@ class TestEstimateMonthlyCompensation(TestCase):
     def test_children_no_effect_below_30(self):
         """Children don't add below 30%."""
         base = estimate_monthly_compensation(20, year=2024)
-        with_children = estimate_monthly_compensation(20, children_under_18=3, year=2024)
+        with_children = estimate_monthly_compensation(
+            20, children_under_18=3, year=2024
+        )
         self.assertEqual(base, with_children)
 
     def test_dependent_parents(self):
         """Dependent parents add to compensation at 30%+."""
         base = estimate_monthly_compensation(50, year=2024)
-        with_one_parent = estimate_monthly_compensation(50, dependent_parents=1, year=2024)
-        with_two_parents = estimate_monthly_compensation(50, dependent_parents=2, year=2024)
+        with_one_parent = estimate_monthly_compensation(
+            50, dependent_parents=1, year=2024
+        )
+        with_two_parents = estimate_monthly_compensation(
+            50, dependent_parents=2, year=2024
+        )
         self.assertGreater(with_one_parent, base)
         self.assertGreater(with_two_parents, with_one_parent)
 
@@ -532,17 +549,13 @@ class TestEstimateMonthlyCompensation(TestCase):
         """Full family calculation: spouse + children + parents."""
         base = estimate_monthly_compensation(100, year=2024)
         full = estimate_monthly_compensation(
-            100,
-            spouse=True,
-            children_under_18=3,
-            dependent_parents=2,
-            year=2024
+            100, spouse=True, children_under_18=3, dependent_parents=2, year=2024
         )
         expected = (
-            base +
-            DEPENDENT_RATES_2024['spouse'][100] +
-            3 * DEPENDENT_RATES_2024['child_under_18'][100] +
-            2 * DEPENDENT_RATES_2024['parent_one'][100]
+            base
+            + DEPENDENT_RATES_2024["spouse"][100]
+            + 3 * DEPENDENT_RATES_2024["child_under_18"][100]
+            + 2 * DEPENDENT_RATES_2024["parent_one"][100]
         )
         self.assertEqual(full, expected)
 
@@ -607,9 +620,13 @@ class TestVAMathRealWorldScenarios(TestCase):
     def test_bilateral_knees_with_back(self):
         """Bilateral knees with back condition."""
         ratings = [
-            DisabilityRating(percentage=40, description="Lumbar Spine", is_bilateral=False),
+            DisabilityRating(
+                percentage=40, description="Lumbar Spine", is_bilateral=False
+            ),
             DisabilityRating(percentage=20, description="Left Knee", is_bilateral=True),
-            DisabilityRating(percentage=20, description="Right Knee", is_bilateral=True),
+            DisabilityRating(
+                percentage=20, description="Right Knee", is_bilateral=True
+            ),
         ]
         result = calculate_combined_rating(ratings)
         # Bilateral: 36% + 3.6% = 39.6% → 40%
@@ -705,10 +722,16 @@ class TestVAMathEdgeCases(TestCase):
     def test_all_bilateral_ratings(self):
         """All ratings are bilateral."""
         ratings = [
-            DisabilityRating(percentage=30, description="Left Ankle", is_bilateral=True),
-            DisabilityRating(percentage=30, description="Right Ankle", is_bilateral=True),
+            DisabilityRating(
+                percentage=30, description="Left Ankle", is_bilateral=True
+            ),
+            DisabilityRating(
+                percentage=30, description="Right Ankle", is_bilateral=True
+            ),
             DisabilityRating(percentage=20, description="Left Knee", is_bilateral=True),
-            DisabilityRating(percentage=20, description="Right Knee", is_bilateral=True),
+            DisabilityRating(
+                percentage=20, description="Right Knee", is_bilateral=True
+            ),
         ]
         result = calculate_combined_rating(ratings)
         self.assertGreater(result.bilateral_factor_applied, 0)
@@ -728,6 +751,7 @@ class TestVAMathEdgeCases(TestCase):
 # =============================================================================
 # EXAM GUIDANCE MODEL TESTS
 # =============================================================================
+
 
 class TestExamGuidanceModel(TestCase):
     """Tests for the ExamGuidance model."""
@@ -761,8 +785,17 @@ class TestExamGuidanceModel(TestCase):
 
     def test_guidance_category_choices(self):
         """ExamGuidance accepts valid category choices."""
-        valid_cats = ['general', 'ptsd', 'tbi', 'musculoskeletal', 'hearing',
-                      'respiratory', 'sleep_apnea', 'mental_health', 'other']
+        valid_cats = [
+            "general",
+            "ptsd",
+            "tbi",
+            "musculoskeletal",
+            "hearing",
+            "respiratory",
+            "sleep_apnea",
+            "mental_health",
+            "other",
+        ]
         for cat in valid_cats:
             guidance = ExamGuidance.objects.create(
                 title=f"Guide {cat}",
@@ -784,6 +817,7 @@ class TestExamGuidanceModel(TestCase):
 # =============================================================================
 # GLOSSARY TERM MODEL TESTS
 # =============================================================================
+
 
 class TestGlossaryTermModel(TestCase):
     """Tests for the GlossaryTerm model."""
@@ -824,13 +858,13 @@ class TestGlossaryTermModel(TestCase):
 # EXAM CHECKLIST MODEL TESTS
 # =============================================================================
 
+
 class TestExamChecklistModel(TestCase):
     """Tests for the ExamChecklist model."""
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email="test@example.com",
-            password="TestPass123!"
+            email="test@example.com", password="TestPass123!"
         )
         self.guidance = ExamGuidance.objects.create(
             title="Test Guide",
@@ -901,13 +935,13 @@ class TestExamChecklistModel(TestCase):
 # SAVED RATING CALCULATION MODEL TESTS
 # =============================================================================
 
+
 class TestSavedRatingCalculationModel(TestCase):
     """Tests for the SavedRatingCalculation model."""
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email="test@example.com",
-            password="TestPass123!"
+            email="test@example.com", password="TestPass123!"
         )
 
     def test_calculation_creation(self):
@@ -969,13 +1003,13 @@ class TestSavedRatingCalculationModel(TestCase):
 # EVIDENCE CHECKLIST MODEL TESTS
 # =============================================================================
 
+
 class TestEvidenceChecklistModel(TestCase):
     """Tests for the EvidenceChecklist model."""
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email="test@example.com",
-            password="TestPass123!"
+            email="test@example.com", password="TestPass123!"
         )
 
     def test_evidence_checklist_creation(self):
@@ -1067,25 +1101,26 @@ class TestEvidenceChecklistModel(TestCase):
 # PUBLIC GUIDE VIEW TESTS
 # =============================================================================
 
+
 @pytest.mark.django_db
 class TestPublicGuideViews:
     """Tests for public guide views (no login required)."""
 
     def test_guide_list_loads(self, client):
         """Guide list page loads without login."""
-        response = client.get(reverse('examprep:guide_list'))
+        response = client.get(reverse("examprep:guide_list"))
         assert response.status_code == 200
 
     def test_guide_list_shows_published(self, client, exam_guidance):
         """Guide list shows published guides."""
-        response = client.get(reverse('examprep:guide_list'))
+        response = client.get(reverse("examprep:guide_list"))
         assert response.status_code == 200
         # Check context for guides
 
     def test_guide_detail_loads(self, client, exam_guidance):
         """Guide detail page loads without login."""
         response = client.get(
-            reverse('examprep:guide_detail', kwargs={'slug': exam_guidance.slug})
+            reverse("examprep:guide_detail", kwargs={"slug": exam_guidance.slug})
         )
         assert response.status_code == 200
 
@@ -1097,7 +1132,7 @@ class TestPublicGuideViews:
             is_published=False,
         )
         response = client.get(
-            reverse('examprep:guide_detail', kwargs={'slug': 'unpublished'})
+            reverse("examprep:guide_detail", kwargs={"slug": "unpublished"})
         )
         assert response.status_code == 404
 
@@ -1106,26 +1141,25 @@ class TestPublicGuideViews:
 # PUBLIC GLOSSARY VIEW TESTS
 # =============================================================================
 
+
 @pytest.mark.django_db
 class TestPublicGlossaryViews:
     """Tests for public glossary views (no login required)."""
 
     def test_glossary_list_loads(self, client):
         """Glossary list page loads without login."""
-        response = client.get(reverse('examprep:glossary_list'))
+        response = client.get(reverse("examprep:glossary_list"))
         assert response.status_code == 200
 
     def test_glossary_list_search(self, client, glossary_term):
         """Glossary list supports search."""
-        response = client.get(
-            reverse('examprep:glossary_list') + '?q=Nexus'
-        )
+        response = client.get(reverse("examprep:glossary_list") + "?q=Nexus")
         assert response.status_code == 200
 
     def test_glossary_detail_loads(self, client, glossary_term):
         """Glossary detail page loads without login."""
         response = client.get(
-            reverse('examprep:glossary_detail', kwargs={'pk': glossary_term.pk})
+            reverse("examprep:glossary_detail", kwargs={"pk": glossary_term.pk})
         )
         assert response.status_code == 200
 
@@ -1134,50 +1168,61 @@ class TestPublicGlossaryViews:
 # RATING CALCULATOR VIEW TESTS
 # =============================================================================
 
+
 @pytest.mark.django_db
 class TestRatingCalculatorViews:
     """Tests for rating calculator views."""
 
     def test_calculator_loads_anonymous(self, client):
         """Rating calculator loads for anonymous users."""
-        response = client.get(reverse('examprep:rating_calculator'))
+        response = client.get(reverse("examprep:rating_calculator"))
         assert response.status_code == 200
 
     def test_calculator_loads_authenticated(self, authenticated_client):
         """Rating calculator loads for authenticated users."""
-        response = authenticated_client.get(reverse('examprep:rating_calculator'))
+        response = authenticated_client.get(reverse("examprep:rating_calculator"))
         assert response.status_code == 200
         # Should have saved_calculations in context
-        assert 'saved_calculations' in response.context
+        assert "saved_calculations" in response.context
 
     def test_calculate_htmx_endpoint(self, client):
         """Calculate HTMX endpoint returns results."""
         response = client.post(
-            reverse('examprep:calculate_rating'),
+            reverse("examprep:calculate_rating"),
             {
-                'ratings': json.dumps([
-                    {"percentage": 50, "description": "PTSD", "is_bilateral": False},
-                    {"percentage": 30, "description": "Back", "is_bilateral": False},
-                ]),
-                'has_spouse': 'false',
-                'children_under_18': '0',
-                'dependent_parents': '0',
+                "ratings": json.dumps(
+                    [
+                        {
+                            "percentage": 50,
+                            "description": "PTSD",
+                            "is_bilateral": False,
+                        },
+                        {
+                            "percentage": 30,
+                            "description": "Back",
+                            "is_bilateral": False,
+                        },
+                    ]
+                ),
+                "has_spouse": "false",
+                "children_under_18": "0",
+                "dependent_parents": "0",
             },
-            HTTP_HX_REQUEST='true'
+            HTTP_HX_REQUEST="true",
         )
         assert response.status_code == 200
 
     def test_calculate_htmx_empty_ratings(self, client):
         """Calculate HTMX handles empty ratings."""
         response = client.post(
-            reverse('examprep:calculate_rating'),
+            reverse("examprep:calculate_rating"),
             {
-                'ratings': '[]',
-                'has_spouse': 'false',
-                'children_under_18': '0',
-                'dependent_parents': '0',
+                "ratings": "[]",
+                "has_spouse": "false",
+                "children_under_18": "0",
+                "dependent_parents": "0",
             },
-            HTTP_HX_REQUEST='true'
+            HTTP_HX_REQUEST="true",
         )
         assert response.status_code == 200
 
@@ -1188,37 +1233,46 @@ class TestSaveCalculationViews:
 
     def test_save_calculation_requires_login(self, client):
         """Saving calculation requires authentication."""
-        response = client.post(reverse('examprep:save_calculation'))
+        response = client.post(reverse("examprep:save_calculation"))
         assert response.status_code == 302
 
-    def test_save_calculation_creates_record(self, authenticated_client, user, settings):
+    def test_save_calculation_creates_record(
+        self, authenticated_client, user, settings
+    ):
         """Saving calculation creates database record."""
         settings.PILOT_PREMIUM_ACCESS = True
         response = authenticated_client.post(
-            reverse('examprep:save_calculation'),
+            reverse("examprep:save_calculation"),
             {
-                'name': 'Test Calculation',
-                'ratings': json.dumps([
-                    {"percentage": 50, "description": "PTSD", "is_bilateral": False},
-                ]),
-                'has_spouse': 'false',
-                'children_under_18': '0',
-                'dependent_parents': '0',
-            }
+                "name": "Test Calculation",
+                "ratings": json.dumps(
+                    [
+                        {
+                            "percentage": 50,
+                            "description": "PTSD",
+                            "is_bilateral": False,
+                        },
+                    ]
+                ),
+                "has_spouse": "false",
+                "children_under_18": "0",
+                "dependent_parents": "0",
+            },
         )
         assert response.status_code in [200, 302]
         assert SavedRatingCalculation.objects.filter(user=user).exists()
 
     def test_saved_calculations_list(self, authenticated_client, saved_rating):
         """Saved calculations list shows user's calculations."""
-        response = authenticated_client.get(reverse('examprep:saved_calculations'))
+        response = authenticated_client.get(reverse("examprep:saved_calculations"))
         assert response.status_code == 200
-        assert saved_rating in response.context['calculations']
+        assert saved_rating in response.context["calculations"]
 
 
 # =============================================================================
 # EXAM CHECKLIST VIEW TESTS
 # =============================================================================
+
 
 @pytest.mark.django_db
 class TestExamChecklistViews:
@@ -1226,37 +1280,37 @@ class TestExamChecklistViews:
 
     def test_checklist_list_requires_login(self, client):
         """Checklist list requires authentication."""
-        response = client.get(reverse('examprep:checklist_list'))
+        response = client.get(reverse("examprep:checklist_list"))
         assert response.status_code == 302
 
     def test_checklist_list_loads(self, authenticated_client):
         """Checklist list loads for authenticated user."""
-        response = authenticated_client.get(reverse('examprep:checklist_list'))
+        response = authenticated_client.get(reverse("examprep:checklist_list"))
         assert response.status_code == 200
 
     def test_checklist_create_requires_login(self, client):
         """Creating checklist requires authentication."""
-        response = client.get(reverse('examprep:checklist_create'))
+        response = client.get(reverse("examprep:checklist_create"))
         assert response.status_code == 302
 
     def test_checklist_create_loads(self, authenticated_client):
         """Create checklist page loads."""
-        response = authenticated_client.get(reverse('examprep:checklist_create'))
+        response = authenticated_client.get(reverse("examprep:checklist_create"))
         assert response.status_code == 200
 
     def test_checklist_detail_loads(self, authenticated_client, exam_checklist):
         """Checklist detail loads for owner."""
         response = authenticated_client.get(
-            reverse('examprep:checklist_detail', kwargs={'pk': exam_checklist.pk})
+            reverse("examprep:checklist_detail", kwargs={"pk": exam_checklist.pk})
         )
         assert response.status_code == 200
 
     def test_checklist_toggle_task(self, authenticated_client, exam_checklist):
         """Toggle task HTMX endpoint works."""
         response = authenticated_client.post(
-            reverse('examprep:checklist_toggle_task', kwargs={'pk': exam_checklist.pk}),
-            {'task_id': 'task_1'},
-            HTTP_HX_REQUEST='true'
+            reverse("examprep:checklist_toggle_task", kwargs={"pk": exam_checklist.pk}),
+            {"task_id": "task_1"},
+            HTTP_HX_REQUEST="true",
         )
         assert response.status_code == 200
 
@@ -1265,33 +1319,40 @@ class TestExamChecklistViews:
 # EVIDENCE CHECKLIST VIEW TESTS
 # =============================================================================
 
+
 @pytest.mark.django_db
 class TestEvidenceChecklistViews:
     """Tests for evidence checklist views."""
 
     def test_evidence_list_requires_login(self, client):
         """Evidence checklist list requires authentication."""
-        response = client.get(reverse('examprep:evidence_checklist_list'))
+        response = client.get(reverse("examprep:evidence_checklist_list"))
         assert response.status_code == 302
 
     def test_evidence_list_loads(self, authenticated_client):
         """Evidence checklist list loads for authenticated user."""
-        response = authenticated_client.get(reverse('examprep:evidence_checklist_list'))
+        response = authenticated_client.get(reverse("examprep:evidence_checklist_list"))
         assert response.status_code == 200
 
     def test_evidence_detail_loads(self, authenticated_client, evidence_checklist):
         """Evidence checklist detail loads for owner."""
         response = authenticated_client.get(
-            reverse('examprep:evidence_checklist_detail', kwargs={'pk': evidence_checklist.pk})
+            reverse(
+                "examprep:evidence_checklist_detail",
+                kwargs={"pk": evidence_checklist.pk},
+            )
         )
         assert response.status_code == 200
 
     def test_evidence_toggle_item(self, authenticated_client, evidence_checklist):
         """Toggle item HTMX endpoint works."""
         response = authenticated_client.post(
-            reverse('examprep:evidence_checklist_toggle', kwargs={'pk': evidence_checklist.pk}),
-            {'item_id': 'sleep_study'},
-            HTTP_HX_REQUEST='true'
+            reverse(
+                "examprep:evidence_checklist_toggle",
+                kwargs={"pk": evidence_checklist.pk},
+            ),
+            {"item_id": "sleep_study"},
+            HTTP_HX_REQUEST="true",
         )
         assert response.status_code == 200
 
@@ -1300,11 +1361,14 @@ class TestEvidenceChecklistViews:
 # ACCESS CONTROL TESTS
 # =============================================================================
 
+
 @pytest.mark.django_db
 class TestExamPrepAccessControl:
     """Tests for access control on examprep views."""
 
-    def test_user_cannot_view_other_checklist(self, authenticated_client, other_user, exam_guidance):
+    def test_user_cannot_view_other_checklist(
+        self, authenticated_client, other_user, exam_guidance
+    ):
         """Users cannot view other user's exam checklist."""
         other_checklist = ExamChecklist.objects.create(
             user=other_user,
@@ -1312,11 +1376,13 @@ class TestExamPrepAccessControl:
             exam_date=date.today() + timedelta(days=7),
         )
         response = authenticated_client.get(
-            reverse('examprep:checklist_detail', kwargs={'pk': other_checklist.pk})
+            reverse("examprep:checklist_detail", kwargs={"pk": other_checklist.pk})
         )
         assert response.status_code == 404
 
-    def test_user_cannot_view_other_evidence_checklist(self, authenticated_client, other_user):
+    def test_user_cannot_view_other_evidence_checklist(
+        self, authenticated_client, other_user
+    ):
         """Users cannot view other user's evidence checklist."""
         other_checklist = EvidenceChecklist.objects.create(
             user=other_user,
@@ -1324,11 +1390,15 @@ class TestExamPrepAccessControl:
             claim_type="initial",
         )
         response = authenticated_client.get(
-            reverse('examprep:evidence_checklist_detail', kwargs={'pk': other_checklist.pk})
+            reverse(
+                "examprep:evidence_checklist_detail", kwargs={"pk": other_checklist.pk}
+            )
         )
         assert response.status_code == 404
 
-    def test_user_cannot_view_other_saved_calculation(self, authenticated_client, other_user):
+    def test_user_cannot_view_other_saved_calculation(
+        self, authenticated_client, other_user
+    ):
         """Users cannot load other user's saved calculation."""
         other_calc = SavedRatingCalculation.objects.create(
             user=other_user,
@@ -1336,7 +1406,7 @@ class TestExamPrepAccessControl:
             ratings=[],
         )
         response = authenticated_client.get(
-            reverse('examprep:load_calculation', kwargs={'pk': other_calc.pk})
+            reverse("examprep:load_calculation", kwargs={"pk": other_calc.pk})
         )
         assert response.status_code == 404
 
@@ -1345,13 +1415,13 @@ class TestExamPrepAccessControl:
 # INTEGRATION TESTS
 # =============================================================================
 
+
 class TestExamPrepWorkflow(TestCase):
     """Integration tests for examprep workflows."""
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email="test@example.com",
-            password="TestPass123!"
+            email="test@example.com", password="TestPass123!"
         )
         self.client = Client()
         self.client.login(email="test@example.com", password="TestPass123!")
@@ -1376,7 +1446,11 @@ class TestExamPrepWorkflow(TestCase):
             user=self.user,
             name="My Full Rating",
             ratings=[
-                {"percentage": r.percentage, "description": r.description, "is_bilateral": r.is_bilateral}
+                {
+                    "percentage": r.percentage,
+                    "description": r.description,
+                    "is_bilateral": r.is_bilateral,
+                }
                 for r in ratings
             ],
             has_spouse=True,
@@ -1440,12 +1514,27 @@ class TestExamPrepWorkflow(TestCase):
             claim_type="secondary",
             primary_condition="PTSD",
             checklist_items=[
-                {"id": "sleep_study", "category": "Medical", "title": "Sleep Study",
-                 "priority": "critical", "completed": False},
-                {"id": "nexus", "category": "Medical", "title": "Nexus Letter",
-                 "priority": "critical", "completed": False},
-                {"id": "buddy", "category": "Lay", "title": "Buddy Statement",
-                 "priority": "standard", "completed": False},
+                {
+                    "id": "sleep_study",
+                    "category": "Medical",
+                    "title": "Sleep Study",
+                    "priority": "critical",
+                    "completed": False,
+                },
+                {
+                    "id": "nexus",
+                    "category": "Medical",
+                    "title": "Nexus Letter",
+                    "priority": "critical",
+                    "completed": False,
+                },
+                {
+                    "id": "buddy",
+                    "category": "Lay",
+                    "title": "Buddy Statement",
+                    "priority": "standard",
+                    "completed": False,
+                },
             ],
         )
         checklist.update_completion()
@@ -1470,33 +1559,33 @@ class TestExamPrepWorkflow(TestCase):
 # RATING CALCULATOR INTEGRATION TESTS - COMPREHENSIVE SUITE
 # =============================================================================
 
+
 class TestRatingCalculatorPageIntegration(TestCase):
     """Integration tests for rating calculator page loading and context."""
 
     def setUp(self):
         self.client = Client()
         self.user = User.objects.create_user(
-            email="calcuser@example.com",
-            password="TestPass123!"
+            email="calcuser@example.com", password="TestPass123!"
         )
 
     def test_calculator_page_loads_anonymous(self):
         """Calculator page loads for anonymous users."""
-        response = self.client.get(reverse('examprep:rating_calculator'))
+        response = self.client.get(reverse("examprep:rating_calculator"))
         self.assertEqual(response.status_code, 200)
-        self.assertTemplateUsed(response, 'examprep/rating_calculator.html')
+        self.assertTemplateUsed(response, "examprep/rating_calculator.html")
 
     def test_calculator_page_contains_compensation_rates(self):
         """Calculator page includes 2024 compensation rates."""
-        response = self.client.get(reverse('examprep:rating_calculator'))
-        self.assertIn('compensation_rates', response.context)
-        rates = response.context['compensation_rates']
+        response = self.client.get(reverse("examprep:rating_calculator"))
+        self.assertIn("compensation_rates", response.context)
+        rates = response.context["compensation_rates"]
         self.assertEqual(rates[100], VA_COMPENSATION_RATES_2024[100])
 
     def test_calculator_page_no_saved_calculations_anonymous(self):
         """Anonymous users have no saved calculations."""
-        response = self.client.get(reverse('examprep:rating_calculator'))
-        self.assertIsNone(response.context.get('saved_calculations'))
+        response = self.client.get(reverse("examprep:rating_calculator"))
+        self.assertIsNone(response.context.get("saved_calculations"))
 
     def test_calculator_page_shows_saved_calculations_authenticated(self):
         """Authenticated users see their saved calculations."""
@@ -1507,12 +1596,14 @@ class TestRatingCalculatorPageIntegration(TestCase):
             SavedRatingCalculation.objects.create(
                 user=self.user,
                 name=f"Calculation {i}",
-                ratings=[{"percentage": 50, "description": "Test", "is_bilateral": False}],
+                ratings=[
+                    {"percentage": 50, "description": "Test", "is_bilateral": False}
+                ],
             )
 
-        response = self.client.get(reverse('examprep:rating_calculator'))
-        self.assertIn('saved_calculations', response.context)
-        self.assertEqual(len(response.context['saved_calculations']), 3)
+        response = self.client.get(reverse("examprep:rating_calculator"))
+        self.assertIn("saved_calculations", response.context)
+        self.assertEqual(len(response.context["saved_calculations"]), 3)
 
     def test_calculator_page_limits_saved_calculations_to_5(self):
         """Calculator page shows at most 5 recent saved calculations."""
@@ -1523,11 +1614,13 @@ class TestRatingCalculatorPageIntegration(TestCase):
             SavedRatingCalculation.objects.create(
                 user=self.user,
                 name=f"Calculation {i}",
-                ratings=[{"percentage": 50, "description": "Test", "is_bilateral": False}],
+                ratings=[
+                    {"percentage": 50, "description": "Test", "is_bilateral": False}
+                ],
             )
 
-        response = self.client.get(reverse('examprep:rating_calculator'))
-        self.assertEqual(len(response.context['saved_calculations']), 5)
+        response = self.client.get(reverse("examprep:rating_calculator"))
+        self.assertEqual(len(response.context["saved_calculations"]), 5)
 
 
 class TestCalculateRatingHTMXEndpoint(TestCase):
@@ -1535,7 +1628,7 @@ class TestCalculateRatingHTMXEndpoint(TestCase):
 
     def setUp(self):
         self.client = Client()
-        self.url = reverse('examprep:calculate_rating')
+        self.url = reverse("examprep:calculate_rating")
 
     def test_calculate_get_not_allowed(self):
         """GET requests are not allowed."""
@@ -1547,69 +1640,97 @@ class TestCalculateRatingHTMXEndpoint(TestCase):
         response = self.client.post(
             self.url,
             {
-                'ratings': json.dumps([
-                    {"percentage": 70, "description": "PTSD", "is_bilateral": False}
-                ]),
-                'has_spouse': 'false',
-                'children_under_18': '0',
-                'dependent_parents': '0',
+                "ratings": json.dumps(
+                    [{"percentage": 70, "description": "PTSD", "is_bilateral": False}]
+                ),
+                "has_spouse": "false",
+                "children_under_18": "0",
+                "dependent_parents": "0",
             },
-            HTTP_HX_REQUEST='true'
+            HTTP_HX_REQUEST="true",
         )
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '70')
+        self.assertContains(response, "70")
 
     def test_calculate_two_ratings(self):
         """Calculate two ratings combined correctly."""
         response = self.client.post(
             self.url,
             {
-                'ratings': json.dumps([
-                    {"percentage": 50, "description": "PTSD", "is_bilateral": False},
-                    {"percentage": 30, "description": "Back", "is_bilateral": False},
-                ]),
-                'has_spouse': 'false',
-                'children_under_18': '0',
-                'dependent_parents': '0',
+                "ratings": json.dumps(
+                    [
+                        {
+                            "percentage": 50,
+                            "description": "PTSD",
+                            "is_bilateral": False,
+                        },
+                        {
+                            "percentage": 30,
+                            "description": "Back",
+                            "is_bilateral": False,
+                        },
+                    ]
+                ),
+                "has_spouse": "false",
+                "children_under_18": "0",
+                "dependent_parents": "0",
             },
-            HTTP_HX_REQUEST='true'
+            HTTP_HX_REQUEST="true",
         )
         self.assertEqual(response.status_code, 200)
         # 50% + 30% = 65% → rounds to 70%
-        self.assertContains(response, '70')
+        self.assertContains(response, "70")
 
     def test_calculate_with_bilateral(self):
         """Calculate with bilateral factor."""
         response = self.client.post(
             self.url,
             {
-                'ratings': json.dumps([
-                    {"percentage": 30, "description": "Left Knee", "is_bilateral": True},
-                    {"percentage": 20, "description": "Right Knee", "is_bilateral": True},
-                ]),
-                'has_spouse': 'false',
-                'children_under_18': '0',
-                'dependent_parents': '0',
+                "ratings": json.dumps(
+                    [
+                        {
+                            "percentage": 30,
+                            "description": "Left Knee",
+                            "is_bilateral": True,
+                        },
+                        {
+                            "percentage": 20,
+                            "description": "Right Knee",
+                            "is_bilateral": True,
+                        },
+                    ]
+                ),
+                "has_spouse": "false",
+                "children_under_18": "0",
+                "dependent_parents": "0",
             },
-            HTTP_HX_REQUEST='true'
+            HTTP_HX_REQUEST="true",
         )
         self.assertEqual(response.status_code, 200)
         # Should show bilateral factor was applied
-        self.assertContains(response, 'bilateral', status_code=200, msg_prefix='', html=False)
+        self.assertContains(
+            response, "bilateral", status_code=200, msg_prefix="", html=False
+        )
 
     def test_calculate_with_spouse(self):
         """Calculate with spouse dependent."""
         response = self.client.post(
             self.url,
             {
-                'ratings': json.dumps([
-                    {"percentage": 50, "description": "PTSD", "is_bilateral": False},
-                ]),
-                'has_spouse': 'true',
-                'children_under_18': '0',
-                'dependent_parents': '0',
+                "ratings": json.dumps(
+                    [
+                        {
+                            "percentage": 50,
+                            "description": "PTSD",
+                            "is_bilateral": False,
+                        },
+                    ]
+                ),
+                "has_spouse": "true",
+                "children_under_18": "0",
+                "dependent_parents": "0",
             },
-            HTTP_HX_REQUEST='true'
+            HTTP_HX_REQUEST="true",
         )
         self.assertEqual(response.status_code, 200)
         # Compensation should be higher than base 50%
@@ -1619,14 +1740,20 @@ class TestCalculateRatingHTMXEndpoint(TestCase):
         response = self.client.post(
             self.url,
             {
-                'ratings': json.dumps([
-                    {"percentage": 70, "description": "PTSD", "is_bilateral": False},
-                ]),
-                'has_spouse': 'false',
-                'children_under_18': '3',
-                'dependent_parents': '0',
+                "ratings": json.dumps(
+                    [
+                        {
+                            "percentage": 70,
+                            "description": "PTSD",
+                            "is_bilateral": False,
+                        },
+                    ]
+                ),
+                "has_spouse": "false",
+                "children_under_18": "3",
+                "dependent_parents": "0",
             },
-            HTTP_HX_REQUEST='true'
+            HTTP_HX_REQUEST="true",
         )
         self.assertEqual(response.status_code, 200)
 
@@ -1635,14 +1762,20 @@ class TestCalculateRatingHTMXEndpoint(TestCase):
         response = self.client.post(
             self.url,
             {
-                'ratings': json.dumps([
-                    {"percentage": 50, "description": "PTSD", "is_bilateral": False},
-                ]),
-                'has_spouse': 'false',
-                'children_under_18': '0',
-                'dependent_parents': '2',
+                "ratings": json.dumps(
+                    [
+                        {
+                            "percentage": 50,
+                            "description": "PTSD",
+                            "is_bilateral": False,
+                        },
+                    ]
+                ),
+                "has_spouse": "false",
+                "children_under_18": "0",
+                "dependent_parents": "2",
             },
-            HTTP_HX_REQUEST='true'
+            HTTP_HX_REQUEST="true",
         )
         self.assertEqual(response.status_code, 200)
 
@@ -1651,14 +1784,20 @@ class TestCalculateRatingHTMXEndpoint(TestCase):
         response = self.client.post(
             self.url,
             {
-                'ratings': json.dumps([
-                    {"percentage": 100, "description": "PTSD", "is_bilateral": False},
-                ]),
-                'has_spouse': 'true',
-                'children_under_18': '2',
-                'dependent_parents': '1',
+                "ratings": json.dumps(
+                    [
+                        {
+                            "percentage": 100,
+                            "description": "PTSD",
+                            "is_bilateral": False,
+                        },
+                    ]
+                ),
+                "has_spouse": "true",
+                "children_under_18": "2",
+                "dependent_parents": "1",
             },
-            HTTP_HX_REQUEST='true'
+            HTTP_HX_REQUEST="true",
         )
         self.assertEqual(response.status_code, 200)
 
@@ -1667,46 +1806,56 @@ class TestCalculateRatingHTMXEndpoint(TestCase):
         response = self.client.post(
             self.url,
             {
-                'ratings': '[]',
-                'has_spouse': 'false',
-                'children_under_18': '0',
-                'dependent_parents': '0',
+                "ratings": "[]",
+                "has_spouse": "false",
+                "children_under_18": "0",
+                "dependent_parents": "0",
             },
-            HTTP_HX_REQUEST='true'
+            HTTP_HX_REQUEST="true",
         )
         self.assertEqual(response.status_code, 200)
-        self.assertIn('has_ratings', response.context)
-        self.assertFalse(response.context['has_ratings'])
+        self.assertIn("has_ratings", response.context)
+        self.assertFalse(response.context["has_ratings"])
 
     def test_calculate_zero_percentage_ratings_filtered(self):
         """Zero percentage ratings are filtered out."""
         response = self.client.post(
             self.url,
             {
-                'ratings': json.dumps([
-                    {"percentage": 0, "description": "Resolved", "is_bilateral": False},
-                    {"percentage": 50, "description": "Active", "is_bilateral": False},
-                ]),
-                'has_spouse': 'false',
-                'children_under_18': '0',
-                'dependent_parents': '0',
+                "ratings": json.dumps(
+                    [
+                        {
+                            "percentage": 0,
+                            "description": "Resolved",
+                            "is_bilateral": False,
+                        },
+                        {
+                            "percentage": 50,
+                            "description": "Active",
+                            "is_bilateral": False,
+                        },
+                    ]
+                ),
+                "has_spouse": "false",
+                "children_under_18": "0",
+                "dependent_parents": "0",
             },
-            HTTP_HX_REQUEST='true'
+            HTTP_HX_REQUEST="true",
         )
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '50')
+        self.assertContains(response, "50")
 
     def test_calculate_invalid_json(self):
         """Invalid JSON returns error."""
         response = self.client.post(
             self.url,
             {
-                'ratings': 'not valid json',
-                'has_spouse': 'false',
-                'children_under_18': '0',
-                'dependent_parents': '0',
+                "ratings": "not valid json",
+                "has_spouse": "false",
+                "children_under_18": "0",
+                "dependent_parents": "0",
             },
-            HTTP_HX_REQUEST='true'
+            HTTP_HX_REQUEST="true",
         )
         self.assertEqual(response.status_code, 400)
 
@@ -1715,41 +1864,77 @@ class TestCalculateRatingHTMXEndpoint(TestCase):
         response = self.client.post(
             self.url,
             {
-                'ratings': json.dumps([
-                    {"percentage": 70, "description": "PTSD", "is_bilateral": False},
-                    {"percentage": 50, "description": "Sleep Apnea", "is_bilateral": False},
-                    {"percentage": 30, "description": "Back", "is_bilateral": False},
-                    {"percentage": 20, "description": "Left Knee", "is_bilateral": True},
-                    {"percentage": 20, "description": "Right Knee", "is_bilateral": True},
-                    {"percentage": 10, "description": "Tinnitus", "is_bilateral": False},
-                ]),
-                'has_spouse': 'true',
-                'children_under_18': '2',
-                'dependent_parents': '0',
+                "ratings": json.dumps(
+                    [
+                        {
+                            "percentage": 70,
+                            "description": "PTSD",
+                            "is_bilateral": False,
+                        },
+                        {
+                            "percentage": 50,
+                            "description": "Sleep Apnea",
+                            "is_bilateral": False,
+                        },
+                        {
+                            "percentage": 30,
+                            "description": "Back",
+                            "is_bilateral": False,
+                        },
+                        {
+                            "percentage": 20,
+                            "description": "Left Knee",
+                            "is_bilateral": True,
+                        },
+                        {
+                            "percentage": 20,
+                            "description": "Right Knee",
+                            "is_bilateral": True,
+                        },
+                        {
+                            "percentage": 10,
+                            "description": "Tinnitus",
+                            "is_bilateral": False,
+                        },
+                    ]
+                ),
+                "has_spouse": "true",
+                "children_under_18": "2",
+                "dependent_parents": "0",
             },
-            HTTP_HX_REQUEST='true'
+            HTTP_HX_REQUEST="true",
         )
         self.assertEqual(response.status_code, 200)
         # Should be high combined rating
-        self.assertContains(response, '90')
+        self.assertContains(response, "90")
 
     def test_calculate_returns_step_by_step(self):
         """Calculate endpoint returns step-by-step breakdown."""
         response = self.client.post(
             self.url,
             {
-                'ratings': json.dumps([
-                    {"percentage": 50, "description": "PTSD", "is_bilateral": False},
-                    {"percentage": 30, "description": "Back", "is_bilateral": False},
-                ]),
-                'has_spouse': 'false',
-                'children_under_18': '0',
-                'dependent_parents': '0',
+                "ratings": json.dumps(
+                    [
+                        {
+                            "percentage": 50,
+                            "description": "PTSD",
+                            "is_bilateral": False,
+                        },
+                        {
+                            "percentage": 30,
+                            "description": "Back",
+                            "is_bilateral": False,
+                        },
+                    ]
+                ),
+                "has_spouse": "false",
+                "children_under_18": "0",
+                "dependent_parents": "0",
             },
-            HTTP_HX_REQUEST='true'
+            HTTP_HX_REQUEST="true",
         )
         self.assertEqual(response.status_code, 200)
-        self.assertIn('step_by_step', response.context)
+        self.assertIn("step_by_step", response.context)
 
 
 @override_settings(PILOT_PREMIUM_ACCESS=True)
@@ -1759,16 +1944,15 @@ class TestSaveCalculationIntegration(TestCase):
     def setUp(self):
         self.client = Client()
         self.user = User.objects.create_user(
-            email="saveuser@example.com",
-            password="TestPass123!"
+            email="saveuser@example.com", password="TestPass123!"
         )
-        self.url = reverse('examprep:save_calculation')
+        self.url = reverse("examprep:save_calculation")
 
     def test_save_requires_authentication(self):
         """Save endpoint requires login."""
         response = self.client.post(self.url)
         self.assertEqual(response.status_code, 302)
-        self.assertIn('login', response.url)
+        self.assertIn("login", response.url)
 
     def test_save_get_not_allowed(self):
         """GET requests are not allowed."""
@@ -1783,16 +1967,26 @@ class TestSaveCalculationIntegration(TestCase):
         response = self.client.post(
             self.url,
             {
-                'name': 'My Test Calculation',
-                'ratings': json.dumps([
-                    {"percentage": 50, "description": "PTSD", "is_bilateral": False},
-                    {"percentage": 30, "description": "Back", "is_bilateral": False},
-                ]),
-                'has_spouse': 'true',
-                'children_under_18': '2',
-                'dependent_parents': '0',
-                'notes': 'Test notes',
-            }
+                "name": "My Test Calculation",
+                "ratings": json.dumps(
+                    [
+                        {
+                            "percentage": 50,
+                            "description": "PTSD",
+                            "is_bilateral": False,
+                        },
+                        {
+                            "percentage": 30,
+                            "description": "Back",
+                            "is_bilateral": False,
+                        },
+                    ]
+                ),
+                "has_spouse": "true",
+                "children_under_18": "2",
+                "dependent_parents": "0",
+                "notes": "Test notes",
+            },
         )
 
         # Should redirect to saved calculations
@@ -1801,11 +1995,11 @@ class TestSaveCalculationIntegration(TestCase):
         # Verify calculation was created
         calc = SavedRatingCalculation.objects.filter(user=self.user).first()
         self.assertIsNotNone(calc)
-        self.assertEqual(calc.name, 'My Test Calculation')
+        self.assertEqual(calc.name, "My Test Calculation")
         self.assertEqual(len(calc.ratings), 2)
         self.assertTrue(calc.has_spouse)
         self.assertEqual(calc.children_under_18, 2)
-        self.assertEqual(calc.notes, 'Test notes')
+        self.assertEqual(calc.notes, "Test notes")
 
     def test_save_calculates_combined_rating(self):
         """Saved calculation includes calculated values."""
@@ -1814,15 +2008,25 @@ class TestSaveCalculationIntegration(TestCase):
         self.client.post(
             self.url,
             {
-                'name': 'Calculated',
-                'ratings': json.dumps([
-                    {"percentage": 50, "description": "PTSD", "is_bilateral": False},
-                    {"percentage": 30, "description": "Back", "is_bilateral": False},
-                ]),
-                'has_spouse': 'false',
-                'children_under_18': '0',
-                'dependent_parents': '0',
-            }
+                "name": "Calculated",
+                "ratings": json.dumps(
+                    [
+                        {
+                            "percentage": 50,
+                            "description": "PTSD",
+                            "is_bilateral": False,
+                        },
+                        {
+                            "percentage": 30,
+                            "description": "Back",
+                            "is_bilateral": False,
+                        },
+                    ]
+                ),
+                "has_spouse": "false",
+                "children_under_18": "0",
+                "dependent_parents": "0",
+            },
         )
 
         calc = SavedRatingCalculation.objects.filter(user=self.user).first()
@@ -1837,22 +2041,36 @@ class TestSaveCalculationIntegration(TestCase):
         self.client.post(
             self.url,
             {
-                'name': 'Bilateral Test',
-                'ratings': json.dumps([
-                    {"percentage": 30, "description": "Left Knee", "is_bilateral": True},
-                    {"percentage": 20, "description": "Right Knee", "is_bilateral": True},
-                    {"percentage": 50, "description": "PTSD", "is_bilateral": False},
-                ]),
-                'has_spouse': 'false',
-                'children_under_18': '0',
-                'dependent_parents': '0',
-            }
+                "name": "Bilateral Test",
+                "ratings": json.dumps(
+                    [
+                        {
+                            "percentage": 30,
+                            "description": "Left Knee",
+                            "is_bilateral": True,
+                        },
+                        {
+                            "percentage": 20,
+                            "description": "Right Knee",
+                            "is_bilateral": True,
+                        },
+                        {
+                            "percentage": 50,
+                            "description": "PTSD",
+                            "is_bilateral": False,
+                        },
+                    ]
+                ),
+                "has_spouse": "false",
+                "children_under_18": "0",
+                "dependent_parents": "0",
+            },
         )
 
         calc = SavedRatingCalculation.objects.filter(user=self.user).first()
         self.assertIsNotNone(calc)
         # Verify bilateral ratings are stored
-        bilateral_count = sum(1 for r in calc.ratings if r.get('is_bilateral', False))
+        bilateral_count = sum(1 for r in calc.ratings if r.get("is_bilateral", False))
         self.assertEqual(bilateral_count, 2)
 
     def test_save_htmx_returns_confirmation(self):
@@ -1862,15 +2080,21 @@ class TestSaveCalculationIntegration(TestCase):
         response = self.client.post(
             self.url,
             {
-                'name': 'HTMX Test',
-                'ratings': json.dumps([
-                    {"percentage": 50, "description": "PTSD", "is_bilateral": False},
-                ]),
-                'has_spouse': 'false',
-                'children_under_18': '0',
-                'dependent_parents': '0',
+                "name": "HTMX Test",
+                "ratings": json.dumps(
+                    [
+                        {
+                            "percentage": 50,
+                            "description": "PTSD",
+                            "is_bilateral": False,
+                        },
+                    ]
+                ),
+                "has_spouse": "false",
+                "children_under_18": "0",
+                "dependent_parents": "0",
             },
-            HTTP_HX_REQUEST='true'
+            HTTP_HX_REQUEST="true",
         )
 
         self.assertEqual(response.status_code, 200)
@@ -1882,13 +2106,13 @@ class TestSaveCalculationIntegration(TestCase):
         response = self.client.post(
             self.url,
             {
-                'name': 'Invalid',
-                'ratings': 'not valid json',
-                'has_spouse': 'false',
-                'children_under_18': '0',
-                'dependent_parents': '0',
+                "name": "Invalid",
+                "ratings": "not valid json",
+                "has_spouse": "false",
+                "children_under_18": "0",
+                "dependent_parents": "0",
             },
-            HTTP_HX_REQUEST='true'
+            HTTP_HX_REQUEST="true",
         )
 
         self.assertEqual(response.status_code, 400)
@@ -1900,12 +2124,10 @@ class TestLoadCalculationIntegration(TestCase):
     def setUp(self):
         self.client = Client()
         self.user = User.objects.create_user(
-            email="loaduser@example.com",
-            password="TestPass123!"
+            email="loaduser@example.com", password="TestPass123!"
         )
         self.other_user = User.objects.create_user(
-            email="otheruser@example.com",
-            password="TestPass123!"
+            email="otheruser@example.com", password="TestPass123!"
         )
         self.calc = SavedRatingCalculation.objects.create(
             user=self.user,
@@ -1925,7 +2147,7 @@ class TestLoadCalculationIntegration(TestCase):
     def test_load_requires_authentication(self):
         """Load endpoint requires login."""
         response = self.client.get(
-            reverse('examprep:load_calculation', kwargs={'pk': self.calc.pk})
+            reverse("examprep:load_calculation", kwargs={"pk": self.calc.pk})
         )
         self.assertEqual(response.status_code, 302)
 
@@ -1934,26 +2156,26 @@ class TestLoadCalculationIntegration(TestCase):
         self.client.login(email="loaduser@example.com", password="TestPass123!")
 
         response = self.client.get(
-            reverse('examprep:load_calculation', kwargs={'pk': self.calc.pk})
+            reverse("examprep:load_calculation", kwargs={"pk": self.calc.pk})
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response['Content-Type'], 'application/json')
+        self.assertEqual(response["Content-Type"], "application/json")
 
         data = json.loads(response.content)
-        self.assertEqual(data['name'], 'Test Calculation')
-        self.assertEqual(len(data['ratings']), 2)
-        self.assertTrue(data['has_spouse'])
-        self.assertEqual(data['children_under_18'], 2)
-        self.assertEqual(data['dependent_parents'], 1)
-        self.assertEqual(data['notes'], 'Test notes')
+        self.assertEqual(data["name"], "Test Calculation")
+        self.assertEqual(len(data["ratings"]), 2)
+        self.assertTrue(data["has_spouse"])
+        self.assertEqual(data["children_under_18"], 2)
+        self.assertEqual(data["dependent_parents"], 1)
+        self.assertEqual(data["notes"], "Test notes")
 
     def test_load_other_user_calculation_404(self):
         """Cannot load another user's calculation."""
         self.client.login(email="otheruser@example.com", password="TestPass123!")
 
         response = self.client.get(
-            reverse('examprep:load_calculation', kwargs={'pk': self.calc.pk})
+            reverse("examprep:load_calculation", kwargs={"pk": self.calc.pk})
         )
 
         self.assertEqual(response.status_code, 404)
@@ -1963,7 +2185,7 @@ class TestLoadCalculationIntegration(TestCase):
         self.client.login(email="loaduser@example.com", password="TestPass123!")
 
         response = self.client.get(
-            reverse('examprep:load_calculation', kwargs={'pk': 99999})
+            reverse("examprep:load_calculation", kwargs={"pk": 99999})
         )
 
         self.assertEqual(response.status_code, 404)
@@ -1975,12 +2197,10 @@ class TestDeleteCalculationIntegration(TestCase):
     def setUp(self):
         self.client = Client()
         self.user = User.objects.create_user(
-            email="deleteuser@example.com",
-            password="TestPass123!"
+            email="deleteuser@example.com", password="TestPass123!"
         )
         self.other_user = User.objects.create_user(
-            email="otherdeleteuser@example.com",
-            password="TestPass123!"
+            email="otherdeleteuser@example.com", password="TestPass123!"
         )
 
     def test_delete_requires_authentication(self):
@@ -1991,7 +2211,7 @@ class TestDeleteCalculationIntegration(TestCase):
             ratings=[],
         )
         response = self.client.post(
-            reverse('examprep:delete_calculation', kwargs={'pk': calc.pk})
+            reverse("examprep:delete_calculation", kwargs={"pk": calc.pk})
         )
         self.assertEqual(response.status_code, 302)
 
@@ -2007,7 +2227,7 @@ class TestDeleteCalculationIntegration(TestCase):
         calc_pk = calc.pk
 
         response = self.client.post(
-            reverse('examprep:delete_calculation', kwargs={'pk': calc_pk})
+            reverse("examprep:delete_calculation", kwargs={"pk": calc_pk})
         )
 
         # Should redirect to saved calculations list
@@ -2027,7 +2247,7 @@ class TestDeleteCalculationIntegration(TestCase):
         self.client.login(email="otherdeleteuser@example.com", password="TestPass123!")
 
         response = self.client.post(
-            reverse('examprep:delete_calculation', kwargs={'pk': calc.pk})
+            reverse("examprep:delete_calculation", kwargs={"pk": calc.pk})
         )
 
         self.assertEqual(response.status_code, 404)
@@ -2045,12 +2265,12 @@ class TestDeleteCalculationIntegration(TestCase):
         )
 
         response = self.client.post(
-            reverse('examprep:delete_calculation', kwargs={'pk': calc.pk}),
-            HTTP_HX_REQUEST='true'
+            reverse("examprep:delete_calculation", kwargs={"pk": calc.pk}),
+            HTTP_HX_REQUEST="true",
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.content, b'')
+        self.assertEqual(response.content, b"")
 
     def test_delete_confirmation_page_get(self):
         """GET request shows deletion confirmation page or redirects."""
@@ -2063,7 +2283,7 @@ class TestDeleteCalculationIntegration(TestCase):
         )
 
         response = self.client.get(
-            reverse('examprep:delete_calculation', kwargs={'pk': calc.pk})
+            reverse("examprep:delete_calculation", kwargs={"pk": calc.pk})
         )
 
         # View may render template or redirect - both are valid
@@ -2076,13 +2296,12 @@ class TestSavedCalculationsListIntegration(TestCase):
     def setUp(self):
         self.client = Client()
         self.user = User.objects.create_user(
-            email="listuser@example.com",
-            password="TestPass123!"
+            email="listuser@example.com", password="TestPass123!"
         )
 
     def test_list_requires_authentication(self):
         """Saved calculations list requires login."""
-        response = self.client.get(reverse('examprep:saved_calculations'))
+        response = self.client.get(reverse("examprep:saved_calculations"))
         self.assertEqual(response.status_code, 302)
 
     def test_list_shows_user_calculations(self):
@@ -2094,13 +2313,14 @@ class TestSavedCalculationsListIntegration(TestCase):
             SavedRatingCalculation.objects.create(
                 user=self.user,
                 name=f"My Calc {i}",
-                ratings=[{"percentage": 50, "description": "Test", "is_bilateral": False}],
+                ratings=[
+                    {"percentage": 50, "description": "Test", "is_bilateral": False}
+                ],
             )
 
         # Create calculation for another user
         other_user = User.objects.create_user(
-            email="otherlistuser@example.com",
-            password="TestPass123!"
+            email="otherlistuser@example.com", password="TestPass123!"
         )
         SavedRatingCalculation.objects.create(
             user=other_user,
@@ -2108,10 +2328,10 @@ class TestSavedCalculationsListIntegration(TestCase):
             ratings=[],
         )
 
-        response = self.client.get(reverse('examprep:saved_calculations'))
+        response = self.client.get(reverse("examprep:saved_calculations"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.context['calculations']), 3)
+        self.assertEqual(len(response.context["calculations"]), 3)
 
     def test_list_ordered_by_updated_date(self):
         """List is ordered by most recently updated."""
@@ -2128,9 +2348,9 @@ class TestSavedCalculationsListIntegration(TestCase):
             ratings=[],
         )
 
-        response = self.client.get(reverse('examprep:saved_calculations'))
+        response = self.client.get(reverse("examprep:saved_calculations"))
 
-        calculations = list(response.context['calculations'])
+        calculations = list(response.context["calculations"])
         # Newest should be first
         self.assertEqual(calculations[0].name, "Newest")
 
@@ -2142,43 +2362,56 @@ class TestRatingCalculatorEndToEndWorkflow(TestCase):
     def setUp(self):
         self.client = Client()
         self.user = User.objects.create_user(
-            email="e2euser@example.com",
-            password="TestPass123!"
+            email="e2euser@example.com", password="TestPass123!"
         )
 
     def test_complete_workflow_anonymous_user(self):
         """Complete workflow for anonymous user (calculate only, no save)."""
         # 1. Load calculator page
-        response = self.client.get(reverse('examprep:rating_calculator'))
+        response = self.client.get(reverse("examprep:rating_calculator"))
         self.assertEqual(response.status_code, 200)
 
         # 2. Calculate ratings
         response = self.client.post(
-            reverse('examprep:calculate_rating'),
+            reverse("examprep:calculate_rating"),
             {
-                'ratings': json.dumps([
-                    {"percentage": 70, "description": "PTSD", "is_bilateral": False},
-                    {"percentage": 40, "description": "Back", "is_bilateral": False},
-                    {"percentage": 10, "description": "Tinnitus", "is_bilateral": False},
-                ]),
-                'has_spouse': 'false',
-                'children_under_18': '0',
-                'dependent_parents': '0',
+                "ratings": json.dumps(
+                    [
+                        {
+                            "percentage": 70,
+                            "description": "PTSD",
+                            "is_bilateral": False,
+                        },
+                        {
+                            "percentage": 40,
+                            "description": "Back",
+                            "is_bilateral": False,
+                        },
+                        {
+                            "percentage": 10,
+                            "description": "Tinnitus",
+                            "is_bilateral": False,
+                        },
+                    ]
+                ),
+                "has_spouse": "false",
+                "children_under_18": "0",
+                "dependent_parents": "0",
             },
-            HTTP_HX_REQUEST='true'
+            HTTP_HX_REQUEST="true",
         )
         self.assertEqual(response.status_code, 200)
 
         # 3. Attempting to save should redirect to login
         response = self.client.post(
-            reverse('examprep:save_calculation'),
+            reverse("examprep:save_calculation"),
             {
-                'name': 'Cannot Save',
-                'ratings': '[]',
-                'has_spouse': 'false',
-                'children_under_18': '0',
-                'dependent_parents': '0',
-            }
+                "name": "Cannot Save",
+                "ratings": "[]",
+                "has_spouse": "false",
+                "children_under_18": "0",
+                "dependent_parents": "0",
+            },
         )
         self.assertEqual(response.status_code, 302)
 
@@ -2187,9 +2420,9 @@ class TestRatingCalculatorEndToEndWorkflow(TestCase):
         self.client.login(email="e2euser@example.com", password="TestPass123!")
 
         # 1. Load calculator page
-        response = self.client.get(reverse('examprep:rating_calculator'))
+        response = self.client.get(reverse("examprep:rating_calculator"))
         self.assertEqual(response.status_code, 200)
-        self.assertIn('saved_calculations', response.context)
+        self.assertIn("saved_calculations", response.context)
 
         # 2. Calculate ratings
         ratings_data = [
@@ -2201,35 +2434,37 @@ class TestRatingCalculatorEndToEndWorkflow(TestCase):
         ]
 
         response = self.client.post(
-            reverse('examprep:calculate_rating'),
+            reverse("examprep:calculate_rating"),
             {
-                'ratings': json.dumps(ratings_data),
-                'has_spouse': 'true',
-                'children_under_18': '2',
-                'dependent_parents': '0',
+                "ratings": json.dumps(ratings_data),
+                "has_spouse": "true",
+                "children_under_18": "2",
+                "dependent_parents": "0",
             },
-            HTTP_HX_REQUEST='true'
+            HTTP_HX_REQUEST="true",
         )
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.context['has_ratings'])
-        self.assertGreater(response.context['combined_rounded'], 80)
+        self.assertTrue(response.context["has_ratings"])
+        self.assertGreater(response.context["combined_rounded"], 80)
 
         # 3. Save calculation
         response = self.client.post(
-            reverse('examprep:save_calculation'),
+            reverse("examprep:save_calculation"),
             {
-                'name': 'My Complex Rating',
-                'ratings': json.dumps(ratings_data),
-                'has_spouse': 'true',
-                'children_under_18': '2',
-                'dependent_parents': '0',
-                'notes': 'Bilateral knees from service',
-            }
+                "name": "My Complex Rating",
+                "ratings": json.dumps(ratings_data),
+                "has_spouse": "true",
+                "children_under_18": "2",
+                "dependent_parents": "0",
+                "notes": "Bilateral knees from service",
+            },
         )
         self.assertIn(response.status_code, [200, 302])
 
         # 4. Verify saved calculation
-        calc = SavedRatingCalculation.objects.get(user=self.user, name='My Complex Rating')
+        calc = SavedRatingCalculation.objects.get(
+            user=self.user, name="My Complex Rating"
+        )
         self.assertEqual(len(calc.ratings), 5)
         self.assertTrue(calc.has_spouse)
         self.assertEqual(calc.children_under_18, 2)
@@ -2237,21 +2472,21 @@ class TestRatingCalculatorEndToEndWorkflow(TestCase):
         self.assertIsNotNone(calc.estimated_monthly)
 
         # 5. View saved calculations list
-        response = self.client.get(reverse('examprep:saved_calculations'))
+        response = self.client.get(reverse("examprep:saved_calculations"))
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.context['calculations']), 1)
+        self.assertEqual(len(response.context["calculations"]), 1)
 
         # 6. Load the saved calculation
         response = self.client.get(
-            reverse('examprep:load_calculation', kwargs={'pk': calc.pk})
+            reverse("examprep:load_calculation", kwargs={"pk": calc.pk})
         )
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
-        self.assertEqual(data['name'], 'My Complex Rating')
+        self.assertEqual(data["name"], "My Complex Rating")
 
         # 7. Delete the calculation
         response = self.client.post(
-            reverse('examprep:delete_calculation', kwargs={'pk': calc.pk})
+            reverse("examprep:delete_calculation", kwargs={"pk": calc.pk})
         )
         self.assertEqual(response.status_code, 302)
         self.assertFalse(SavedRatingCalculation.objects.filter(pk=calc.pk).exists())
@@ -2265,14 +2500,14 @@ class TestRatingCalculatorEndToEndWorkflow(TestCase):
             {"percentage": 50, "description": "PTSD", "is_bilateral": False},
         ]
         self.client.post(
-            reverse('examprep:save_calculation'),
+            reverse("examprep:save_calculation"),
             {
-                'name': 'Initial Rating',
-                'ratings': json.dumps(initial_ratings),
-                'has_spouse': 'false',
-                'children_under_18': '0',
-                'dependent_parents': '0',
-            }
+                "name": "Initial Rating",
+                "ratings": json.dumps(initial_ratings),
+                "has_spouse": "false",
+                "children_under_18": "0",
+                "dependent_parents": "0",
+            },
         )
 
         # Create updated calculation with same name
@@ -2281,14 +2516,14 @@ class TestRatingCalculatorEndToEndWorkflow(TestCase):
             {"percentage": 30, "description": "Back", "is_bilateral": False},
         ]
         self.client.post(
-            reverse('examprep:save_calculation'),
+            reverse("examprep:save_calculation"),
             {
-                'name': 'Updated Rating',
-                'ratings': json.dumps(updated_ratings),
-                'has_spouse': 'true',
-                'children_under_18': '0',
-                'dependent_parents': '0',
-            }
+                "name": "Updated Rating",
+                "ratings": json.dumps(updated_ratings),
+                "has_spouse": "true",
+                "children_under_18": "0",
+                "dependent_parents": "0",
+            },
         )
 
         # Should now have 2 calculations
@@ -2301,28 +2536,45 @@ class TestRatingCalculatorEndToEndWorkflow(TestCase):
 
         # Create multiple calculations
         scenarios = [
-            ("Current Rating", [{"percentage": 70, "description": "PTSD", "is_bilateral": False}]),
-            ("Best Case", [
-                {"percentage": 70, "description": "PTSD", "is_bilateral": False},
-                {"percentage": 50, "description": "Back", "is_bilateral": False},
-            ]),
-            ("With Bilateral", [
-                {"percentage": 50, "description": "PTSD", "is_bilateral": False},
-                {"percentage": 20, "description": "Left Knee", "is_bilateral": True},
-                {"percentage": 20, "description": "Right Knee", "is_bilateral": True},
-            ]),
+            (
+                "Current Rating",
+                [{"percentage": 70, "description": "PTSD", "is_bilateral": False}],
+            ),
+            (
+                "Best Case",
+                [
+                    {"percentage": 70, "description": "PTSD", "is_bilateral": False},
+                    {"percentage": 50, "description": "Back", "is_bilateral": False},
+                ],
+            ),
+            (
+                "With Bilateral",
+                [
+                    {"percentage": 50, "description": "PTSD", "is_bilateral": False},
+                    {
+                        "percentage": 20,
+                        "description": "Left Knee",
+                        "is_bilateral": True,
+                    },
+                    {
+                        "percentage": 20,
+                        "description": "Right Knee",
+                        "is_bilateral": True,
+                    },
+                ],
+            ),
         ]
 
         for name, ratings in scenarios:
             self.client.post(
-                reverse('examprep:save_calculation'),
+                reverse("examprep:save_calculation"),
                 {
-                    'name': name,
-                    'ratings': json.dumps(ratings),
-                    'has_spouse': 'false',
-                    'children_under_18': '0',
-                    'dependent_parents': '0',
-                }
+                    "name": name,
+                    "ratings": json.dumps(ratings),
+                    "has_spouse": "false",
+                    "children_under_18": "0",
+                    "dependent_parents": "0",
+                },
             )
 
         # Verify all saved
@@ -2332,7 +2584,7 @@ class TestRatingCalculatorEndToEndWorkflow(TestCase):
         # Load each and verify
         for calc in calcs:
             response = self.client.get(
-                reverse('examprep:load_calculation', kwargs={'pk': calc.pk})
+                reverse("examprep:load_calculation", kwargs={"pk": calc.pk})
             )
             self.assertEqual(response.status_code, 200)
 
@@ -2344,34 +2596,33 @@ class TestRatingCalculatorErrorHandling(TestCase):
     def setUp(self):
         self.client = Client()
         self.user = User.objects.create_user(
-            email="erroruser@example.com",
-            password="TestPass123!"
+            email="erroruser@example.com", password="TestPass123!"
         )
 
     def test_calculate_malformed_json(self):
         """Malformed JSON returns 400 error."""
         response = self.client.post(
-            reverse('examprep:calculate_rating'),
+            reverse("examprep:calculate_rating"),
             {
-                'ratings': '{invalid json',
-                'has_spouse': 'false',
-                'children_under_18': '0',
-                'dependent_parents': '0',
+                "ratings": "{invalid json",
+                "has_spouse": "false",
+                "children_under_18": "0",
+                "dependent_parents": "0",
             },
-            HTTP_HX_REQUEST='true'
+            HTTP_HX_REQUEST="true",
         )
         self.assertEqual(response.status_code, 400)
 
     def test_calculate_missing_ratings(self):
         """Missing ratings field handles gracefully."""
         response = self.client.post(
-            reverse('examprep:calculate_rating'),
+            reverse("examprep:calculate_rating"),
             {
-                'has_spouse': 'false',
-                'children_under_18': '0',
-                'dependent_parents': '0',
+                "has_spouse": "false",
+                "children_under_18": "0",
+                "dependent_parents": "0",
             },
-            HTTP_HX_REQUEST='true'
+            HTTP_HX_REQUEST="true",
         )
         # Should default to empty ratings
         self.assertEqual(response.status_code, 200)
@@ -2379,16 +2630,22 @@ class TestRatingCalculatorErrorHandling(TestCase):
     def test_calculate_invalid_percentage(self):
         """Invalid percentage value handles gracefully."""
         response = self.client.post(
-            reverse('examprep:calculate_rating'),
+            reverse("examprep:calculate_rating"),
             {
-                'ratings': json.dumps([
-                    {"percentage": "not a number", "description": "Test", "is_bilateral": False},
-                ]),
-                'has_spouse': 'false',
-                'children_under_18': '0',
-                'dependent_parents': '0',
+                "ratings": json.dumps(
+                    [
+                        {
+                            "percentage": "not a number",
+                            "description": "Test",
+                            "is_bilateral": False,
+                        },
+                    ]
+                ),
+                "has_spouse": "false",
+                "children_under_18": "0",
+                "dependent_parents": "0",
             },
-            HTTP_HX_REQUEST='true'
+            HTTP_HX_REQUEST="true",
         )
         self.assertEqual(response.status_code, 400)
 
@@ -2397,26 +2654,33 @@ class TestRatingCalculatorErrorHandling(TestCase):
         self.client.login(email="erroruser@example.com", password="TestPass123!")
 
         response = self.client.post(
-            reverse('examprep:save_calculation'),
+            reverse("examprep:save_calculation"),
             {
-                'name': 'My Custom Name',
-                'ratings': json.dumps([
-                    {"percentage": 50, "description": "Test", "is_bilateral": False},
-                ]),
-                'has_spouse': 'false',
-                'children_under_18': '0',
-                'dependent_parents': '0',
-            }
+                "name": "My Custom Name",
+                "ratings": json.dumps(
+                    [
+                        {
+                            "percentage": 50,
+                            "description": "Test",
+                            "is_bilateral": False,
+                        },
+                    ]
+                ),
+                "has_spouse": "false",
+                "children_under_18": "0",
+                "dependent_parents": "0",
+            },
         )
 
         calc = SavedRatingCalculation.objects.filter(user=self.user).first()
         self.assertIsNotNone(calc)
-        self.assertEqual(calc.name, 'My Custom Name')
+        self.assertEqual(calc.name, "My Custom Name")
 
 
 # =============================================================================
 # PDF EXPORT TESTS
 # =============================================================================
+
 
 class TestPDFExport(TestCase):
     """Tests for PDF export functionality."""
@@ -2424,12 +2688,10 @@ class TestPDFExport(TestCase):
     def setUp(self):
         self.client = Client()
         self.user = User.objects.create_user(
-            email="pdfuser@example.com",
-            password="TestPass123!"
+            email="pdfuser@example.com", password="TestPass123!"
         )
         self.other_user = User.objects.create_user(
-            email="otheruser@example.com",
-            password="TestPass123!"
+            email="otheruser@example.com", password="TestPass123!"
         )
         # Create a saved calculation for the user
         self.saved_calc = SavedRatingCalculation.objects.create(
@@ -2452,145 +2714,193 @@ class TestPDFExport(TestCase):
     def test_export_pdf_returns_pdf_content_type(self):
         """Export PDF returns application/pdf content type."""
         response = self.client.post(
-            reverse('examprep:export_rating_pdf'),
+            reverse("examprep:export_rating_pdf"),
             {
-                'ratings': json.dumps([
-                    {"percentage": 50, "description": "PTSD", "is_bilateral": False},
-                    {"percentage": 30, "description": "Knee", "is_bilateral": False},
-                ]),
-                'has_spouse': 'false',
-                'children_under_18': '0',
-                'dependent_parents': '0',
-            }
+                "ratings": json.dumps(
+                    [
+                        {
+                            "percentage": 50,
+                            "description": "PTSD",
+                            "is_bilateral": False,
+                        },
+                        {
+                            "percentage": 30,
+                            "description": "Knee",
+                            "is_bilateral": False,
+                        },
+                    ]
+                ),
+                "has_spouse": "false",
+                "children_under_18": "0",
+                "dependent_parents": "0",
+            },
         )
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response['Content-Type'], 'application/pdf')
+        self.assertEqual(response["Content-Type"], "application/pdf")
 
     def test_export_pdf_has_attachment_disposition(self):
         """Export PDF has attachment Content-Disposition header."""
         response = self.client.post(
-            reverse('examprep:export_rating_pdf'),
+            reverse("examprep:export_rating_pdf"),
             {
-                'ratings': json.dumps([
-                    {"percentage": 50, "description": "PTSD", "is_bilateral": False},
-                ]),
-                'has_spouse': 'false',
-                'children_under_18': '0',
-                'dependent_parents': '0',
-            }
+                "ratings": json.dumps(
+                    [
+                        {
+                            "percentage": 50,
+                            "description": "PTSD",
+                            "is_bilateral": False,
+                        },
+                    ]
+                ),
+                "has_spouse": "false",
+                "children_under_18": "0",
+                "dependent_parents": "0",
+            },
         )
         self.assertEqual(response.status_code, 200)
-        self.assertIn('attachment', response['Content-Disposition'])
-        self.assertIn('.pdf', response['Content-Disposition'])
+        self.assertIn("attachment", response["Content-Disposition"])
+        self.assertIn(".pdf", response["Content-Disposition"])
 
     def test_export_pdf_with_single_rating(self):
         """Export PDF works with a single rating."""
         response = self.client.post(
-            reverse('examprep:export_rating_pdf'),
+            reverse("examprep:export_rating_pdf"),
             {
-                'ratings': json.dumps([
-                    {"percentage": 70, "description": "TBI", "is_bilateral": False},
-                ]),
-                'has_spouse': 'false',
-                'children_under_18': '0',
-                'dependent_parents': '0',
-            }
+                "ratings": json.dumps(
+                    [
+                        {"percentage": 70, "description": "TBI", "is_bilateral": False},
+                    ]
+                ),
+                "has_spouse": "false",
+                "children_under_18": "0",
+                "dependent_parents": "0",
+            },
         )
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response['Content-Type'], 'application/pdf')
+        self.assertEqual(response["Content-Type"], "application/pdf")
 
     def test_export_pdf_with_multiple_ratings(self):
         """Export PDF works with multiple ratings."""
         response = self.client.post(
-            reverse('examprep:export_rating_pdf'),
+            reverse("examprep:export_rating_pdf"),
             {
-                'ratings': json.dumps([
-                    {"percentage": 50, "description": "PTSD", "is_bilateral": False},
-                    {"percentage": 30, "description": "Back", "is_bilateral": False},
-                    {"percentage": 20, "description": "Tinnitus", "is_bilateral": False},
-                    {"percentage": 10, "description": "Scars", "is_bilateral": False},
-                ]),
-                'has_spouse': 'true',
-                'children_under_18': '2',
-                'dependent_parents': '1',
-            }
+                "ratings": json.dumps(
+                    [
+                        {
+                            "percentage": 50,
+                            "description": "PTSD",
+                            "is_bilateral": False,
+                        },
+                        {
+                            "percentage": 30,
+                            "description": "Back",
+                            "is_bilateral": False,
+                        },
+                        {
+                            "percentage": 20,
+                            "description": "Tinnitus",
+                            "is_bilateral": False,
+                        },
+                        {
+                            "percentage": 10,
+                            "description": "Scars",
+                            "is_bilateral": False,
+                        },
+                    ]
+                ),
+                "has_spouse": "true",
+                "children_under_18": "2",
+                "dependent_parents": "1",
+            },
         )
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response['Content-Type'], 'application/pdf')
+        self.assertEqual(response["Content-Type"], "application/pdf")
 
     def test_export_pdf_with_bilateral_ratings(self):
         """Export PDF works with bilateral factor ratings."""
         response = self.client.post(
-            reverse('examprep:export_rating_pdf'),
+            reverse("examprep:export_rating_pdf"),
             {
-                'ratings': json.dumps([
-                    {"percentage": 40, "description": "Knee", "is_bilateral": True},
-                    {"percentage": 30, "description": "Shoulder", "is_bilateral": True},
-                ]),
-                'has_spouse': 'false',
-                'children_under_18': '0',
-                'dependent_parents': '0',
-            }
+                "ratings": json.dumps(
+                    [
+                        {"percentage": 40, "description": "Knee", "is_bilateral": True},
+                        {
+                            "percentage": 30,
+                            "description": "Shoulder",
+                            "is_bilateral": True,
+                        },
+                    ]
+                ),
+                "has_spouse": "false",
+                "children_under_18": "0",
+                "dependent_parents": "0",
+            },
         )
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response['Content-Type'], 'application/pdf')
+        self.assertEqual(response["Content-Type"], "application/pdf")
 
     def test_export_pdf_empty_ratings_returns_400(self):
         """Export PDF with empty ratings returns 400 error."""
         response = self.client.post(
-            reverse('examprep:export_rating_pdf'),
+            reverse("examprep:export_rating_pdf"),
             {
-                'ratings': json.dumps([]),
-                'has_spouse': 'false',
-                'children_under_18': '0',
-                'dependent_parents': '0',
-            }
+                "ratings": json.dumps([]),
+                "has_spouse": "false",
+                "children_under_18": "0",
+                "dependent_parents": "0",
+            },
         )
         self.assertEqual(response.status_code, 400)
 
     def test_export_pdf_malformed_json_returns_400(self):
         """Export PDF with malformed JSON returns 400 error."""
         response = self.client.post(
-            reverse('examprep:export_rating_pdf'),
+            reverse("examprep:export_rating_pdf"),
             {
-                'ratings': '{invalid json',
-                'has_spouse': 'false',
-                'children_under_18': '0',
-                'dependent_parents': '0',
-            }
+                "ratings": "{invalid json",
+                "has_spouse": "false",
+                "children_under_18": "0",
+                "dependent_parents": "0",
+            },
         )
         self.assertEqual(response.status_code, 400)
 
     def test_export_pdf_get_not_allowed(self):
         """Export PDF via GET method returns 405 Method Not Allowed."""
-        response = self.client.get(reverse('examprep:export_rating_pdf'))
+        response = self.client.get(reverse("examprep:export_rating_pdf"))
         self.assertEqual(response.status_code, 405)
 
     def test_export_saved_calculation_requires_login(self):
         """Exporting a saved calculation requires authentication."""
         response = self.client.get(
-            reverse('examprep:export_saved_rating_pdf', kwargs={'pk': self.saved_calc.pk})
+            reverse(
+                "examprep:export_saved_rating_pdf", kwargs={"pk": self.saved_calc.pk}
+            )
         )
         # Should redirect to login
         self.assertEqual(response.status_code, 302)
-        self.assertIn('login', response.url)
+        self.assertIn("login", response.url)
 
     def test_export_saved_calculation_returns_pdf(self):
         """Exporting a saved calculation returns PDF."""
         self.client.login(email="pdfuser@example.com", password="TestPass123!")
         response = self.client.get(
-            reverse('examprep:export_saved_rating_pdf', kwargs={'pk': self.saved_calc.pk})
+            reverse(
+                "examprep:export_saved_rating_pdf", kwargs={"pk": self.saved_calc.pk}
+            )
         )
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response['Content-Type'], 'application/pdf')
-        self.assertIn('attachment', response['Content-Disposition'])
+        self.assertEqual(response["Content-Type"], "application/pdf")
+        self.assertIn("attachment", response["Content-Disposition"])
 
     def test_export_saved_calculation_only_owner_can_access(self):
         """Only the owner can export their saved calculation."""
         # Login as different user
         self.client.login(email="otheruser@example.com", password="TestPass123!")
         response = self.client.get(
-            reverse('examprep:export_saved_rating_pdf', kwargs={'pk': self.saved_calc.pk})
+            reverse(
+                "examprep:export_saved_rating_pdf", kwargs={"pk": self.saved_calc.pk}
+            )
         )
         # Should return 404 (not found) since query filters by user
         self.assertEqual(response.status_code, 404)
@@ -2599,27 +2909,33 @@ class TestPDFExport(TestCase):
         """Exporting a non-existent saved calculation returns 404."""
         self.client.login(email="pdfuser@example.com", password="TestPass123!")
         response = self.client.get(
-            reverse('examprep:export_saved_rating_pdf', kwargs={'pk': 99999})
+            reverse("examprep:export_saved_rating_pdf", kwargs={"pk": 99999})
         )
         self.assertEqual(response.status_code, 404)
 
     def test_export_pdf_file_starts_with_pdf_header(self):
         """Exported file starts with PDF header bytes."""
         response = self.client.post(
-            reverse('examprep:export_rating_pdf'),
+            reverse("examprep:export_rating_pdf"),
             {
-                'ratings': json.dumps([
-                    {"percentage": 50, "description": "PTSD", "is_bilateral": False},
-                ]),
-                'has_spouse': 'false',
-                'children_under_18': '0',
-                'dependent_parents': '0',
-            }
+                "ratings": json.dumps(
+                    [
+                        {
+                            "percentage": 50,
+                            "description": "PTSD",
+                            "is_bilateral": False,
+                        },
+                    ]
+                ),
+                "has_spouse": "false",
+                "children_under_18": "0",
+                "dependent_parents": "0",
+            },
         )
         self.assertEqual(response.status_code, 200)
         # PDF files start with %PDF
         content = response.content
-        self.assertTrue(content.startswith(b'%PDF'))
+        self.assertTrue(content.startswith(b"%PDF"))
 
 
 class TestPDFGeneratorService(TestCase):
@@ -2648,7 +2964,7 @@ class TestPDFGeneratorService(TestCase):
         )
         self.assertIsInstance(pdf_bytes, bytes)
         self.assertTrue(len(pdf_bytes) > 0)
-        self.assertTrue(pdf_bytes.startswith(b'%PDF'))
+        self.assertTrue(pdf_bytes.startswith(b"%PDF"))
 
     def test_generate_rating_pdf_with_all_dependents(self):
         """generate_rating_pdf works with all dependent types."""
@@ -2674,7 +2990,7 @@ class TestPDFGeneratorService(TestCase):
             calculation_name="Full Dependents Test",
         )
         self.assertIsInstance(pdf_bytes, bytes)
-        self.assertTrue(pdf_bytes.startswith(b'%PDF'))
+        self.assertTrue(pdf_bytes.startswith(b"%PDF"))
 
     def test_generate_rating_pdf_with_bilateral_factor(self):
         """generate_rating_pdf includes bilateral factor when present."""
@@ -2699,7 +3015,7 @@ class TestPDFGeneratorService(TestCase):
             dependent_parents=0,
         )
         self.assertIsInstance(pdf_bytes, bytes)
-        self.assertTrue(pdf_bytes.startswith(b'%PDF'))
+        self.assertTrue(pdf_bytes.startswith(b"%PDF"))
 
     def test_generate_rating_pdf_with_empty_step_by_step(self):
         """generate_rating_pdf handles empty step_by_step list."""
@@ -2720,7 +3036,7 @@ class TestPDFGeneratorService(TestCase):
             dependent_parents=0,
         )
         self.assertIsInstance(pdf_bytes, bytes)
-        self.assertTrue(pdf_bytes.startswith(b'%PDF'))
+        self.assertTrue(pdf_bytes.startswith(b"%PDF"))
 
     def test_rating_calculation_pdf_class_directly(self):
         """RatingCalculationPDF class generates valid PDF."""
@@ -2741,12 +3057,13 @@ class TestPDFGeneratorService(TestCase):
 
         pdf_bytes = generator.generate()
         self.assertIsInstance(pdf_bytes, bytes)
-        self.assertTrue(pdf_bytes.startswith(b'%PDF'))
+        self.assertTrue(pdf_bytes.startswith(b"%PDF"))
 
 
 # =============================================================================
 # SHARE CALCULATION TESTS
 # =============================================================================
+
 
 class TestShareCalculation(TestCase):
     """Tests for share calculation functionality."""
@@ -2754,12 +3071,10 @@ class TestShareCalculation(TestCase):
     def setUp(self):
         self.client = Client()
         self.user = User.objects.create_user(
-            email="shareuser@example.com",
-            password="TestPass123!"
+            email="shareuser@example.com", password="TestPass123!"
         )
         self.other_user = User.objects.create_user(
-            email="otheruser2@example.com",
-            password="TestPass123!"
+            email="otheruser2@example.com", password="TestPass123!"
         )
         # Create a saved calculation for testing
         self.saved_calc = SavedRatingCalculation.objects.create(
@@ -2783,113 +3098,130 @@ class TestShareCalculation(TestCase):
         from examprep.models import SharedCalculation
 
         response = self.client.post(
-            reverse('examprep:share_calculation'),
+            reverse("examprep:share_calculation"),
             {
-                'ratings': json.dumps([
-                    {"percentage": 50, "description": "PTSD", "is_bilateral": False},
-                ]),
-                'has_spouse': 'false',
-                'children_under_18': '0',
-                'dependent_parents': '0',
-                'name': 'My Shared Calculation',
-            }
+                "ratings": json.dumps(
+                    [
+                        {
+                            "percentage": 50,
+                            "description": "PTSD",
+                            "is_bilateral": False,
+                        },
+                    ]
+                ),
+                "has_spouse": "false",
+                "children_under_18": "0",
+                "dependent_parents": "0",
+                "name": "My Shared Calculation",
+            },
         )
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertTrue(data['success'])
-        self.assertIn('share_url', data)
-        self.assertIn('token', data)
+        self.assertTrue(data["success"])
+        self.assertIn("share_url", data)
+        self.assertIn("token", data)
 
         # Verify record created
-        shared = SharedCalculation.objects.filter(share_token=data['token']).first()
+        shared = SharedCalculation.objects.filter(share_token=data["token"]).first()
         self.assertIsNotNone(shared)
         self.assertEqual(shared.combined_rounded, 50)
 
     def test_share_calculation_returns_json(self):
         """Share endpoint returns JSON response."""
         response = self.client.post(
-            reverse('examprep:share_calculation'),
+            reverse("examprep:share_calculation"),
             {
-                'ratings': json.dumps([
-                    {"percentage": 70, "description": "TBI", "is_bilateral": False},
-                ]),
-                'has_spouse': 'true',
-                'children_under_18': '2',
-                'dependent_parents': '0',
-            }
+                "ratings": json.dumps(
+                    [
+                        {"percentage": 70, "description": "TBI", "is_bilateral": False},
+                    ]
+                ),
+                "has_spouse": "true",
+                "children_under_18": "2",
+                "dependent_parents": "0",
+            },
         )
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response['Content-Type'], 'application/json')
+        self.assertEqual(response["Content-Type"], "application/json")
 
     def test_share_calculation_empty_ratings_returns_400(self):
         """Share with empty ratings returns 400 error."""
         response = self.client.post(
-            reverse('examprep:share_calculation'),
+            reverse("examprep:share_calculation"),
             {
-                'ratings': json.dumps([]),
-                'has_spouse': 'false',
-                'children_under_18': '0',
-                'dependent_parents': '0',
-            }
+                "ratings": json.dumps([]),
+                "has_spouse": "false",
+                "children_under_18": "0",
+                "dependent_parents": "0",
+            },
         )
         self.assertEqual(response.status_code, 400)
 
     def test_share_calculation_get_not_allowed(self):
         """GET request to share endpoint returns 405."""
-        response = self.client.get(reverse('examprep:share_calculation'))
+        response = self.client.get(reverse("examprep:share_calculation"))
         self.assertEqual(response.status_code, 405)
 
     def test_share_saved_calculation_requires_login(self):
         """Sharing a saved calculation requires authentication."""
         response = self.client.get(
-            reverse('examprep:share_saved_calculation', kwargs={'pk': self.saved_calc.pk})
+            reverse(
+                "examprep:share_saved_calculation", kwargs={"pk": self.saved_calc.pk}
+            )
         )
         # Should redirect to login
         self.assertEqual(response.status_code, 302)
-        self.assertIn('login', response.url)
+        self.assertIn("login", response.url)
 
     def test_share_saved_calculation_returns_share_url(self):
         """Sharing a saved calculation returns a share URL."""
         self.client.login(email="shareuser@example.com", password="TestPass123!")
         response = self.client.get(
-            reverse('examprep:share_saved_calculation', kwargs={'pk': self.saved_calc.pk})
+            reverse(
+                "examprep:share_saved_calculation", kwargs={"pk": self.saved_calc.pk}
+            )
         )
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertTrue(data['success'])
-        self.assertIn('share_url', data)
-        self.assertIn('token', data)
+        self.assertTrue(data["success"])
+        self.assertIn("share_url", data)
+        self.assertIn("token", data)
 
     def test_share_saved_calculation_only_owner_can_share(self):
         """Only the owner can share their saved calculation."""
         self.client.login(email="otheruser2@example.com", password="TestPass123!")
         response = self.client.get(
-            reverse('examprep:share_saved_calculation', kwargs={'pk': self.saved_calc.pk})
+            reverse(
+                "examprep:share_saved_calculation", kwargs={"pk": self.saved_calc.pk}
+            )
         )
         self.assertEqual(response.status_code, 404)
 
     def test_share_saved_calculation_reuses_existing_share(self):
         """Sharing the same saved calculation reuses existing share link."""
-        from examprep.models import SharedCalculation
 
         self.client.login(email="shareuser@example.com", password="TestPass123!")
 
         # First share
         response1 = self.client.get(
-            reverse('examprep:share_saved_calculation', kwargs={'pk': self.saved_calc.pk})
+            reverse(
+                "examprep:share_saved_calculation", kwargs={"pk": self.saved_calc.pk}
+            )
         )
         data1 = response1.json()
-        token1 = data1['token']
+        token1 = data1["token"]
 
         # Second share - should return same token
         response2 = self.client.get(
-            reverse('examprep:share_saved_calculation', kwargs={'pk': self.saved_calc.pk})
+            reverse(
+                "examprep:share_saved_calculation", kwargs={"pk": self.saved_calc.pk}
+            )
         )
         data2 = response2.json()
-        token2 = data2['token']
+        token2 = data2["token"]
 
         self.assertEqual(token1, token2)
-        self.assertTrue(data2['existing'])
+        self.assertTrue(data2["existing"])
 
     def test_view_shared_calculation_public_access(self):
         """Shared calculations can be viewed without login."""
@@ -2905,10 +3237,10 @@ class TestShareCalculation(TestCase):
         )
 
         response = self.client.get(
-            reverse('examprep:shared_calculation', kwargs={'token': shared.share_token})
+            reverse("examprep:shared_calculation", kwargs={"token": shared.share_token})
         )
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '50%')
+        self.assertContains(response, "50%")
 
     def test_view_shared_calculation_increments_views(self):
         """Viewing a shared calculation increments view count."""
@@ -2925,7 +3257,7 @@ class TestShareCalculation(TestCase):
 
         # View the shared calculation
         self.client.get(
-            reverse('examprep:shared_calculation', kwargs={'token': shared.share_token})
+            reverse("examprep:shared_calculation", kwargs={"token": shared.share_token})
         )
 
         shared.refresh_from_db()
@@ -2951,15 +3283,17 @@ class TestShareCalculation(TestCase):
         shared.save()
 
         response = self.client.get(
-            reverse('examprep:shared_calculation', kwargs={'token': shared.share_token})
+            reverse("examprep:shared_calculation", kwargs={"token": shared.share_token})
         )
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'expired')
+        self.assertContains(response, "expired")
 
     def test_view_nonexistent_shared_calculation_returns_404(self):
         """Viewing a nonexistent shared calculation returns 404."""
         response = self.client.get(
-            reverse('examprep:shared_calculation', kwargs={'token': 'nonexistent-token'})
+            reverse(
+                "examprep:shared_calculation", kwargs={"token": "nonexistent-token"}
+            )
         )
         self.assertEqual(response.status_code, 404)
 
@@ -3058,12 +3392,13 @@ class TestSharedCalculationModel(TestCase):
         )
         url = shared.get_absolute_url()
         self.assertIn(shared.share_token, url)
-        self.assertIn('shared', url)
+        self.assertIn("shared", url)
 
 
 # =============================================================================
 # TDIU BOUNDARY TESTS — 38 CFR § 4.16
 # =============================================================================
+
 
 class TestTDIUBoundaryEligibility(TestCase):
     """
@@ -3077,6 +3412,7 @@ class TestTDIUBoundaryEligibility(TestCase):
 
     def setUp(self):
         from examprep.va_special_compensation import check_tdiu_eligibility
+
         self.check_tdiu = check_tdiu_eligibility
 
     def _make_ratings(self, percentages):
@@ -3150,6 +3486,7 @@ class TestTDIUBoundaryEligibility(TestCase):
 # SMC BOUNDARY TESTS — 38 CFR § 3.350
 # =============================================================================
 
+
 class TestSMCBoundaryEligibility(TestCase):
     """
     Boundary tests for SMC(s) eligibility (housebound).
@@ -3159,37 +3496,41 @@ class TestSMCBoundaryEligibility(TestCase):
 
     def setUp(self):
         from examprep.va_special_compensation import (
-            check_smc_eligibility, SMCCondition, SMCLevel,
+            check_smc_eligibility,
+            SMCCondition,
+            SMCLevel,
         )
+
         self.check_smc = check_smc_eligibility
         self.SMCCondition = SMCCondition
         self.SMCLevel = SMCLevel
 
     def _make_conditions(self, ratings):
         """Helper to build SMCCondition list from (name, rating) tuples."""
-        return [
-            self.SMCCondition(name=name, rating=rating)
-            for name, rating in ratings
-        ]
+        return [self.SMCCondition(name=name, rating=rating) for name, rating in ratings]
 
     def test_smc_s_combined_59_other(self):
         """100% + 59% other should NOT meet SMC(s) threshold."""
         # 50% + 20% = 60% via VA Math; but we need just under 60
         # Use a single 50% which stays at 50% combined
-        conditions = self._make_conditions([
-            ("PTSD", 100),
-            ("Back Pain", 50),
-        ])
+        conditions = self._make_conditions(
+            [
+                ("PTSD", 100),
+                ("Back Pain", 50),
+            ]
+        )
         result = self.check_smc(conditions)
         # 50% other doesn't meet 60% threshold
         self.assertNotIn(self.SMCLevel.S, result.levels)
 
     def test_smc_s_combined_60_other(self):
         """100% + 60% other SHOULD meet SMC(s) threshold."""
-        conditions = self._make_conditions([
-            ("PTSD", 100),
-            ("Back Pain", 60),
-        ])
+        conditions = self._make_conditions(
+            [
+                ("PTSD", 100),
+                ("Back Pain", 60),
+            ]
+        )
         result = self.check_smc(conditions)
         self.assertTrue(result.eligible)
         self.assertIn(self.SMCLevel.S, result.levels)
@@ -3197,20 +3538,24 @@ class TestSMCBoundaryEligibility(TestCase):
     def test_smc_s_multiple_reaching_60(self):
         """100% + multiple disabilities combining to 60%+ should meet SMC(s)."""
         # 40% + 40% = 64% via VA Math: 40 + 40*(1-0.40) = 40 + 24 = 64
-        conditions = self._make_conditions([
-            ("PTSD", 100),
-            ("Back Pain", 40),
-            ("Knee", 40),
-        ])
+        conditions = self._make_conditions(
+            [
+                ("PTSD", 100),
+                ("Back Pain", 40),
+                ("Knee", 40),
+            ]
+        )
         result = self.check_smc(conditions)
         self.assertTrue(result.eligible)
         self.assertIn(self.SMCLevel.S, result.levels)
 
     def test_smc_s_no_100_percent(self):
         """Without any 100% disability, SMC(s) should not apply."""
-        conditions = self._make_conditions([
-            ("PTSD", 90),
-            ("Back Pain", 70),
-        ])
+        conditions = self._make_conditions(
+            [
+                ("PTSD", 90),
+                ("Back Pain", 70),
+            ]
+        )
         result = self.check_smc(conditions)
         self.assertNotIn(self.SMCLevel.S, result.levels)

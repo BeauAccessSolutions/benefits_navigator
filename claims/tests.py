@@ -16,18 +16,16 @@ Covers:
 import json
 import pytest
 from datetime import date, timedelta
-from decimal import Decimal
-from unittest.mock import patch, MagicMock, PropertyMock
-from io import BytesIO
+from unittest.mock import patch, MagicMock
 
 from django.test import TestCase, Client
 from django.urls import reverse
-from django.core.files.uploadedfile import SimpleUploadedFile, InMemoryUploadedFile
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
 from claims.models import Document, Claim
-from claims.forms import DocumentUploadForm, DenialLetterUploadForm
+from claims.forms import DocumentUploadForm
 
 User = get_user_model()
 
@@ -36,13 +34,13 @@ User = get_user_model()
 # DOCUMENT MODEL TESTS
 # =============================================================================
 
+
 class TestDocumentModel(TestCase):
     """Tests for the Document model."""
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email="test@example.com",
-            password="TestPass123!"
+            email="test@example.com", password="TestPass123!"
         )
 
     def test_document_creation(self):
@@ -68,9 +66,17 @@ class TestDocumentModel(TestCase):
 
     def test_document_type_choices(self):
         """Document accepts all valid type choices."""
-        valid_types = ['medical_records', 'service_records', 'decision_letter',
-                       'buddy_statement', 'lay_statement', 'nexus_letter',
-                       'employment_records', 'personal_statement', 'other']
+        valid_types = [
+            "medical_records",
+            "service_records",
+            "decision_letter",
+            "buddy_statement",
+            "lay_statement",
+            "nexus_letter",
+            "employment_records",
+            "personal_statement",
+            "other",
+        ]
         for doc_type in valid_types:
             doc = Document.objects.create(
                 user=self.user,
@@ -264,7 +270,7 @@ class TestDocumentModel(TestCase):
 
     def test_ocr_status_choices(self):
         """OCR status accepts all valid choices."""
-        valid_statuses = ['pending', 'completed', 'failed']
+        valid_statuses = ["pending", "completed", "failed"]
         for ocr_status in valid_statuses:
             doc = Document.objects.create(
                 user=self.user,
@@ -278,13 +284,13 @@ class TestDocumentModel(TestCase):
 # CLAIM MODEL TESTS
 # =============================================================================
 
+
 class TestClaimModel(TestCase):
     """Tests for the Claim model."""
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email="test@example.com",
-            password="TestPass123!"
+            email="test@example.com", password="TestPass123!"
         )
 
     def test_claim_creation(self):
@@ -309,7 +315,7 @@ class TestClaimModel(TestCase):
 
     def test_claim_type_choices(self):
         """Claim accepts all valid type choices."""
-        valid_types = ['initial', 'increase', 'secondary', 'new_condition']
+        valid_types = ["initial", "increase", "secondary", "new_condition"]
         for claim_type in valid_types:
             claim = Claim.objects.create(
                 user=self.user,
@@ -320,7 +326,14 @@ class TestClaimModel(TestCase):
 
     def test_claim_status_choices(self):
         """Claim accepts all valid status choices."""
-        valid_statuses = ['draft', 'gathering_evidence', 'submitted', 'pending', 'decided', 'appealed']
+        valid_statuses = [
+            "draft",
+            "gathering_evidence",
+            "submitted",
+            "pending",
+            "decided",
+            "appealed",
+        ]
         for status in valid_statuses:
             claim = Claim.objects.create(
                 user=self.user,
@@ -366,13 +379,13 @@ class TestClaimModel(TestCase):
 # DOCUMENT UPLOAD FORM TESTS
 # =============================================================================
 
+
 class TestDocumentUploadForm(TestCase):
     """Tests for the DocumentUploadForm."""
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email="test@example.com",
-            password="TestPass123!"
+            email="test@example.com", password="TestPass123!"
         )
 
     def get_test_pdf(self, size=1024):
@@ -394,46 +407,38 @@ startxref
 %%EOF"""
         # Pad to desired size
         if len(content) < size:
-            content = content + b'\x00' * (size - len(content))
-        return SimpleUploadedFile(
-            "test.pdf",
-            content,
-            content_type="application/pdf"
-        )
+            content = content + b"\x00" * (size - len(content))
+        return SimpleUploadedFile("test.pdf", content, content_type="application/pdf")
 
     def test_form_valid_with_pdf(self):
         """Form is valid with a PDF file."""
         pdf_file = self.get_test_pdf()
         form = DocumentUploadForm(
-            data={'document_type': 'medical_records'},
-            files={'file': pdf_file},
-            user=self.user
+            data={"document_type": "medical_records"},
+            files={"file": pdf_file},
+            user=self.user,
         )
         # May fail due to magic byte validation in tests
         # Testing the basic form structure
-        self.assertIn('document_type', form.fields)
-        self.assertIn('file', form.fields)
+        self.assertIn("document_type", form.fields)
+        self.assertIn("file", form.fields)
 
     def test_form_rejects_empty_file(self):
         """Form rejects empty file upload."""
         form = DocumentUploadForm(
-            data={'document_type': 'medical_records'},
-            files={},
-            user=self.user
+            data={"document_type": "medical_records"}, files={}, user=self.user
         )
         self.assertFalse(form.is_valid())
 
     def test_form_rejects_invalid_extension(self):
         """Form rejects files with invalid extensions."""
         txt_file = SimpleUploadedFile(
-            "test.txt",
-            b"This is a text file",
-            content_type="text/plain"
+            "test.txt", b"This is a text file", content_type="text/plain"
         )
         form = DocumentUploadForm(
-            data={'document_type': 'medical_records'},
-            files={'file': txt_file},
-            user=self.user
+            data={"document_type": "medical_records"},
+            files={"file": txt_file},
+            user=self.user,
         )
         self.assertFalse(form.is_valid())
 
@@ -441,17 +446,16 @@ startxref
         """Form requires document_type selection."""
         pdf_file = self.get_test_pdf()
         form = DocumentUploadForm(
-            data={},  # Missing document_type
-            files={'file': pdf_file},
-            user=self.user
+            data={}, files={"file": pdf_file}, user=self.user  # Missing document_type
         )
         self.assertFalse(form.is_valid())
-        self.assertIn('document_type', form.errors)
+        self.assertIn("document_type", form.errors)
 
 
 # =============================================================================
 # DOCUMENT VIEW TESTS
 # =============================================================================
+
 
 @pytest.mark.django_db
 class TestDocumentListView:
@@ -459,28 +463,30 @@ class TestDocumentListView:
 
     def test_document_list_requires_login(self, client):
         """Document list requires authentication."""
-        response = client.get(reverse('claims:document_list'))
+        response = client.get(reverse("claims:document_list"))
         assert response.status_code == 302
 
     def test_document_list_loads(self, authenticated_client):
         """Document list loads for authenticated user."""
-        response = authenticated_client.get(reverse('claims:document_list'))
+        response = authenticated_client.get(reverse("claims:document_list"))
         assert response.status_code == 200
 
     def test_document_list_shows_user_documents(self, authenticated_client, document):
         """Document list shows user's documents."""
-        response = authenticated_client.get(reverse('claims:document_list'))
+        response = authenticated_client.get(reverse("claims:document_list"))
         assert response.status_code == 200
-        assert document in response.context['documents']
+        assert document in response.context["documents"]
 
-    def test_document_list_hides_other_user_documents(self, authenticated_client, other_user):
+    def test_document_list_hides_other_user_documents(
+        self, authenticated_client, other_user
+    ):
         """Document list doesn't show other user's documents."""
         other_doc = Document.objects.create(
             user=other_user,
             file_name="other_user.pdf",
         )
-        response = authenticated_client.get(reverse('claims:document_list'))
-        documents = response.context['documents']
+        response = authenticated_client.get(reverse("claims:document_list"))
+        documents = response.context["documents"]
         assert other_doc not in documents
 
 
@@ -490,14 +496,14 @@ class TestDocumentUploadView:
 
     def test_upload_requires_login(self, client):
         """Upload page requires authentication."""
-        response = client.get(reverse('claims:document_upload'))
+        response = client.get(reverse("claims:document_upload"))
         assert response.status_code == 302
 
     def test_upload_page_loads(self, authenticated_client):
         """Upload page loads for authenticated user."""
-        response = authenticated_client.get(reverse('claims:document_upload'))
+        response = authenticated_client.get(reverse("claims:document_upload"))
         assert response.status_code == 200
-        assert 'form' in response.context
+        assert "form" in response.context
 
 
 @pytest.mark.django_db
@@ -507,17 +513,17 @@ class TestDocumentDetailView:
     def test_detail_requires_login(self, client, document):
         """Document detail requires authentication."""
         response = client.get(
-            reverse('claims:document_detail', kwargs={'pk': document.pk})
+            reverse("claims:document_detail", kwargs={"pk": document.pk})
         )
         assert response.status_code == 302
 
     def test_detail_loads_for_owner(self, authenticated_client, document):
         """Document detail loads for document owner."""
         response = authenticated_client.get(
-            reverse('claims:document_detail', kwargs={'pk': document.pk})
+            reverse("claims:document_detail", kwargs={"pk": document.pk})
         )
         assert response.status_code == 200
-        assert response.context['document'] == document
+        assert response.context["document"] == document
 
     def test_detail_denied_for_other_user(self, authenticated_client, other_user):
         """Document detail returns 404 for non-owner."""
@@ -526,7 +532,7 @@ class TestDocumentDetailView:
             file_name="other.pdf",
         )
         response = authenticated_client.get(
-            reverse('claims:document_detail', kwargs={'pk': other_doc.pk})
+            reverse("claims:document_detail", kwargs={"pk": other_doc.pk})
         )
         assert response.status_code == 404
 
@@ -538,16 +544,16 @@ class TestDocumentStatusView:
     def test_status_returns_json(self, authenticated_client, processing_document):
         """Status endpoint returns JSON for AJAX requests."""
         response = authenticated_client.get(
-            reverse('claims:document_status', kwargs={'pk': processing_document.pk}),
-            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+            reverse("claims:document_status", kwargs={"pk": processing_document.pk}),
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
         )
         assert response.status_code == 200
 
     def test_status_returns_correct_status(self, authenticated_client, document):
         """Status endpoint returns correct document status."""
         response = authenticated_client.get(
-            reverse('claims:document_status', kwargs={'pk': document.pk}),
-            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+            reverse("claims:document_status", kwargs={"pk": document.pk}),
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
         )
         assert response.status_code == 200
 
@@ -559,14 +565,14 @@ class TestDocumentDeleteView:
     def test_delete_requires_login(self, client, document):
         """Delete requires authentication."""
         response = client.post(
-            reverse('claims:document_delete', kwargs={'pk': document.pk})
+            reverse("claims:document_delete", kwargs={"pk": document.pk})
         )
         assert response.status_code == 302
 
     def test_delete_soft_deletes_document(self, authenticated_client, document):
         """Delete endpoint soft deletes the document."""
         response = authenticated_client.post(
-            reverse('claims:document_delete', kwargs={'pk': document.pk})
+            reverse("claims:document_delete", kwargs={"pk": document.pk})
         )
         assert response.status_code == 302
 
@@ -580,7 +586,7 @@ class TestDocumentDeleteView:
             file_name="other.pdf",
         )
         response = authenticated_client.post(
-            reverse('claims:document_delete', kwargs={'pk': other_doc.pk})
+            reverse("claims:document_delete", kwargs={"pk": other_doc.pk})
         )
         assert response.status_code == 404
 
@@ -589,18 +595,19 @@ class TestDocumentDeleteView:
 # DENIAL DECODER VIEW TESTS
 # =============================================================================
 
+
 @pytest.mark.django_db
 class TestDenialDecoderViews:
     """Tests for the denial decoder workflow."""
 
     def test_upload_requires_login(self, client):
         """Denial decoder upload requires authentication."""
-        response = client.get(reverse('claims:denial_decoder'))
+        response = client.get(reverse("claims:denial_decoder"))
         assert response.status_code == 302
 
     def test_upload_page_loads(self, authenticated_client):
         """Denial decoder upload page loads."""
-        response = authenticated_client.get(reverse('claims:denial_decoder'))
+        response = authenticated_client.get(reverse("claims:denial_decoder"))
         assert response.status_code == 200
 
 
@@ -608,11 +615,12 @@ class TestDenialDecoderViews:
 # OCR SERVICE TESTS
 # =============================================================================
 
+
 class TestOCRService(TestCase):
     """Tests for the OCRService."""
 
-    @patch('claims.services.ocr_service.pytesseract')
-    @patch('claims.services.ocr_service.Image')
+    @patch("claims.services.ocr_service.pytesseract")
+    @patch("claims.services.ocr_service.Image")
     def test_extract_from_image(self, mock_image, mock_tesseract):
         """OCRService extracts text from images."""
         from claims.services.ocr_service import OCRService
@@ -627,6 +635,7 @@ class TestOCRService(TestCase):
     def test_ocr_service_init(self):
         """OCRService can be initialized."""
         from claims.services.ocr_service import OCRService
+
         service = OCRService()
         self.assertIsNotNone(service)
 
@@ -635,10 +644,11 @@ class TestOCRService(TestCase):
 # AI SERVICE TESTS
 # =============================================================================
 
+
 class TestAIService(TestCase):
     """Tests for the AIService."""
 
-    @patch('claims.services.ai_service.get_gateway')
+    @patch("claims.services.ai_service.get_gateway")
     def test_analyze_document_mocked(self, mock_get_gateway):
         """AIService analyzes documents with OpenAI via gateway."""
         from claims.services.ai_service import AIService
@@ -647,58 +657,60 @@ class TestAIService(TestCase):
         # Mock gateway response
         mock_gateway = MagicMock()
         mock_get_gateway.return_value = mock_gateway
-        mock_gateway.config.model = 'gpt-3.5-turbo'
+        mock_gateway.config.model = "gpt-3.5-turbo"
         mock_gateway.config.max_tokens = 4000
 
         # Mock completion result
         mock_completion = CompletionResponse(
-            content=json.dumps({
-                'summary': 'Test document summary',
-                'key_findings': ['Finding 1', 'Finding 2'],
-            }),
+            content=json.dumps(
+                {
+                    "summary": "Test document summary",
+                    "key_findings": ["Finding 1", "Finding 2"],
+                }
+            ),
             tokens_used=500,
-            model='gpt-3.5-turbo',
-            finish_reason='stop'
+            model="gpt-3.5-turbo",
+            finish_reason="stop",
         )
         mock_gateway.complete.return_value = Result.success(mock_completion, tokens=500)
 
         service = AIService()
         # Test service initialization
         self.assertIsNotNone(service)
-        self.assertEqual(service.model, 'gpt-3.5-turbo')
+        self.assertEqual(service.model, "gpt-3.5-turbo")
 
     def test_get_system_prompt_for_medical_records(self):
         """AIService returns appropriate prompt for medical records."""
         from claims.services.ai_service import AIService
 
         service = AIService()
-        prompt = service._get_system_prompt('medical_records')
-        self.assertIn('medical', prompt.lower())
+        prompt = service._get_system_prompt("medical_records")
+        self.assertIn("medical", prompt.lower())
 
     def test_get_system_prompt_for_decision_letter(self):
         """AIService returns appropriate prompt for decision letters."""
         from claims.services.ai_service import AIService
 
         service = AIService()
-        prompt = service._get_system_prompt('decision_letter')
-        self.assertIn('decision', prompt.lower())
+        prompt = service._get_system_prompt("decision_letter")
+        self.assertIn("decision", prompt.lower())
 
 
 # =============================================================================
 # CELERY TASK TESTS
 # =============================================================================
 
+
 class TestCeleryTasks(TestCase):
     """Tests for Celery tasks."""
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email="test@example.com",
-            password="TestPass123!"
+            email="test@example.com", password="TestPass123!"
         )
 
-    @patch('claims.tasks.OCRService')
-    @patch('claims.tasks.AIService')
+    @patch("claims.tasks.OCRService")
+    @patch("claims.tasks.AIService")
     def test_process_document_task(self, mock_ai_service, mock_ocr_service):
         """process_document_task processes document through OCR and AI."""
         from claims.tasks import process_document_task
@@ -713,28 +725,27 @@ class TestCeleryTasks(TestCase):
         # Mock OCR service
         mock_ocr_instance = MagicMock()
         mock_ocr_instance.extract_text.return_value = {
-            'text': 'Extracted text from document',
-            'confidence': 95.0,
-            'page_count': 1,
+            "text": "Extracted text from document",
+            "confidence": 95.0,
+            "page_count": 1,
         }
         mock_ocr_service.return_value = mock_ocr_instance
 
         # Mock AI service
         mock_ai_instance = MagicMock()
         mock_ai_instance.analyze_document.return_value = {
-            'analysis': {'summary': 'Test summary'},
-            'model': 'gpt-3.5-turbo',
-            'tokens': 500,
+            "analysis": {"summary": "Test summary"},
+            "model": "gpt-3.5-turbo",
+            "tokens": 500,
         }
         mock_ai_service.return_value = mock_ai_instance
 
         # Task should exist and be callable
         self.assertTrue(callable(process_document_task))
 
-    @patch('claims.tasks.OCRService')
+    @patch("claims.tasks.OCRService")
     def test_process_document_task_handles_ocr_failure(self, mock_ocr_service):
         """process_document_task handles OCR failures gracefully."""
-        from claims.tasks import process_document_task
 
         doc = Document.objects.create(
             user=self.user,
@@ -788,19 +799,19 @@ class TestCeleryTasks(TestCase):
         # Verify old document was hard deleted (check all_objects since it was soft-deleted)
         self.assertFalse(
             Document.all_objects.filter(id=old_doc.id).exists(),
-            "Old soft-deleted document should be permanently deleted"
+            "Old soft-deleted document should be permanently deleted",
         )
 
         # Verify recent soft-deleted document still exists (use all_objects for soft-deleted)
         self.assertTrue(
             Document.all_objects.filter(id=recent_doc.id).exists(),
-            "Recently soft-deleted document should still exist"
+            "Recently soft-deleted document should still exist",
         )
 
         # Verify active document still exists (regular objects manager works for non-deleted)
         self.assertTrue(
             Document.objects.filter(id=active_doc.id).exists(),
-            "Active document should still exist"
+            "Active document should still exist",
         )
 
         self.assertIn("1", result)  # Should indicate 1 document cleaned up
@@ -814,8 +825,8 @@ class TestCeleryTasks(TestCase):
 
         self.assertIn("0", result)
 
-    @patch('claims.tasks.OCRService')
-    @patch('claims.tasks.logger')
+    @patch("claims.tasks.OCRService")
+    @patch("claims.tasks.logger")
     def test_cleanup_old_documents_handles_deletion_errors(self, mock_logger, mock_ocr):
         """cleanup_old_documents logs errors but continues processing."""
         from claims.tasks import cleanup_old_documents
@@ -852,21 +863,19 @@ class TestDecodeDenialLetterTask(TestCase):
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email="test@example.com",
-            password="TestPass123!"
+            email="test@example.com", password="TestPass123!"
         )
 
-    @patch('claims.tasks.OCRService')
+    @patch("claims.tasks.OCRService")
     def test_decode_denial_letter_task_exists(self, mock_ocr):
         """decode_denial_letter_task is importable and callable."""
         from claims.tasks import decode_denial_letter_task
 
         self.assertTrue(callable(decode_denial_letter_task))
 
-    @patch('claims.tasks.OCRService')
+    @patch("claims.tasks.OCRService")
     def test_decode_denial_letter_performs_ocr(self, mock_ocr_service):
         """decode_denial_letter_task always performs OCR (ephemeral approach)."""
-        from claims.tasks import decode_denial_letter_task
 
         # Create document pending OCR
         doc = Document.objects.create(
@@ -880,9 +889,9 @@ class TestDecodeDenialLetterTask(TestCase):
         # Mock OCR service
         mock_ocr_instance = MagicMock()
         mock_ocr_instance.extract_text.return_value = {
-            'text': 'Your claim for PTSD has been denied...',
-            'confidence': 95.0,
-            'page_count': 2,
+            "text": "Your claim for PTSD has been denied...",
+            "confidence": 95.0,
+            "page_count": 2,
         }
         mock_ocr_service.return_value = mock_ocr_instance
 
@@ -890,7 +899,7 @@ class TestDecodeDenialLetterTask(TestCase):
         self.assertEqual(doc.ocr_status, "pending")
         self.assertEqual(doc.ocr_length, 0)
 
-    @patch('claims.tasks.OCRService')
+    @patch("claims.tasks.OCRService")
     def test_decode_denial_letter_sets_ocr_metadata(self, mock_ocr_service):
         """decode_denial_letter_task sets OCR metadata fields."""
         # Create document
@@ -921,6 +930,7 @@ class TestDecodeDenialLetterTask(TestCase):
 # FREE TIER LIMIT TESTS
 # =============================================================================
 
+
 @pytest.mark.django_db
 class TestFreeTierLimits:
     """Tests for free tier document limits."""
@@ -935,7 +945,7 @@ class TestFreeTierLimits:
             )
 
         # Form should show limit reached
-        response = authenticated_client.get(reverse('claims:document_upload'))
+        response = authenticated_client.get(reverse("claims:document_upload"))
         # Check context or form for limit information
         assert response.status_code == 200
 
@@ -949,13 +959,14 @@ class TestFreeTierLimits:
             )
 
         # Premium user should still be able to upload
-        response = premium_client.get(reverse('claims:document_upload'))
+        response = premium_client.get(reverse("claims:document_upload"))
         assert response.status_code == 200
 
 
 # =============================================================================
 # ACCESS CONTROL TESTS
 # =============================================================================
+
 
 @pytest.mark.django_db
 class TestDocumentAccessControl:
@@ -967,8 +978,8 @@ class TestDocumentAccessControl:
         user_doc = Document.objects.create(user=user, file_name="user.pdf")
         other_doc = Document.objects.create(user=other_user, file_name="other.pdf")
 
-        response = authenticated_client.get(reverse('claims:document_list'))
-        documents = list(response.context['documents'])
+        response = authenticated_client.get(reverse("claims:document_list"))
+        documents = list(response.context["documents"])
 
         assert user_doc in documents
         assert other_doc not in documents
@@ -978,7 +989,7 @@ class TestDocumentAccessControl:
         other_doc = Document.objects.create(user=other_user, file_name="secret.pdf")
 
         response = authenticated_client.get(
-            reverse('claims:document_detail', kwargs={'pk': other_doc.pk})
+            reverse("claims:document_detail", kwargs={"pk": other_doc.pk})
         )
         assert response.status_code == 404
 
@@ -987,7 +998,7 @@ class TestDocumentAccessControl:
         other_doc = Document.objects.create(user=other_user, file_name="protected.pdf")
 
         response = authenticated_client.post(
-            reverse('claims:document_delete', kwargs={'pk': other_doc.pk})
+            reverse("claims:document_delete", kwargs={"pk": other_doc.pk})
         )
         assert response.status_code == 404
 
@@ -999,13 +1010,13 @@ class TestDocumentAccessControl:
 # INTEGRATION TESTS
 # =============================================================================
 
+
 class TestDocumentWorkflow(TestCase):
     """Integration tests for complete document workflows."""
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email="test@example.com",
-            password="TestPass123!"
+            email="test@example.com", password="TestPass123!"
         )
         self.client = Client()
         self.client.login(email="test@example.com", password="TestPass123!")
@@ -1092,13 +1103,13 @@ class TestDocumentWorkflow(TestCase):
 # DOCUMENT UPLOAD END-TO-END INTEGRATION TESTS
 # =============================================================================
 
+
 class TestDocumentUploadEndToEnd(TestCase):
     """End-to-end integration tests for document upload flow."""
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email="e2e@example.com",
-            password="TestPass123!"
+            email="e2e@example.com", password="TestPass123!"
         )
         # Enable AI consent for upload tests (required by require_ai_consent_view)
         self.user.profile.ai_processing_consent = True
@@ -1123,68 +1134,375 @@ startxref
 190
 %%EOF"""
         if len(content) < size:
-            content = content + b'\x00' * (size - len(content))
+            content = content + b"\x00" * (size - len(content))
         return SimpleUploadedFile(name, content, content_type="application/pdf")
 
     def get_test_image(self, name="test.jpg"):
         """Create a minimal valid JPEG file for testing."""
         # Minimal JPEG (1x1 pixel white)
-        content = bytes([
-            0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00,
-            0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0xFF, 0xDB,
-            0x00, 0x43, 0x00, 0x08, 0x06, 0x06, 0x07, 0x06, 0x05, 0x08, 0x07,
-            0x07, 0x07, 0x09, 0x09, 0x08, 0x0A, 0x0C, 0x14, 0x0D, 0x0C, 0x0B,
-            0x0B, 0x0C, 0x19, 0x12, 0x13, 0x0F, 0x14, 0x1D, 0x1A, 0x1F, 0x1E,
-            0x1D, 0x1A, 0x1C, 0x1C, 0x20, 0x24, 0x2E, 0x27, 0x20, 0x22, 0x2C,
-            0x23, 0x1C, 0x1C, 0x28, 0x37, 0x29, 0x2C, 0x30, 0x31, 0x34, 0x34,
-            0x34, 0x1F, 0x27, 0x39, 0x3D, 0x38, 0x32, 0x3C, 0x2E, 0x33, 0x34,
-            0x32, 0xFF, 0xC0, 0x00, 0x0B, 0x08, 0x00, 0x01, 0x00, 0x01, 0x01,
-            0x01, 0x11, 0x00, 0xFF, 0xC4, 0x00, 0x1F, 0x00, 0x00, 0x01, 0x05,
-            0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-            0x09, 0x0A, 0x0B, 0xFF, 0xC4, 0x00, 0xB5, 0x10, 0x00, 0x02, 0x01,
-            0x03, 0x03, 0x02, 0x04, 0x03, 0x05, 0x05, 0x04, 0x04, 0x00, 0x00,
-            0x01, 0x7D, 0x01, 0x02, 0x03, 0x00, 0x04, 0x11, 0x05, 0x12, 0x21,
-            0x31, 0x41, 0x06, 0x13, 0x51, 0x61, 0x07, 0x22, 0x71, 0x14, 0x32,
-            0x81, 0x91, 0xA1, 0x08, 0x23, 0x42, 0xB1, 0xC1, 0x15, 0x52, 0xD1,
-            0xF0, 0x24, 0x33, 0x62, 0x72, 0x82, 0x09, 0x0A, 0x16, 0x17, 0x18,
-            0x19, 0x1A, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2A, 0x34, 0x35, 0x36,
-            0x37, 0x38, 0x39, 0x3A, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49,
-            0x4A, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x59, 0x5A, 0x63, 0x64,
-            0x65, 0x66, 0x67, 0x68, 0x69, 0x6A, 0x73, 0x74, 0x75, 0x76, 0x77,
-            0x78, 0x79, 0x7A, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x8A,
-            0x92, 0x93, 0x94, 0x95, 0x96, 0x97, 0x98, 0x99, 0x9A, 0xA2, 0xA3,
-            0xA4, 0xA5, 0xA6, 0xA7, 0xA8, 0xA9, 0xAA, 0xB2, 0xB3, 0xB4, 0xB5,
-            0xB6, 0xB7, 0xB8, 0xB9, 0xBA, 0xC2, 0xC3, 0xC4, 0xC5, 0xC6, 0xC7,
-            0xC8, 0xC9, 0xCA, 0xD2, 0xD3, 0xD4, 0xD5, 0xD6, 0xD7, 0xD8, 0xD9,
-            0xDA, 0xE1, 0xE2, 0xE3, 0xE4, 0xE5, 0xE6, 0xE7, 0xE8, 0xE9, 0xEA,
-            0xF1, 0xF2, 0xF3, 0xF4, 0xF5, 0xF6, 0xF7, 0xF8, 0xF9, 0xFA, 0xFF,
-            0xDA, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3F, 0x00, 0xFB, 0xD5,
-            0xDB, 0x20, 0xA8, 0xF3, 0xFF, 0xD9
-        ])
+        content = bytes(
+            [
+                0xFF,
+                0xD8,
+                0xFF,
+                0xE0,
+                0x00,
+                0x10,
+                0x4A,
+                0x46,
+                0x49,
+                0x46,
+                0x00,
+                0x01,
+                0x01,
+                0x00,
+                0x00,
+                0x01,
+                0x00,
+                0x01,
+                0x00,
+                0x00,
+                0xFF,
+                0xDB,
+                0x00,
+                0x43,
+                0x00,
+                0x08,
+                0x06,
+                0x06,
+                0x07,
+                0x06,
+                0x05,
+                0x08,
+                0x07,
+                0x07,
+                0x07,
+                0x09,
+                0x09,
+                0x08,
+                0x0A,
+                0x0C,
+                0x14,
+                0x0D,
+                0x0C,
+                0x0B,
+                0x0B,
+                0x0C,
+                0x19,
+                0x12,
+                0x13,
+                0x0F,
+                0x14,
+                0x1D,
+                0x1A,
+                0x1F,
+                0x1E,
+                0x1D,
+                0x1A,
+                0x1C,
+                0x1C,
+                0x20,
+                0x24,
+                0x2E,
+                0x27,
+                0x20,
+                0x22,
+                0x2C,
+                0x23,
+                0x1C,
+                0x1C,
+                0x28,
+                0x37,
+                0x29,
+                0x2C,
+                0x30,
+                0x31,
+                0x34,
+                0x34,
+                0x34,
+                0x1F,
+                0x27,
+                0x39,
+                0x3D,
+                0x38,
+                0x32,
+                0x3C,
+                0x2E,
+                0x33,
+                0x34,
+                0x32,
+                0xFF,
+                0xC0,
+                0x00,
+                0x0B,
+                0x08,
+                0x00,
+                0x01,
+                0x00,
+                0x01,
+                0x01,
+                0x01,
+                0x11,
+                0x00,
+                0xFF,
+                0xC4,
+                0x00,
+                0x1F,
+                0x00,
+                0x00,
+                0x01,
+                0x05,
+                0x01,
+                0x01,
+                0x01,
+                0x01,
+                0x01,
+                0x01,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x01,
+                0x02,
+                0x03,
+                0x04,
+                0x05,
+                0x06,
+                0x07,
+                0x08,
+                0x09,
+                0x0A,
+                0x0B,
+                0xFF,
+                0xC4,
+                0x00,
+                0xB5,
+                0x10,
+                0x00,
+                0x02,
+                0x01,
+                0x03,
+                0x03,
+                0x02,
+                0x04,
+                0x03,
+                0x05,
+                0x05,
+                0x04,
+                0x04,
+                0x00,
+                0x00,
+                0x01,
+                0x7D,
+                0x01,
+                0x02,
+                0x03,
+                0x00,
+                0x04,
+                0x11,
+                0x05,
+                0x12,
+                0x21,
+                0x31,
+                0x41,
+                0x06,
+                0x13,
+                0x51,
+                0x61,
+                0x07,
+                0x22,
+                0x71,
+                0x14,
+                0x32,
+                0x81,
+                0x91,
+                0xA1,
+                0x08,
+                0x23,
+                0x42,
+                0xB1,
+                0xC1,
+                0x15,
+                0x52,
+                0xD1,
+                0xF0,
+                0x24,
+                0x33,
+                0x62,
+                0x72,
+                0x82,
+                0x09,
+                0x0A,
+                0x16,
+                0x17,
+                0x18,
+                0x19,
+                0x1A,
+                0x25,
+                0x26,
+                0x27,
+                0x28,
+                0x29,
+                0x2A,
+                0x34,
+                0x35,
+                0x36,
+                0x37,
+                0x38,
+                0x39,
+                0x3A,
+                0x43,
+                0x44,
+                0x45,
+                0x46,
+                0x47,
+                0x48,
+                0x49,
+                0x4A,
+                0x53,
+                0x54,
+                0x55,
+                0x56,
+                0x57,
+                0x58,
+                0x59,
+                0x5A,
+                0x63,
+                0x64,
+                0x65,
+                0x66,
+                0x67,
+                0x68,
+                0x69,
+                0x6A,
+                0x73,
+                0x74,
+                0x75,
+                0x76,
+                0x77,
+                0x78,
+                0x79,
+                0x7A,
+                0x83,
+                0x84,
+                0x85,
+                0x86,
+                0x87,
+                0x88,
+                0x89,
+                0x8A,
+                0x92,
+                0x93,
+                0x94,
+                0x95,
+                0x96,
+                0x97,
+                0x98,
+                0x99,
+                0x9A,
+                0xA2,
+                0xA3,
+                0xA4,
+                0xA5,
+                0xA6,
+                0xA7,
+                0xA8,
+                0xA9,
+                0xAA,
+                0xB2,
+                0xB3,
+                0xB4,
+                0xB5,
+                0xB6,
+                0xB7,
+                0xB8,
+                0xB9,
+                0xBA,
+                0xC2,
+                0xC3,
+                0xC4,
+                0xC5,
+                0xC6,
+                0xC7,
+                0xC8,
+                0xC9,
+                0xCA,
+                0xD2,
+                0xD3,
+                0xD4,
+                0xD5,
+                0xD6,
+                0xD7,
+                0xD8,
+                0xD9,
+                0xDA,
+                0xE1,
+                0xE2,
+                0xE3,
+                0xE4,
+                0xE5,
+                0xE6,
+                0xE7,
+                0xE8,
+                0xE9,
+                0xEA,
+                0xF1,
+                0xF2,
+                0xF3,
+                0xF4,
+                0xF5,
+                0xF6,
+                0xF7,
+                0xF8,
+                0xF9,
+                0xFA,
+                0xFF,
+                0xDA,
+                0x00,
+                0x08,
+                0x01,
+                0x01,
+                0x00,
+                0x00,
+                0x3F,
+                0x00,
+                0xFB,
+                0xD5,
+                0xDB,
+                0x20,
+                0xA8,
+                0xF3,
+                0xFF,
+                0xD9,
+            ]
+        )
         return SimpleUploadedFile(name, content, content_type="image/jpeg")
 
     def test_upload_page_loads_with_form(self):
         """Upload page loads with the document upload form."""
-        response = self.client.get(reverse('claims:document_upload'))
+        response = self.client.get(reverse("claims:document_upload"))
         self.assertEqual(response.status_code, 200)
-        self.assertIn('form', response.context)
-        self.assertTemplateUsed(response, 'claims/document_upload.html')
+        self.assertIn("form", response.context)
+        self.assertTemplateUsed(response, "claims/document_upload.html")
 
     def test_upload_page_shows_document_types(self):
         """Upload form includes all document type options."""
-        response = self.client.get(reverse('claims:document_upload'))
+        response = self.client.get(reverse("claims:document_upload"))
         self.assertEqual(response.status_code, 200)
         content = response.content.decode()
         # Check for document type options
-        self.assertIn('medical_records', content)
-        self.assertIn('decision_letter', content)
+        self.assertIn("medical_records", content)
+        self.assertIn("decision_letter", content)
 
     def test_document_list_empty_for_new_user(self):
         """New user sees empty document list."""
-        response = self.client.get(reverse('claims:document_list'))
+        response = self.client.get(reverse("claims:document_list"))
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.context['documents']), 0)
+        self.assertEqual(len(response.context["documents"]), 0)
 
     def test_document_list_shows_uploaded_documents(self):
         """Document list shows user's uploaded documents."""
@@ -1202,9 +1520,9 @@ startxref
             status="completed",
         )
 
-        response = self.client.get(reverse('claims:document_list'))
+        response = self.client.get(reverse("claims:document_list"))
         self.assertEqual(response.status_code, 200)
-        documents = list(response.context['documents'])
+        documents = list(response.context["documents"])
         self.assertEqual(len(documents), 2)
 
     def test_document_detail_shows_metadata(self):
@@ -1222,10 +1540,10 @@ startxref
         )
 
         response = self.client.get(
-            reverse('claims:document_detail', kwargs={'pk': doc.pk})
+            reverse("claims:document_detail", kwargs={"pk": doc.pk})
         )
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.context['document'], doc)
+        self.assertEqual(response.context["document"], doc)
 
     def test_document_status_polling_htmx(self):
         """Status endpoint returns correct status for HTMX polling."""
@@ -1236,8 +1554,8 @@ startxref
         )
 
         response = self.client.get(
-            reverse('claims:document_status', kwargs={'pk': doc.pk}),
-            HTTP_HX_REQUEST='true'
+            reverse("claims:document_status", kwargs={"pk": doc.pk}),
+            HTTP_HX_REQUEST="true",
         )
         self.assertEqual(response.status_code, 200)
 
@@ -1251,8 +1569,8 @@ startxref
 
         # Check uploading status
         response = self.client.get(
-            reverse('claims:document_status', kwargs={'pk': doc.pk}),
-            HTTP_HX_REQUEST='true'
+            reverse("claims:document_status", kwargs={"pk": doc.pk}),
+            HTTP_HX_REQUEST="true",
         )
         self.assertEqual(response.status_code, 200)
 
@@ -1260,8 +1578,8 @@ startxref
         doc.mark_processing()
 
         response = self.client.get(
-            reverse('claims:document_status', kwargs={'pk': doc.pk}),
-            HTTP_HX_REQUEST='true'
+            reverse("claims:document_status", kwargs={"pk": doc.pk}),
+            HTTP_HX_REQUEST="true",
         )
         self.assertEqual(response.status_code, 200)
 
@@ -1269,8 +1587,8 @@ startxref
         doc.mark_completed(ocr_length=4, ocr_confidence=90.0, page_count=1)
 
         response = self.client.get(
-            reverse('claims:document_status', kwargs={'pk': doc.pk}),
-            HTTP_HX_REQUEST='true'
+            reverse("claims:document_status", kwargs={"pk": doc.pk}),
+            HTTP_HX_REQUEST="true",
         )
         self.assertEqual(response.status_code, 200)
 
@@ -1283,7 +1601,7 @@ startxref
         )
 
         response = self.client.post(
-            reverse('claims:document_delete', kwargs={'pk': doc.pk})
+            reverse("claims:document_delete", kwargs={"pk": doc.pk})
         )
         self.assertEqual(response.status_code, 302)
 
@@ -1292,8 +1610,8 @@ startxref
         self.assertTrue(doc.is_deleted)
 
         # Document should not appear in list
-        response = self.client.get(reverse('claims:document_list'))
-        documents = list(response.context['documents'])
+        response = self.client.get(reverse("claims:document_list"))
+        documents = list(response.context["documents"])
         self.assertNotIn(doc, documents)
 
 
@@ -1302,8 +1620,7 @@ class TestDocumentProcessingIntegration(TestCase):
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email="processing@example.com",
-            password="TestPass123!"
+            email="processing@example.com", password="TestPass123!"
         )
 
     def test_document_status_workflow(self):
@@ -1377,19 +1694,19 @@ class TestDocumentProcessingIntegration(TestCase):
 
         # Add AI results
         doc.ai_summary = {
-            'summary': 'Medical records showing PTSD diagnosis',
-            'key_findings': ['PTSD diagnosis', 'Treatment plan'],
+            "summary": "Medical records showing PTSD diagnosis",
+            "key_findings": ["PTSD diagnosis", "Treatment plan"],
         }
-        doc.ai_model_used = 'gpt-4'
+        doc.ai_model_used = "gpt-4"
         doc.ai_tokens_used = 1500
         doc.save()
 
         # Verify all data persisted
         doc.refresh_from_db()
-        self.assertEqual(doc.status, 'completed')
+        self.assertEqual(doc.status, "completed")
         self.assertEqual(doc.ocr_length, 35)
         self.assertIsNotNone(doc.ai_summary)
-        self.assertEqual(doc.ai_model_used, 'gpt-4')
+        self.assertEqual(doc.ai_model_used, "gpt-4")
         self.assertEqual(doc.ai_tokens_used, 1500)
 
 
@@ -1398,8 +1715,7 @@ class TestDenialDecoderEndToEnd(TestCase):
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email="denial@example.com",
-            password="TestPass123!"
+            email="denial@example.com", password="TestPass123!"
         )
         # Enable AI consent for denial decoder tests (required by require_ai_consent_view)
         self.user.profile.ai_processing_consent = True
@@ -1409,9 +1725,9 @@ class TestDenialDecoderEndToEnd(TestCase):
 
     def test_denial_decoder_page_loads(self):
         """Denial decoder upload page loads correctly."""
-        response = self.client.get(reverse('claims:denial_decoder'))
+        response = self.client.get(reverse("claims:denial_decoder"))
         self.assertEqual(response.status_code, 200)
-        self.assertIn('form', response.context)
+        self.assertIn("form", response.context)
 
     def test_denial_decoder_status_polling(self):
         """Denial decoder status endpoint works."""
@@ -1423,8 +1739,8 @@ class TestDenialDecoderEndToEnd(TestCase):
         )
 
         response = self.client.get(
-            reverse('claims:denial_decoder_status', kwargs={'pk': doc.pk}),
-            HTTP_HX_REQUEST='true'
+            reverse("claims:denial_decoder_status", kwargs={"pk": doc.pk}),
+            HTTP_HX_REQUEST="true",
         )
         self.assertEqual(response.status_code, 200)
 
@@ -1441,8 +1757,8 @@ class TestDenialDecoderEndToEnd(TestCase):
 
         # View status - should show completed
         response = self.client.get(
-            reverse('claims:denial_decoder_status', kwargs={'pk': doc.pk}),
-            HTTP_HX_REQUEST='true'
+            reverse("claims:denial_decoder_status", kwargs={"pk": doc.pk}),
+            HTTP_HX_REQUEST="true",
         )
         self.assertEqual(response.status_code, 200)
 
@@ -1452,12 +1768,10 @@ class TestDocumentSecurityIntegration(TestCase):
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email="security@example.com",
-            password="TestPass123!"
+            email="security@example.com", password="TestPass123!"
         )
         self.other_user = User.objects.create_user(
-            email="other@example.com",
-            password="TestPass123!"
+            email="other@example.com", password="TestPass123!"
         )
         self.client = Client()
 
@@ -1469,17 +1783,17 @@ class TestDocumentSecurityIntegration(TestCase):
         )
 
         # List
-        response = self.client.get(reverse('claims:document_list'))
+        response = self.client.get(reverse("claims:document_list"))
         self.assertEqual(response.status_code, 302)
 
         # Detail
         response = self.client.get(
-            reverse('claims:document_detail', kwargs={'pk': doc.pk})
+            reverse("claims:document_detail", kwargs={"pk": doc.pk})
         )
         self.assertEqual(response.status_code, 302)
 
         # Upload
-        response = self.client.get(reverse('claims:document_upload'))
+        response = self.client.get(reverse("claims:document_upload"))
         self.assertEqual(response.status_code, 302)
 
     def test_user_cannot_access_other_user_document_detail(self):
@@ -1492,7 +1806,7 @@ class TestDocumentSecurityIntegration(TestCase):
         self.client.login(email="other@example.com", password="TestPass123!")
 
         response = self.client.get(
-            reverse('claims:document_detail', kwargs={'pk': doc.pk})
+            reverse("claims:document_detail", kwargs={"pk": doc.pk})
         )
         self.assertEqual(response.status_code, 404)
 
@@ -1506,7 +1820,7 @@ class TestDocumentSecurityIntegration(TestCase):
         self.client.login(email="other@example.com", password="TestPass123!")
 
         response = self.client.post(
-            reverse('claims:document_delete', kwargs={'pk': doc.pk})
+            reverse("claims:document_delete", kwargs={"pk": doc.pk})
         )
         self.assertEqual(response.status_code, 404)
 
@@ -1524,8 +1838,8 @@ class TestDocumentSecurityIntegration(TestCase):
         self.client.login(email="other@example.com", password="TestPass123!")
 
         response = self.client.get(
-            reverse('claims:document_status', kwargs={'pk': doc.pk}),
-            HTTP_HX_REQUEST='true'
+            reverse("claims:document_status", kwargs={"pk": doc.pk}),
+            HTTP_HX_REQUEST="true",
         )
         self.assertEqual(response.status_code, 404)
 
@@ -1535,41 +1849,36 @@ class TestDocumentFormValidation(TestCase):
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email="validation@example.com",
-            password="TestPass123!"
+            email="validation@example.com", password="TestPass123!"
         )
 
     def test_form_rejects_oversized_file(self):
         """Form rejects files over size limit."""
         # Create mock large file
-        large_content = b'x' * (51 * 1024 * 1024)  # 51 MB
+        large_content = b"x" * (51 * 1024 * 1024)  # 51 MB
         large_file = SimpleUploadedFile(
-            "large.pdf",
-            large_content,
-            content_type="application/pdf"
+            "large.pdf", large_content, content_type="application/pdf"
         )
 
         form = DocumentUploadForm(
-            data={'document_type': 'medical_records'},
-            files={'file': large_file},
-            user=self.user
+            data={"document_type": "medical_records"},
+            files={"file": large_file},
+            user=self.user,
         )
 
         self.assertFalse(form.is_valid())
-        self.assertIn('file', form.errors)
+        self.assertIn("file", form.errors)
 
     def test_form_rejects_executable(self):
         """Form rejects executable files."""
         exe_file = SimpleUploadedFile(
             "malware.exe",
-            b"MZ\x90\x00" + b'\x00' * 100,  # DOS header
-            content_type="application/x-executable"
+            b"MZ\x90\x00" + b"\x00" * 100,  # DOS header
+            content_type="application/x-executable",
         )
 
         form = DocumentUploadForm(
-            data={'document_type': 'other'},
-            files={'file': exe_file},
-            user=self.user
+            data={"document_type": "other"}, files={"file": exe_file}, user=self.user
         )
 
         self.assertFalse(form.is_valid())
@@ -1579,30 +1888,26 @@ class TestDocumentFormValidation(TestCase):
         html_file = SimpleUploadedFile(
             "xss.html",
             b"<html><script>alert('xss')</script></html>",
-            content_type="text/html"
+            content_type="text/html",
         )
 
         form = DocumentUploadForm(
-            data={'document_type': 'other'},
-            files={'file': html_file},
-            user=self.user
+            data={"document_type": "other"}, files={"file": html_file}, user=self.user
         )
 
         self.assertFalse(form.is_valid())
 
     def test_form_rejects_script_extension(self):
         """Form rejects script file extensions."""
-        for ext in ['.js', '.py', '.sh', '.bat', '.ps1']:
+        for ext in [".js", ".py", ".sh", ".bat", ".ps1"]:
             script_file = SimpleUploadedFile(
-                f"script{ext}",
-                b"malicious code",
-                content_type="text/plain"
+                f"script{ext}", b"malicious code", content_type="text/plain"
             )
 
             form = DocumentUploadForm(
-                data={'document_type': 'other'},
-                files={'file': script_file},
-                user=self.user
+                data={"document_type": "other"},
+                files={"file": script_file},
+                user=self.user,
             )
 
             self.assertFalse(form.is_valid(), f"Should reject {ext} files")
@@ -1613,8 +1918,7 @@ class TestDocumentCompleteWorkflow(TestCase):
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email="workflow@example.com",
-            password="TestPass123!"
+            email="workflow@example.com", password="TestPass123!"
         )
         # Enable AI consent for workflow tests (required by require_ai_consent_view)
         self.user.profile.ai_processing_consent = True
@@ -1625,7 +1929,7 @@ class TestDocumentCompleteWorkflow(TestCase):
     def test_complete_upload_to_analysis_workflow(self):
         """Test complete workflow from upload to viewing analysis."""
         # 1. View upload page
-        response = self.client.get(reverse('claims:document_upload'))
+        response = self.client.get(reverse("claims:document_upload"))
         self.assertEqual(response.status_code, 200)
 
         # 2. Create document (simulating successful upload)
@@ -1648,31 +1952,31 @@ class TestDocumentCompleteWorkflow(TestCase):
 
         # Add AI analysis results
         doc.ai_summary = {
-            'summary': 'Medical records confirming PTSD diagnosis',
-            'key_findings': ['PTSD diagnosis', 'Ongoing treatment'],
-            'recommendations': ['Use for service connection claim'],
+            "summary": "Medical records confirming PTSD diagnosis",
+            "key_findings": ["PTSD diagnosis", "Ongoing treatment"],
+            "recommendations": ["Use for service connection claim"],
         }
-        doc.ai_model_used = 'gpt-4'
+        doc.ai_model_used = "gpt-4"
         doc.ai_tokens_used = 800
         doc.save()
 
         # 4. View document list - should show document
-        response = self.client.get(reverse('claims:document_list'))
+        response = self.client.get(reverse("claims:document_list"))
         self.assertEqual(response.status_code, 200)
-        self.assertIn(doc, response.context['documents'])
+        self.assertIn(doc, response.context["documents"])
 
         # 5. View document detail with analysis
         response = self.client.get(
-            reverse('claims:document_detail', kwargs={'pk': doc.pk})
+            reverse("claims:document_detail", kwargs={"pk": doc.pk})
         )
         self.assertEqual(response.status_code, 200)
-        detail_doc = response.context['document']
-        self.assertEqual(detail_doc.status, 'completed')
+        detail_doc = response.context["document"]
+        self.assertEqual(detail_doc.status, "completed")
         self.assertIsNotNone(detail_doc.ai_summary)
 
         # 6. Delete document
         response = self.client.post(
-            reverse('claims:document_delete', kwargs={'pk': doc.pk})
+            reverse("claims:document_delete", kwargs={"pk": doc.pk})
         )
         self.assertEqual(response.status_code, 302)
 
@@ -1681,14 +1985,16 @@ class TestDocumentCompleteWorkflow(TestCase):
         self.assertTrue(doc.is_deleted)
 
         # 8. Verify not in list
-        response = self.client.get(reverse('claims:document_list'))
-        self.assertNotIn(doc, response.context['documents'])
+        response = self.client.get(reverse("claims:document_list"))
+        self.assertNotIn(doc, response.context["documents"])
 
     def test_multiple_documents_workflow(self):
         """Test managing multiple documents."""
         # Create multiple documents
         docs = []
-        for i, doc_type in enumerate(['medical_records', 'buddy_statement', 'nexus_letter']):
+        for i, doc_type in enumerate(
+            ["medical_records", "buddy_statement", "nexus_letter"]
+        ):
             doc = Document.objects.create(
                 user=self.user,
                 file_name=f"document_{i}.pdf",
@@ -1700,24 +2006,22 @@ class TestDocumentCompleteWorkflow(TestCase):
             docs.append(doc)
 
         # View list
-        response = self.client.get(reverse('claims:document_list'))
-        self.assertEqual(len(response.context['documents']), 3)
+        response = self.client.get(reverse("claims:document_list"))
+        self.assertEqual(len(response.context["documents"]), 3)
 
         # View each detail
         for doc in docs:
             response = self.client.get(
-                reverse('claims:document_detail', kwargs={'pk': doc.pk})
+                reverse("claims:document_detail", kwargs={"pk": doc.pk})
             )
             self.assertEqual(response.status_code, 200)
 
         # Delete one
-        self.client.post(
-            reverse('claims:document_delete', kwargs={'pk': docs[0].pk})
-        )
+        self.client.post(reverse("claims:document_delete", kwargs={"pk": docs[0].pk}))
 
         # Verify count
-        response = self.client.get(reverse('claims:document_list'))
-        self.assertEqual(len(response.context['documents']), 2)
+        response = self.client.get(reverse("claims:document_list"))
+        self.assertEqual(len(response.context["documents"]), 2)
 
     def test_failed_document_workflow(self):
         """Test workflow when document processing fails."""
@@ -1733,14 +2037,14 @@ class TestDocumentCompleteWorkflow(TestCase):
 
         # View detail - should show error
         response = self.client.get(
-            reverse('claims:document_detail', kwargs={'pk': doc.pk})
+            reverse("claims:document_detail", kwargs={"pk": doc.pk})
         )
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.context['document'].has_failed)
+        self.assertTrue(response.context["document"].has_failed)
 
         # Status polling should reflect failure
         response = self.client.get(
-            reverse('claims:document_status', kwargs={'pk': doc.pk}),
-            HTTP_HX_REQUEST='true'
+            reverse("claims:document_status", kwargs={"pk": doc.pk}),
+            HTTP_HX_REQUEST="true",
         )
         self.assertEqual(response.status_code, 200)

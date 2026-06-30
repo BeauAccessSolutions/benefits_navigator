@@ -7,11 +7,9 @@ Enhanced with M21-1 reference data for accuracy.
 
 import json
 import logging
-import re
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import Optional
-from django.conf import settings
 
 # Import from the centralized AI gateway
 from .ai_gateway import (
@@ -19,9 +17,8 @@ from .ai_gateway import (
     sanitize_input,
     Result,
     CompletionResponse,
-    GatewayError,
-    ErrorCode,
 )
+
 
 # Backwards-compatible alias for sanitize_user_input
 # New code should use sanitize_input from ai_gateway directly
@@ -34,22 +31,12 @@ def sanitize_user_input(text: str) -> str:
     """
     return sanitize_input(text)
 
+
 from .reference_data import (
     load_appeal_guide,
     get_service_connection_guidance,
     get_evidence_guidance,
-    get_rating_guidance,
-    get_effective_date_guidance,
     get_musculoskeletal_guidance,
-    get_examination_guidance,
-    get_sections_by_topic,
-    format_m21_reference_for_prompt,
-    # Database-backed functions
-    get_m21_section_from_db,
-    search_m21_in_db,
-    get_m21_sections_by_part,
-    get_m21_stats,
-    search_m21_sections,
 )
 
 logger = logging.getLogger(__name__)
@@ -71,7 +58,9 @@ class BaseAgent:
         ANTHROPIC_API_KEY (only actual API calls do)."""
         return self._gateway.client
 
-    def _call_openai(self, system_prompt: str, user_prompt: str, temperature: float = 0.3) -> tuple[str, int]:
+    def _call_openai(
+        self, system_prompt: str, user_prompt: str, temperature: float = 0.3
+    ) -> tuple[str, int]:
         """
         Make an AI completion call and return response with token count.
 
@@ -156,9 +145,9 @@ class DecisionLetterAnalyzer(BaseAgent):
         appeal_info = []
 
         # Load appeal guides
-        hlr_guide = load_appeal_guide('hlr')
-        supp_guide = load_appeal_guide('supplemental')
-        board_guide = load_appeal_guide('board')
+        hlr_guide = load_appeal_guide("hlr")
+        supp_guide = load_appeal_guide("supplemental")
+        board_guide = load_appeal_guide("board")
 
         if hlr_guide:
             appeal_info.append(f"""
@@ -185,7 +174,7 @@ BOARD APPEAL (BVA):
 - Average processing: {board_guide.get('average_processing_days', 365)} days
 """)
 
-        return '\n'.join(appeal_info)
+        return "\n".join(appeal_info)
 
     def _build_system_prompt(self) -> str:
         """Build system prompt with M21-1 reference data"""
@@ -310,16 +299,18 @@ Provide your analysis in the JSON format specified. Be sure to recommend the BES
         result = self._parse_json_response(response)
 
         # Add token tracking
-        result['_tokens_used'] = tokens
-        result['_cost_estimate'] = float(self.estimate_cost(tokens))
+        result["_tokens_used"] = tokens
+        result["_cost_estimate"] = float(self.estimate_cost(tokens))
 
         # Calculate appeal deadline if decision date available
         if decision_date:
-            result['appeal_deadline'] = (decision_date + timedelta(days=365)).isoformat()
-        elif result.get('decision_date'):
+            result["appeal_deadline"] = (
+                decision_date + timedelta(days=365)
+            ).isoformat()
+        elif result.get("decision_date"):
             try:
-                d = date.fromisoformat(result['decision_date'])
-                result['appeal_deadline'] = (d + timedelta(days=365)).isoformat()
+                d = date.fromisoformat(result["decision_date"])
+                result["appeal_deadline"] = (d + timedelta(days=365)).isoformat()
             except (ValueError, TypeError):
                 pass
 
@@ -339,6 +330,7 @@ class DenialDecoderService(BaseAgent):
     def __init__(self):
         super().__init__()
         from .m21_matcher import M21Matcher
+
         self.m21_matcher = M21Matcher()
 
     def decode_denial(self, denial: dict) -> dict:
@@ -357,46 +349,49 @@ class DenialDecoderService(BaseAgent):
             - va_standard: Legal standard for this type of claim
             - common_mistakes: Pitfalls to avoid
         """
-        condition = denial.get('condition', '')
-        denial_reason = denial.get('denial_reason', '')
-        denial_category = denial.get('denial_category', 'evidence')
+        condition = denial.get("condition", "")
+        denial_reason = denial.get("denial_reason", "")
+        denial_category = denial.get("denial_category", "evidence")
 
         # If no category provided, try to categorize the denial reason
         if not denial_category and denial_reason:
-            denial_category, _ = self.m21_matcher.categorize_denial_reason(denial_reason)
+            denial_category, _ = self.m21_matcher.categorize_denial_reason(
+                denial_reason
+            )
 
         # Find relevant M21 sections
         matched_sections = self.m21_matcher.find_relevant_sections(
             condition=condition,
             denial_category=denial_category,
             denial_reason=denial_reason,
-            limit=5
+            limit=5,
         )
 
         # Get standard evidence types for this category
-        base_evidence = self.m21_matcher.get_evidence_types_for_category(denial_category)
+        base_evidence = self.m21_matcher.get_evidence_types_for_category(
+            denial_category
+        )
 
         # Enhance with AI-generated specific guidance
         enhanced_guidance = self._generate_enhanced_guidance(
             denial=denial,
             matched_sections=matched_sections,
-            base_evidence=base_evidence
+            base_evidence=base_evidence,
         )
 
         return {
             **denial,
-            'matched_m21_sections': matched_sections,
-            'required_evidence': enhanced_guidance.get('required_evidence', base_evidence),
-            'suggested_actions': enhanced_guidance.get('suggested_actions', []),
-            'va_standard': enhanced_guidance.get('va_standard', ''),
-            'common_mistakes': enhanced_guidance.get('common_mistakes', []),
+            "matched_m21_sections": matched_sections,
+            "required_evidence": enhanced_guidance.get(
+                "required_evidence", base_evidence
+            ),
+            "suggested_actions": enhanced_guidance.get("suggested_actions", []),
+            "va_standard": enhanced_guidance.get("va_standard", ""),
+            "common_mistakes": enhanced_guidance.get("common_mistakes", []),
         }
 
     def _generate_enhanced_guidance(
-        self,
-        denial: dict,
-        matched_sections: list,
-        base_evidence: list
+        self, denial: dict, matched_sections: list, base_evidence: list
     ) -> dict:
         """
         Use AI to generate specific guidance based on M21 context.
@@ -449,16 +444,20 @@ What standard will VA apply?"""
         try:
             response, tokens = self._call_openai(system_prompt, user_prompt)
             result = self._parse_json_response(response)
-            result['_tokens_used'] = tokens
+            result["_tokens_used"] = tokens
             return result
         except Exception as e:
             logger.error(f"Error generating enhanced guidance: {e}")
             # Return base evidence on error
             return {
-                'required_evidence': base_evidence,
-                'suggested_actions': ['Review denial letter carefully', 'Gather missing evidence', 'Consider appeal options'],
-                'va_standard': 'Preponderance of evidence standard',
-                'common_mistakes': [],
+                "required_evidence": base_evidence,
+                "suggested_actions": [
+                    "Review denial letter carefully",
+                    "Gather missing evidence",
+                    "Consider appeal options",
+                ],
+                "va_standard": "Preponderance of evidence standard",
+                "common_mistakes": [],
             }
 
     def _format_m21_for_prompt(self, sections: list) -> str:
@@ -472,7 +471,7 @@ What standard will VA apply?"""
 ## {section.get('reference', '')} - {section.get('title', '')}
 {section.get('key_excerpt', '')[:500]}
 """)
-        return '\n'.join(formatted)
+        return "\n".join(formatted)
 
     def generate_strategy(self, denial_mappings: list) -> str:
         """
@@ -490,8 +489,14 @@ What standard will VA apply?"""
         # Build summary of denials
         denial_summary = []
         for dm in denial_mappings:
-            critical_count = sum(1 for e in dm.get('required_evidence', []) if e.get('priority') == 'critical')
-            denial_summary.append(f"- {dm.get('condition', 'Unknown')}: {dm.get('denial_category', 'unknown')} ({critical_count} critical evidence items)")
+            critical_count = sum(
+                1
+                for e in dm.get("required_evidence", [])
+                if e.get("priority") == "critical"
+            )
+            denial_summary.append(
+                f"- {dm.get('condition', 'Unknown')}: {dm.get('denial_category', 'unknown')} ({critical_count} critical evidence items)"
+            )
 
         system_prompt = """You are an expert VA claims strategist. Create a concise overall strategy
 for addressing multiple denials in a VA appeal.
@@ -514,16 +519,20 @@ Full denial details:
 Provide a practical strategy the veteran can follow."""
 
         try:
-            response, tokens = self._call_openai(system_prompt, user_prompt, temperature=0.4)
+            response, tokens = self._call_openai(
+                system_prompt, user_prompt, temperature=0.4
+            )
             # For strategy, we want plain text not JSON
             # Remove any JSON formatting if present
-            if response.startswith('{') or response.startswith('```'):
+            if response.startswith("{") or response.startswith("```"):
                 result = self._parse_json_response(response)
-                return result.get('strategy', response)
+                return result.get("strategy", response)
             return response
         except Exception as e:
             logger.error(f"Error generating strategy: {e}")
-            return "Unable to generate strategy. Please review each denial individually."
+            return (
+                "Unable to generate strategy. Please review each denial individually."
+            )
 
     def decode_all_denials(self, denials: list) -> tuple[list, str, int]:
         """
@@ -541,7 +550,9 @@ Provide a practical strategy the veteran can follow."""
         for denial in denials:
             decoded_denial = self.decode_denial(denial)
             decoded.append(decoded_denial)
-            total_sections_searched += len(decoded_denial.get('matched_m21_sections', []))
+            total_sections_searched += len(
+                decoded_denial.get("matched_m21_sections", [])
+            )
 
         strategy = self.generate_strategy(decoded)
 
@@ -562,15 +573,15 @@ class EvidenceGapAnalyzer(BaseAgent):
 
         # Get general evidence guidance
         evidence_guidance = get_evidence_guidance()
-        if evidence_guidance.get('reviewing_evidence'):
-            section = evidence_guidance['reviewing_evidence']
+        if evidence_guidance.get("reviewing_evidence"):
+            section = evidence_guidance["reviewing_evidence"]
             reference_parts.append(f"""
 M21-1 EVIDENCE REVIEW STANDARDS (from {section.get('reference', 'M21-1.V.ii.1.A')}):
 {section.get('overview', '')[:800]}
 """)
 
-        if evidence_guidance.get('lay_evidence'):
-            section = evidence_guidance['lay_evidence']
+        if evidence_guidance.get("lay_evidence"):
+            section = evidence_guidance["lay_evidence"]
             reference_parts.append(f"""
 LAY EVIDENCE REQUIREMENTS (from {section.get('reference', 'M21-1.V.ii.1.B')}):
 {section.get('overview', '')[:500]}
@@ -578,8 +589,8 @@ LAY EVIDENCE REQUIREMENTS (from {section.get('reference', 'M21-1.V.ii.1.B')}):
 
         # Get service connection guidance
         sc_guidance = get_service_connection_guidance()
-        if sc_guidance.get('direct'):
-            section = sc_guidance['direct']
+        if sc_guidance.get("direct"):
+            section = sc_guidance["direct"]
             reference_parts.append(f"""
 DIRECT SERVICE CONNECTION REQUIREMENTS (from {section.get('reference', 'M21-1.V.ii.2.A')}):
 To establish direct service connection, evidence must show:
@@ -588,8 +599,8 @@ To establish direct service connection, evidence must show:
 3. Nexus (medical link) between current disability and service
 """)
 
-        if sc_guidance.get('secondary'):
-            section = sc_guidance['secondary']
+        if sc_guidance.get("secondary"):
+            section = sc_guidance["secondary"]
             reference_parts.append(f"""
 SECONDARY SERVICE CONNECTION (from {section.get('reference', 'M21-1.V.ii.2.D')}):
 For secondary conditions, evidence must show:
@@ -599,11 +610,22 @@ For secondary conditions, evidence must show:
 """)
 
         # Check for musculoskeletal conditions
-        musculoskeletal_keywords = ['back', 'knee', 'shoulder', 'hip', 'spine', 'joint', 'arthritis']
-        if any(keyword in ' '.join(conditions).lower() for keyword in musculoskeletal_keywords):
+        musculoskeletal_keywords = [
+            "back",
+            "knee",
+            "shoulder",
+            "hip",
+            "spine",
+            "joint",
+            "arthritis",
+        ]
+        if any(
+            keyword in " ".join(conditions).lower()
+            for keyword in musculoskeletal_keywords
+        ):
             msk_guidance = get_musculoskeletal_guidance()
-            if msk_guidance.get('painful_motion'):
-                section = msk_guidance['painful_motion']
+            if msk_guidance.get("painful_motion"):
+                section = msk_guidance["painful_motion"]
                 reference_parts.append(f"""
 MUSCULOSKELETAL EVIDENCE (from {section.get('reference', 'M21-1.V.iii.1.A')}):
 For joint/spine conditions, evidence should document:
@@ -613,7 +635,7 @@ For joint/spine conditions, evidence should document:
 - Impact on weight-bearing activities
 """)
 
-        return '\n'.join(reference_parts)
+        return "\n".join(reference_parts)
 
     def _build_system_prompt(self, conditions: list) -> str:
         """Build system prompt with M21-1 reference data"""
@@ -697,17 +719,30 @@ OUTPUT FORMAT (JSON):
     "m21_references_used": ["M21-1.V.ii.2.A", "M21-1.V.ii.1.B"]
 }}"""
 
-    def analyze(self, conditions: list, existing_evidence: list,
-                service_dates: str = "", service_branch: str = "") -> dict:
+    def analyze(
+        self,
+        conditions: list,
+        existing_evidence: list,
+        service_dates: str = "",
+        service_branch: str = "",
+    ) -> dict:
         """Analyze evidence gaps for claimed conditions"""
 
         system_prompt = self._build_system_prompt(conditions)
 
         # Sanitize user-provided inputs
         safe_conditions = [sanitize_user_input(c) for c in conditions]
-        safe_evidence = [sanitize_user_input(e) for e in existing_evidence] if existing_evidence else []
+        safe_evidence = (
+            [sanitize_user_input(e) for e in existing_evidence]
+            if existing_evidence
+            else []
+        )
         conditions_text = "\n".join([f"- {c}" for c in safe_conditions])
-        evidence_text = "\n".join([f"- {e}" for e in safe_evidence]) if safe_evidence else "None provided"
+        evidence_text = (
+            "\n".join([f"- {e}" for e in safe_evidence])
+            if safe_evidence
+            else "None provided"
+        )
 
         user_prompt = f"""Please analyze the evidence gaps for these VA disability claims using M21-1 requirements:
 
@@ -736,8 +771,8 @@ Identify what evidence is missing and provide prioritized, specific recommendati
         response, tokens = self._call_openai(system_prompt, user_prompt)
         result = self._parse_json_response(response)
 
-        result['_tokens_used'] = tokens
-        result['_cost_estimate'] = float(self.estimate_cost(tokens))
+        result["_tokens_used"] = tokens
+        result["_cost_estimate"] = float(self.estimate_cost(tokens))
 
         return result
 
@@ -756,8 +791,8 @@ class PersonalStatementGenerator(BaseAgent):
 
         # Get lay evidence guidance
         evidence_guidance = get_evidence_guidance()
-        if evidence_guidance.get('lay_evidence'):
-            section = evidence_guidance['lay_evidence']
+        if evidence_guidance.get("lay_evidence"):
+            section = evidence_guidance["lay_evidence"]
             reference_parts.append(f"""
 M21-1 LAY EVIDENCE GUIDANCE (from {section.get('reference', 'M21-1.V.ii.1.B')}):
 VA must consider lay evidence (veteran's own statements) when:
@@ -776,7 +811,7 @@ Effective lay statements should include:
 
         # Get service connection info
         sc_guidance = get_service_connection_guidance()
-        if sc_guidance.get('direct'):
+        if sc_guidance.get("direct"):
             reference_parts.append("""
 SERVICE CONNECTION ELEMENTS TO ADDRESS:
 1. In-Service Event: Clearly describe what happened during service
@@ -785,17 +820,17 @@ SERVICE CONNECTION ELEMENTS TO ADDRESS:
 4. Functional Impact: Describe limitations in daily life and work
 """)
 
-        return '\n'.join(reference_parts)
+        return "\n".join(reference_parts)
 
     def _build_system_prompt(self, condition: str, statement_type: str) -> str:
         """Build system prompt with M21-1 reference data"""
         statement_reference = self._get_statement_reference(condition, statement_type)
 
         statement_type_context = {
-            'initial': "This is for an initial VA disability claim. Focus on establishing service connection by clearly linking the condition to service.",
-            'increase': "This is for a rating increase. Focus on how symptoms have WORSENED since the last rating, with specific examples of increased limitations.",
-            'secondary': "This is for a secondary condition claim. Clearly explain how the already service-connected primary condition CAUSED or AGGRAVATED this secondary condition.",
-            'appeal': "This is for an appeal of a denied claim. Address the SPECIFIC reasons for denial and provide additional detail on those points."
+            "initial": "This is for an initial VA disability claim. Focus on establishing service connection by clearly linking the condition to service.",
+            "increase": "This is for a rating increase. Focus on how symptoms have WORSENED since the last rating, with specific examples of increased limitations.",
+            "secondary": "This is for a secondary condition claim. Clearly explain how the already service-connected primary condition CAUSED or AGGRAVATED this secondary condition.",
+            "appeal": "This is for an appeal of a denied claim. Address the SPECIFIC reasons for denial and provide additional detail on those points.",
         }
 
         context = statement_type_context.get(statement_type, "")
@@ -849,15 +884,23 @@ OUTPUT FORMAT (JSON):
 }}"""
 
     STATEMENT_TYPE_CONTEXT = {
-        'initial': "This is for an initial VA disability claim. Focus on establishing service connection.",
-        'increase': "This is for a rating increase. Focus on worsening symptoms since last rating.",
-        'secondary': "This is for a secondary condition claim. Emphasize how the primary condition caused this.",
-        'appeal': "This is for an appeal. Address the specific reasons for the previous denial."
+        "initial": "This is for an initial VA disability claim. Focus on establishing service connection.",
+        "increase": "This is for a rating increase. Focus on worsening symptoms since last rating.",
+        "secondary": "This is for a secondary condition claim. Emphasize how the primary condition caused this.",
+        "appeal": "This is for an appeal. Address the specific reasons for the previous denial.",
     }
 
-    def generate(self, condition: str, in_service_event: str, current_symptoms: str,
-                 daily_impact: str, work_impact: str = "", treatment_history: str = "",
-                 worst_days: str = "", statement_type: str = "initial") -> dict:
+    def generate(
+        self,
+        condition: str,
+        in_service_event: str,
+        current_symptoms: str,
+        daily_impact: str,
+        work_impact: str = "",
+        treatment_history: str = "",
+        worst_days: str = "",
+        statement_type: str = "initial",
+    ) -> dict:
         """Generate a personal statement from veteran's input"""
 
         system_prompt = self._build_system_prompt(condition, statement_type)
@@ -868,9 +911,13 @@ OUTPUT FORMAT (JSON):
         safe_in_service = sanitize_user_input(in_service_event)
         safe_symptoms = sanitize_user_input(current_symptoms)
         safe_daily = sanitize_user_input(daily_impact)
-        safe_work = sanitize_user_input(work_impact) if work_impact else 'Not provided'
-        safe_treatment = sanitize_user_input(treatment_history) if treatment_history else 'Not provided'
-        safe_worst = sanitize_user_input(worst_days) if worst_days else 'Not provided'
+        safe_work = sanitize_user_input(work_impact) if work_impact else "Not provided"
+        safe_treatment = (
+            sanitize_user_input(treatment_history)
+            if treatment_history
+            else "Not provided"
+        )
+        safe_worst = sanitize_user_input(worst_days) if worst_days else "Not provided"
 
         user_prompt = f"""Please write a personal statement for this VA disability claim:
 
@@ -903,11 +950,13 @@ WORST DAYS/FLARE-UPS:
 
 Generate a compelling, properly structured personal statement that addresses VA M21-1 requirements for effective lay evidence. Include specific details, frequencies, and concrete examples of limitations."""
 
-        response, tokens = self._call_openai(system_prompt, user_prompt, temperature=0.5)
+        response, tokens = self._call_openai(
+            system_prompt, user_prompt, temperature=0.5
+        )
         result = self._parse_json_response(response)
 
-        result['_tokens_used'] = tokens
-        result['_cost_estimate'] = float(self.estimate_cost(tokens))
+        result["_tokens_used"] = tokens
+        result["_cost_estimate"] = float(self.estimate_cost(tokens))
 
         return result
 
@@ -919,20 +968,26 @@ def analyze_decision_letter(text: str, decision_date: Optional[date] = None) -> 
     return analyzer.analyze(text, decision_date)
 
 
-def analyze_evidence_gaps(conditions: list, evidence: list,
-                          service_dates: str = "", branch: str = "") -> dict:
+def analyze_evidence_gaps(
+    conditions: list, evidence: list, service_dates: str = "", branch: str = ""
+) -> dict:
     """Analyze evidence gaps for a claim"""
     analyzer = EvidenceGapAnalyzer()
     return analyzer.analyze(conditions, evidence, service_dates, branch)
 
 
-def generate_personal_statement(condition: str, in_service_event: str,
-                                current_symptoms: str, daily_impact: str,
-                                **kwargs) -> dict:
+def generate_personal_statement(
+    condition: str,
+    in_service_event: str,
+    current_symptoms: str,
+    daily_impact: str,
+    **kwargs,
+) -> dict:
     """Generate a personal statement"""
     generator = PersonalStatementGenerator()
-    return generator.generate(condition, in_service_event, current_symptoms,
-                              daily_impact, **kwargs)
+    return generator.generate(
+        condition, in_service_event, current_symptoms, daily_impact, **kwargs
+    )
 
 
 def decode_denials(denials: list) -> tuple[list, str, int]:
@@ -957,217 +1012,271 @@ class EvidenceChecklistGenerator(BaseAgent):
 
     # Standard evidence categories
     EVIDENCE_CATEGORIES = [
-        'Medical Evidence',
-        'Service Records',
-        'Nexus / Medical Opinion',
-        'Lay Evidence',
-        'Supporting Documentation',
+        "Medical Evidence",
+        "Service Records",
+        "Nexus / Medical Opinion",
+        "Lay Evidence",
+        "Supporting Documentation",
     ]
 
     # Base evidence templates for different claim types
     CLAIM_TYPE_TEMPLATES = {
-        'initial': [
+        "initial": [
             {
-                'id': 'current_diagnosis',
-                'category': 'Medical Evidence',
-                'title': 'Current Medical Diagnosis',
-                'description': 'Medical records showing you currently have this condition',
-                'priority': 'critical',
-                'm21_reference': 'M21-1.V.ii.2.A',
-                'tips': ['Get records from your current doctor', 'Include recent test results']
+                "id": "current_diagnosis",
+                "category": "Medical Evidence",
+                "title": "Current Medical Diagnosis",
+                "description": "Medical records showing you currently have this condition",
+                "priority": "critical",
+                "m21_reference": "M21-1.V.ii.2.A",
+                "tips": [
+                    "Get records from your current doctor",
+                    "Include recent test results",
+                ],
             },
             {
-                'id': 'in_service_event',
-                'category': 'Service Records',
-                'title': 'Evidence of In-Service Event',
-                'description': 'Documentation showing injury, illness, or event during service',
-                'priority': 'critical',
-                'm21_reference': 'M21-1.V.ii.2.A',
-                'tips': ['Check your STRs (Service Treatment Records)', 'Request records from NPRC if needed']
+                "id": "in_service_event",
+                "category": "Service Records",
+                "title": "Evidence of In-Service Event",
+                "description": "Documentation showing injury, illness, or event during service",
+                "priority": "critical",
+                "m21_reference": "M21-1.V.ii.2.A",
+                "tips": [
+                    "Check your STRs (Service Treatment Records)",
+                    "Request records from NPRC if needed",
+                ],
             },
             {
-                'id': 'nexus_letter',
-                'category': 'Nexus / Medical Opinion',
-                'title': 'Nexus Letter / IMO',
-                'description': 'Medical opinion stating condition is "at least as likely as not" related to service',
-                'priority': 'critical',
-                'm21_reference': 'M21-1.V.ii.2.A',
-                'tips': ['Ask your treating doctor', 'Consider private IMO if needed', 'Must include rationale']
+                "id": "nexus_letter",
+                "category": "Nexus / Medical Opinion",
+                "title": "Nexus Letter / IMO",
+                "description": 'Medical opinion stating condition is "at least as likely as not" related to service',
+                "priority": "critical",
+                "m21_reference": "M21-1.V.ii.2.A",
+                "tips": [
+                    "Ask your treating doctor",
+                    "Consider private IMO if needed",
+                    "Must include rationale",
+                ],
             },
             {
-                'id': 'personal_statement',
-                'category': 'Lay Evidence',
-                'title': 'Personal Statement',
-                'description': 'Your detailed account of in-service event, symptoms since, and current impact',
-                'priority': 'important',
-                'm21_reference': 'M21-1.V.ii.1.B',
-                'tips': ['Be specific about dates and symptoms', 'Describe worst days', 'Explain daily limitations']
+                "id": "personal_statement",
+                "category": "Lay Evidence",
+                "title": "Personal Statement",
+                "description": "Your detailed account of in-service event, symptoms since, and current impact",
+                "priority": "important",
+                "m21_reference": "M21-1.V.ii.1.B",
+                "tips": [
+                    "Be specific about dates and symptoms",
+                    "Describe worst days",
+                    "Explain daily limitations",
+                ],
             },
             {
-                'id': 'buddy_statement',
-                'category': 'Lay Evidence',
-                'title': 'Buddy Statement',
-                'description': 'Statement from someone who witnessed your condition or can verify your account',
-                'priority': 'helpful',
-                'm21_reference': 'M21-1.V.ii.1.B',
-                'tips': ['Fellow service members are best', 'Family can speak to current symptoms']
-            },
-        ],
-        'increase': [
-            {
-                'id': 'recent_records',
-                'category': 'Medical Evidence',
-                'title': 'Recent Medical Records',
-                'description': 'Medical records showing current symptom severity',
-                'priority': 'critical',
-                'm21_reference': 'M21-1.V.ii.1.A',
-                'tips': ['Records within past 12 months', 'Include all treatment for this condition']
-            },
-            {
-                'id': 'severity_statement',
-                'category': 'Lay Evidence',
-                'title': 'Severity Statement',
-                'description': 'Personal statement describing how condition has worsened',
-                'priority': 'important',
-                'm21_reference': 'M21-1.V.ii.1.B',
-                'tips': ['Compare to when you were last rated', 'Describe new limitations', 'Include worst days']
-            },
-            {
-                'id': 'work_impact',
-                'category': 'Supporting Documentation',
-                'title': 'Employment Impact Documentation',
-                'description': 'Evidence showing impact on work (sick leave, accommodations, job loss)',
-                'priority': 'important',
-                'tips': ['HR records', 'FMLA paperwork', 'Employer statements']
+                "id": "buddy_statement",
+                "category": "Lay Evidence",
+                "title": "Buddy Statement",
+                "description": "Statement from someone who witnessed your condition or can verify your account",
+                "priority": "helpful",
+                "m21_reference": "M21-1.V.ii.1.B",
+                "tips": [
+                    "Fellow service members are best",
+                    "Family can speak to current symptoms",
+                ],
             },
         ],
-        'secondary': [
+        "increase": [
             {
-                'id': 'primary_sc_proof',
-                'category': 'Service Records',
-                'title': 'Proof of Primary Service-Connected Condition',
-                'description': 'Evidence that your primary condition is already service-connected',
-                'priority': 'critical',
-                'm21_reference': 'M21-1.V.ii.2.D',
-                'tips': ['Copy of rating decision', 'Benefits summary letter']
+                "id": "recent_records",
+                "category": "Medical Evidence",
+                "title": "Recent Medical Records",
+                "description": "Medical records showing current symptom severity",
+                "priority": "critical",
+                "m21_reference": "M21-1.V.ii.1.A",
+                "tips": [
+                    "Records within past 12 months",
+                    "Include all treatment for this condition",
+                ],
             },
             {
-                'id': 'secondary_diagnosis',
-                'category': 'Medical Evidence',
-                'title': 'Diagnosis of Secondary Condition',
-                'description': 'Medical diagnosis of the new condition you are claiming',
-                'priority': 'critical',
-                'm21_reference': 'M21-1.V.ii.2.D',
-                'tips': ['Current diagnosis from treating doctor']
+                "id": "severity_statement",
+                "category": "Lay Evidence",
+                "title": "Severity Statement",
+                "description": "Personal statement describing how condition has worsened",
+                "priority": "important",
+                "m21_reference": "M21-1.V.ii.1.B",
+                "tips": [
+                    "Compare to when you were last rated",
+                    "Describe new limitations",
+                    "Include worst days",
+                ],
             },
             {
-                'id': 'secondary_nexus',
-                'category': 'Nexus / Medical Opinion',
-                'title': 'Secondary Nexus Opinion',
-                'description': 'Medical opinion that primary condition caused or aggravated secondary condition',
-                'priority': 'critical',
-                'm21_reference': 'M21-1.V.ii.2.D',
-                'tips': ['Must explain causation or aggravation', 'Doctor should review your file']
+                "id": "work_impact",
+                "category": "Supporting Documentation",
+                "title": "Employment Impact Documentation",
+                "description": "Evidence showing impact on work (sick leave, accommodations, job loss)",
+                "priority": "important",
+                "tips": ["HR records", "FMLA paperwork", "Employer statements"],
             },
         ],
-        'appeal': [
+        "secondary": [
             {
-                'id': 'denial_letter',
-                'category': 'Supporting Documentation',
-                'title': 'Copy of Denial Letter',
-                'description': 'The VA decision letter you are appealing',
-                'priority': 'critical',
-                'tips': ['Keep the original', 'Note specific denial reasons']
+                "id": "primary_sc_proof",
+                "category": "Service Records",
+                "title": "Proof of Primary Service-Connected Condition",
+                "description": "Evidence that your primary condition is already service-connected",
+                "priority": "critical",
+                "m21_reference": "M21-1.V.ii.2.D",
+                "tips": ["Copy of rating decision", "Benefits summary letter"],
             },
             {
-                'id': 'new_evidence',
-                'category': 'Medical Evidence',
-                'title': 'New and Relevant Evidence',
-                'description': 'Evidence that addresses the specific reason for denial',
-                'priority': 'critical',
-                'm21_reference': 'M21-1.V.ii.1.A',
-                'tips': ['Must be new OR previously not considered', 'Address each denial reason']
+                "id": "secondary_diagnosis",
+                "category": "Medical Evidence",
+                "title": "Diagnosis of Secondary Condition",
+                "description": "Medical diagnosis of the new condition you are claiming",
+                "priority": "critical",
+                "m21_reference": "M21-1.V.ii.2.D",
+                "tips": ["Current diagnosis from treating doctor"],
             },
             {
-                'id': 'nexus_update',
-                'category': 'Nexus / Medical Opinion',
-                'title': 'Updated Nexus Letter',
-                'description': 'Medical opinion addressing VA\'s specific objections',
-                'priority': 'critical',
-                'tips': ['Address why VA was wrong', 'Respond to C&P exam if unfavorable']
+                "id": "secondary_nexus",
+                "category": "Nexus / Medical Opinion",
+                "title": "Secondary Nexus Opinion",
+                "description": "Medical opinion that primary condition caused or aggravated secondary condition",
+                "priority": "critical",
+                "m21_reference": "M21-1.V.ii.2.D",
+                "tips": [
+                    "Must explain causation or aggravation",
+                    "Doctor should review your file",
+                ],
+            },
+        ],
+        "appeal": [
+            {
+                "id": "denial_letter",
+                "category": "Supporting Documentation",
+                "title": "Copy of Denial Letter",
+                "description": "The VA decision letter you are appealing",
+                "priority": "critical",
+                "tips": ["Keep the original", "Note specific denial reasons"],
+            },
+            {
+                "id": "new_evidence",
+                "category": "Medical Evidence",
+                "title": "New and Relevant Evidence",
+                "description": "Evidence that addresses the specific reason for denial",
+                "priority": "critical",
+                "m21_reference": "M21-1.V.ii.1.A",
+                "tips": [
+                    "Must be new OR previously not considered",
+                    "Address each denial reason",
+                ],
+            },
+            {
+                "id": "nexus_update",
+                "category": "Nexus / Medical Opinion",
+                "title": "Updated Nexus Letter",
+                "description": "Medical opinion addressing VA's specific objections",
+                "priority": "critical",
+                "tips": [
+                    "Address why VA was wrong",
+                    "Respond to C&P exam if unfavorable",
+                ],
             },
         ],
     }
 
     # Condition-specific additions
     CONDITION_SPECIFIC = {
-        'ptsd': [
+        "ptsd": [
             {
-                'id': 'stressor_statement',
-                'category': 'Lay Evidence',
-                'title': 'Stressor Statement',
-                'description': 'Detailed account of traumatic event(s) during service',
-                'priority': 'critical',
-                'm21_reference': 'M21-1.V.ii.3.D',
-                'tips': ['Be specific about who, what, when, where', 'Include unit and dates', 'Describe emotional impact']
+                "id": "stressor_statement",
+                "category": "Lay Evidence",
+                "title": "Stressor Statement",
+                "description": "Detailed account of traumatic event(s) during service",
+                "priority": "critical",
+                "m21_reference": "M21-1.V.ii.3.D",
+                "tips": [
+                    "Be specific about who, what, when, where",
+                    "Include unit and dates",
+                    "Describe emotional impact",
+                ],
             },
             {
-                'id': 'stressor_corroboration',
-                'category': 'Service Records',
-                'title': 'Stressor Corroboration',
-                'description': 'Evidence supporting your stressor (unit records, news, buddy statements)',
-                'priority': 'important',
-                'm21_reference': 'M21-1.V.ii.3.D',
-                'tips': ['Combat veterans may not need this', 'Request unit records from NPRC']
-            },
-        ],
-        'mst': [
-            {
-                'id': 'mst_markers',
-                'category': 'Service Records',
-                'title': 'MST Markers Evidence',
-                'description': 'Records showing behavioral changes after assault (requests for transfer, performance decline, etc.)',
-                'priority': 'important',
-                'm21_reference': 'M21-1.III.iv.4',
-                'tips': ['VA accepts many types of markers', 'Performance evals, counseling, requests for transfer']
+                "id": "stressor_corroboration",
+                "category": "Service Records",
+                "title": "Stressor Corroboration",
+                "description": "Evidence supporting your stressor (unit records, news, buddy statements)",
+                "priority": "important",
+                "m21_reference": "M21-1.V.ii.3.D",
+                "tips": [
+                    "Combat veterans may not need this",
+                    "Request unit records from NPRC",
+                ],
             },
         ],
-        'tbi': [
+        "mst": [
             {
-                'id': 'tbi_event_docs',
-                'category': 'Service Records',
-                'title': 'TBI Event Documentation',
-                'description': 'Records of blast exposure, accident, or injury during service',
-                'priority': 'critical',
-                'tips': ['Purple Heart', 'Combat deployment records', 'Incident reports']
+                "id": "mst_markers",
+                "category": "Service Records",
+                "title": "MST Markers Evidence",
+                "description": "Records showing behavioral changes after assault (requests for transfer, performance decline, etc.)",
+                "priority": "important",
+                "m21_reference": "M21-1.III.iv.4",
+                "tips": [
+                    "VA accepts many types of markers",
+                    "Performance evals, counseling, requests for transfer",
+                ],
             },
         ],
-        'sleep_apnea': [
+        "tbi": [
             {
-                'id': 'sleep_study',
-                'category': 'Medical Evidence',
-                'title': 'Sleep Study Results',
-                'description': 'Polysomnography (PSG) showing sleep apnea diagnosis',
-                'priority': 'critical',
-                'tips': ['Must have formal sleep study', 'Include AHI score']
+                "id": "tbi_event_docs",
+                "category": "Service Records",
+                "title": "TBI Event Documentation",
+                "description": "Records of blast exposure, accident, or injury during service",
+                "priority": "critical",
+                "tips": [
+                    "Purple Heart",
+                    "Combat deployment records",
+                    "Incident reports",
+                ],
             },
         ],
-        'hearing': [
+        "sleep_apnea": [
             {
-                'id': 'audiogram',
-                'category': 'Medical Evidence',
-                'title': 'Current Audiogram',
-                'description': 'Recent hearing test showing hearing loss severity',
-                'priority': 'critical',
-                'tips': ['Must be within 12 months', 'Maryland CNC word recognition test']
+                "id": "sleep_study",
+                "category": "Medical Evidence",
+                "title": "Sleep Study Results",
+                "description": "Polysomnography (PSG) showing sleep apnea diagnosis",
+                "priority": "critical",
+                "tips": ["Must have formal sleep study", "Include AHI score"],
+            },
+        ],
+        "hearing": [
+            {
+                "id": "audiogram",
+                "category": "Medical Evidence",
+                "title": "Current Audiogram",
+                "description": "Recent hearing test showing hearing loss severity",
+                "priority": "critical",
+                "tips": [
+                    "Must be within 12 months",
+                    "Maryland CNC word recognition test",
+                ],
             },
             {
-                'id': 'noise_exposure',
-                'category': 'Service Records',
-                'title': 'Noise Exposure Documentation',
-                'description': 'Evidence of loud noise exposure during service (MOS, deployment, equipment)',
-                'priority': 'important',
-                'tips': ['DD-214 MOS code', 'Unit history', 'Weapons qualification records']
+                "id": "noise_exposure",
+                "category": "Service Records",
+                "title": "Noise Exposure Documentation",
+                "description": "Evidence of loud noise exposure during service (MOS, deployment, equipment)",
+                "priority": "important",
+                "tips": [
+                    "DD-214 MOS code",
+                    "Unit history",
+                    "Weapons qualification records",
+                ],
             },
         ],
     }
@@ -1175,14 +1284,15 @@ class EvidenceChecklistGenerator(BaseAgent):
     def __init__(self):
         super().__init__()
         from .m21_matcher import M21Matcher
+
         self.m21_matcher = M21Matcher()
 
     def generate_checklist(
         self,
         condition: str,
         claim_type: str,
-        primary_condition: str = '',
-        denial_context: dict = None
+        primary_condition: str = "",
+        denial_context: dict = None,
     ) -> list:
         """
         Generate evidence checklist for a condition claim.
@@ -1199,14 +1309,26 @@ class EvidenceChecklistGenerator(BaseAgent):
         checklist = []
 
         # 1. Get base template for claim type
-        base_items = self.CLAIM_TYPE_TEMPLATES.get(claim_type, self.CLAIM_TYPE_TEMPLATES['initial'])
-        checklist.extend([{**item, 'completed': False, 'completed_at': None, 'notes': ''} for item in base_items])
+        base_items = self.CLAIM_TYPE_TEMPLATES.get(
+            claim_type, self.CLAIM_TYPE_TEMPLATES["initial"]
+        )
+        checklist.extend(
+            [
+                {**item, "completed": False, "completed_at": None, "notes": ""}
+                for item in base_items
+            ]
+        )
 
         # 2. Add condition-specific items
         condition_key = self._normalize_condition(condition)
         if condition_key in self.CONDITION_SPECIFIC:
             condition_items = self.CONDITION_SPECIFIC[condition_key]
-            checklist.extend([{**item, 'completed': False, 'completed_at': None, 'notes': ''} for item in condition_items])
+            checklist.extend(
+                [
+                    {**item, "completed": False, "completed_at": None, "notes": ""}
+                    for item in condition_items
+                ]
+            )
 
         # 3. If denial context, add items addressing denial reasons
         if denial_context:
@@ -1217,13 +1339,15 @@ class EvidenceChecklistGenerator(BaseAgent):
         seen_ids = set()
         unique_checklist = []
         for item in checklist:
-            if item['id'] not in seen_ids:
-                seen_ids.add(item['id'])
+            if item["id"] not in seen_ids:
+                seen_ids.add(item["id"])
                 unique_checklist.append(item)
 
         # 5. Sort by priority
-        priority_order = {'critical': 0, 'important': 1, 'helpful': 2}
-        unique_checklist.sort(key=lambda x: priority_order.get(x.get('priority', 'helpful'), 3))
+        priority_order = {"critical": 0, "important": 1, "helpful": 2}
+        unique_checklist.sort(
+            key=lambda x: priority_order.get(x.get("priority", "helpful"), 3)
+        )
 
         return unique_checklist
 
@@ -1232,16 +1356,20 @@ class EvidenceChecklistGenerator(BaseAgent):
         condition = condition.lower().strip()
 
         # Common normalizations
-        if 'ptsd' in condition or 'post-traumatic' in condition or 'post traumatic' in condition:
-            return 'ptsd'
-        if 'mst' in condition or 'military sexual trauma' in condition:
-            return 'mst'
-        if 'tbi' in condition or 'traumatic brain' in condition:
-            return 'tbi'
-        if 'sleep apnea' in condition or 'apnea' in condition:
-            return 'sleep_apnea'
-        if 'hearing' in condition or 'tinnitus' in condition:
-            return 'hearing'
+        if (
+            "ptsd" in condition
+            or "post-traumatic" in condition
+            or "post traumatic" in condition
+        ):
+            return "ptsd"
+        if "mst" in condition or "military sexual trauma" in condition:
+            return "mst"
+        if "tbi" in condition or "traumatic brain" in condition:
+            return "tbi"
+        if "sleep apnea" in condition or "apnea" in condition:
+            return "sleep_apnea"
+        if "hearing" in condition or "tinnitus" in condition:
+            return "hearing"
 
         return condition
 
@@ -1249,48 +1377,67 @@ class EvidenceChecklistGenerator(BaseAgent):
         """Generate checklist items based on denial reasons."""
         items = []
 
-        denial_category = denial_context.get('denial_category', '')
-        denial_reason = denial_context.get('denial_reason', '')
+        denial_category = denial_context.get("denial_category", "")
+        denial_reason = denial_context.get("denial_reason", "")
 
         # Add specific items based on denial category
-        if denial_category == 'nexus' or 'nexus' in denial_reason.lower():
-            items.append({
-                'id': 'new_nexus_letter',
-                'category': 'Nexus / Medical Opinion',
-                'title': 'New/Stronger Nexus Letter',
-                'description': 'Medical opinion that specifically addresses VA\'s nexus concerns',
-                'priority': 'critical',
-                'tips': ['Address why previous opinion was rejected', 'Include more detailed rationale'],
-                'completed': False,
-                'completed_at': None,
-                'notes': ''
-            })
+        if denial_category == "nexus" or "nexus" in denial_reason.lower():
+            items.append(
+                {
+                    "id": "new_nexus_letter",
+                    "category": "Nexus / Medical Opinion",
+                    "title": "New/Stronger Nexus Letter",
+                    "description": "Medical opinion that specifically addresses VA's nexus concerns",
+                    "priority": "critical",
+                    "tips": [
+                        "Address why previous opinion was rejected",
+                        "Include more detailed rationale",
+                    ],
+                    "completed": False,
+                    "completed_at": None,
+                    "notes": "",
+                }
+            )
 
-        if denial_category == 'evidence' or 'evidence' in denial_reason.lower():
-            items.append({
-                'id': 'additional_medical_records',
-                'category': 'Medical Evidence',
-                'title': 'Additional Medical Records',
-                'description': 'More medical records supporting your claim',
-                'priority': 'critical',
-                'tips': ['Get all treatment records', 'Include private and VA records'],
-                'completed': False,
-                'completed_at': None,
-                'notes': ''
-            })
+        if denial_category == "evidence" or "evidence" in denial_reason.lower():
+            items.append(
+                {
+                    "id": "additional_medical_records",
+                    "category": "Medical Evidence",
+                    "title": "Additional Medical Records",
+                    "description": "More medical records supporting your claim",
+                    "priority": "critical",
+                    "tips": [
+                        "Get all treatment records",
+                        "Include private and VA records",
+                    ],
+                    "completed": False,
+                    "completed_at": None,
+                    "notes": "",
+                }
+            )
 
-        if denial_category == 'in_service_event' or 'in-service' in denial_reason.lower():
-            items.append({
-                'id': 'additional_service_records',
-                'category': 'Service Records',
-                'title': 'Additional Service Records',
-                'description': 'More records documenting the in-service event',
-                'priority': 'critical',
-                'tips': ['Request complete STRs', 'Get unit records', 'Buddy statements'],
-                'completed': False,
-                'completed_at': None,
-                'notes': ''
-            })
+        if (
+            denial_category == "in_service_event"
+            or "in-service" in denial_reason.lower()
+        ):
+            items.append(
+                {
+                    "id": "additional_service_records",
+                    "category": "Service Records",
+                    "title": "Additional Service Records",
+                    "description": "More records documenting the in-service event",
+                    "priority": "critical",
+                    "tips": [
+                        "Request complete STRs",
+                        "Get unit records",
+                        "Buddy statements",
+                    ],
+                    "completed": False,
+                    "completed_at": None,
+                    "notes": "",
+                }
+            )
 
         return items
 
@@ -1298,16 +1445,16 @@ class EvidenceChecklistGenerator(BaseAgent):
         """Extract M21 references from checklist items."""
         refs = []
         for item in checklist:
-            if item.get('m21_reference'):
-                refs.append(item['m21_reference'])
+            if item.get("m21_reference"):
+                refs.append(item["m21_reference"])
         return list(set(refs))
 
 
 def generate_evidence_checklist(
     condition: str,
     claim_type: str,
-    primary_condition: str = '',
-    denial_context: dict = None
+    primary_condition: str = "",
+    denial_context: dict = None,
 ) -> list:
     """
     Generate evidence checklist for a condition claim.
@@ -1322,4 +1469,6 @@ def generate_evidence_checklist(
         List of checklist item dicts
     """
     generator = EvidenceChecklistGenerator()
-    return generator.generate_checklist(condition, claim_type, primary_condition, denial_context)
+    return generator.generate_checklist(
+        condition, claim_type, primary_condition, denial_context
+    )

@@ -17,6 +17,7 @@ from dataclasses import dataclass
 @dataclass
 class DisabilityRating:
     """Individual disability rating"""
+
     percentage: int
     description: str = ""
     is_bilateral: bool = False
@@ -26,6 +27,7 @@ class DisabilityRating:
 @dataclass
 class CalculationResult:
     """Result of VA combined rating calculation"""
+
     combined_raw: float
     combined_rounded: int
     bilateral_factor_applied: float
@@ -72,13 +74,15 @@ def combine_multiple_ratings(ratings: List[int]) -> Tuple[float, List[dict]]:
         return 0.0, []
 
     if len(ratings) == 1:
-        return float(ratings[0]), [{
-            'step': 1,
-            'rating': ratings[0],
-            'combined_before': 0,
-            'combined_after': float(ratings[0]),
-            'explanation': f"Single rating: {ratings[0]}%"
-        }]
+        return float(ratings[0]), [
+            {
+                "step": 1,
+                "rating": ratings[0],
+                "combined_before": 0,
+                "combined_after": float(ratings[0]),
+                "explanation": f"Single rating: {ratings[0]}%",
+            }
+        ]
 
     # Sort ratings highest to lowest (VA requirement)
     sorted_ratings = sorted(ratings, reverse=True)
@@ -86,13 +90,15 @@ def combine_multiple_ratings(ratings: List[int]) -> Tuple[float, List[dict]]:
     steps = []
     combined = float(sorted_ratings[0])
 
-    steps.append({
-        'step': 1,
-        'rating': sorted_ratings[0],
-        'combined_before': 0,
-        'combined_after': combined,
-        'explanation': f"Start with highest rating: {sorted_ratings[0]}%"
-    })
+    steps.append(
+        {
+            "step": 1,
+            "rating": sorted_ratings[0],
+            "combined_before": 0,
+            "combined_after": combined,
+            "explanation": f"Start with highest rating: {sorted_ratings[0]}%",
+        }
+    )
 
     for i, rating in enumerate(sorted_ratings[1:], start=2):
         before = combined
@@ -101,18 +107,20 @@ def combine_multiple_ratings(ratings: List[int]) -> Tuple[float, List[dict]]:
         remaining = 100 - before
         contribution = rating * remaining / 100
 
-        steps.append({
-            'step': i,
-            'rating': rating,
-            'combined_before': before,
-            'combined_after': combined,
-            'remaining_healthy': remaining,
-            'contribution': contribution,
-            'explanation': (
-                f"Add {rating}%: {rating}% × {remaining:.1f}% remaining = "
-                f"{contribution:.1f}% → Combined: {combined:.1f}%"
-            )
-        })
+        steps.append(
+            {
+                "step": i,
+                "rating": rating,
+                "combined_before": before,
+                "combined_after": combined,
+                "remaining_healthy": remaining,
+                "contribution": contribution,
+                "explanation": (
+                    f"Add {rating}%: {rating}% × {remaining:.1f}% remaining = "
+                    f"{contribution:.1f}% → Combined: {combined:.1f}%"
+                ),
+            }
+        )
 
     return combined, steps
 
@@ -154,7 +162,7 @@ def round_to_nearest_10(value: float) -> int:
     # Use Decimal for precise rounding
     d = Decimal(str(value))
     # Divide by 10, round to nearest integer, multiply by 10
-    rounded = int(Decimal(d / 10).quantize(Decimal('1'), rounding=ROUND_HALF_UP) * 10)
+    rounded = int(Decimal(d / 10).quantize(Decimal("1"), rounding=ROUND_HALF_UP) * 10)
     return min(100, max(0, rounded))
 
 
@@ -174,7 +182,7 @@ def calculate_combined_rating(ratings: List[DisabilityRating]) -> CalculationRes
             combined_rounded=0,
             bilateral_factor_applied=0.0,
             step_by_step=[],
-            ratings_used=[]
+            ratings_used=[],
         )
 
     # Separate bilateral and non-bilateral ratings
@@ -188,24 +196,30 @@ def calculate_combined_rating(ratings: List[DisabilityRating]) -> CalculationRes
     bilateral_combined = 0.0
     if bilateral_ratings:
         bilateral_percentages = [r.percentage for r in bilateral_ratings]
-        bilateral_combined, bilateral_steps = combine_multiple_ratings(bilateral_percentages)
+        bilateral_combined, bilateral_steps = combine_multiple_ratings(
+            bilateral_percentages
+        )
 
         # Add bilateral factor (10% of combined bilateral)
         bilateral_factor_bonus = bilateral_combined * 0.10
         bilateral_with_factor = bilateral_combined + bilateral_factor_bonus
 
-        all_steps.append({
-            'phase': 'bilateral',
-            'description': 'Bilateral Conditions (paired extremities)',
-            'ratings': bilateral_percentages,
-            'combined': bilateral_combined,
-            'bilateral_factor': bilateral_factor_bonus,
-            'total_with_factor': bilateral_with_factor,
-            'steps': bilateral_steps
-        })
+        all_steps.append(
+            {
+                "phase": "bilateral",
+                "description": "Bilateral Conditions (paired extremities)",
+                "ratings": bilateral_percentages,
+                "combined": bilateral_combined,
+                "bilateral_factor": bilateral_factor_bonus,
+                "total_with_factor": bilateral_with_factor,
+                "steps": bilateral_steps,
+            }
+        )
 
         # The bilateral total (with factor) is treated as one rating
-        all_percentages = [bilateral_with_factor] + [r.percentage for r in non_bilateral_ratings]
+        all_percentages = [bilateral_with_factor] + [
+            r.percentage for r in non_bilateral_ratings
+        ]
     else:
         all_percentages = [r.percentage for r in non_bilateral_ratings]
 
@@ -215,13 +229,15 @@ def calculate_combined_rating(ratings: List[DisabilityRating]) -> CalculationRes
         int_percentages = [int(round(p)) for p in all_percentages]
         final_combined, final_steps = combine_multiple_ratings(int_percentages)
 
-        all_steps.append({
-            'phase': 'final',
-            'description': 'Final Combination',
-            'ratings': int_percentages,
-            'combined_raw': final_combined,
-            'steps': final_steps
-        })
+        all_steps.append(
+            {
+                "phase": "final",
+                "description": "Final Combination",
+                "ratings": int_percentages,
+                "combined_raw": final_combined,
+                "steps": final_steps,
+            }
+        )
     else:
         final_combined = 0.0
 
@@ -233,7 +249,7 @@ def calculate_combined_rating(ratings: List[DisabilityRating]) -> CalculationRes
         combined_rounded=rounded,
         bilateral_factor_applied=bilateral_factor_bonus,
         step_by_step=all_steps,
-        ratings_used=ratings
+        ratings_used=ratings,
     )
 
 
@@ -255,18 +271,36 @@ VA_COMPENSATION_RATES_2026 = {
 
 # Additional amounts for dependents at 30%+ rating (2026)
 DEPENDENT_RATES_2026 = {
-    'spouse': {
-        30: 63.74, 40: 85.33, 50: 106.91, 60: 128.50,
-        70: 150.09, 80: 170.65, 90: 192.24, 100: 214.21
+    "spouse": {
+        30: 63.74,
+        40: 85.33,
+        50: 106.91,
+        60: 128.50,
+        70: 150.09,
+        80: 170.65,
+        90: 192.24,
+        100: 214.21,
     },
-    'child_under_18': {
-        30: 31.87, 40: 42.15, 50: 53.46, 60: 63.74,
-        70: 74.02, 80: 85.33, 90: 95.61, 100: 106.45
+    "child_under_18": {
+        30: 31.87,
+        40: 42.15,
+        50: 53.46,
+        60: 63.74,
+        70: 74.02,
+        80: 85.33,
+        90: 95.61,
+        100: 106.45,
     },
-    'parent_one': {
-        30: 55.51, 40: 73.00, 50: 91.51, 60: 110.00,
-        70: 128.50, 80: 147.00, 90: 165.51, 100: 183.64
-    }
+    "parent_one": {
+        30: 55.51,
+        40: 73.00,
+        50: 91.51,
+        60: 110.00,
+        70: 128.50,
+        80: 147.00,
+        90: 165.51,
+        100: 183.64,
+    },
 }
 
 # 2025 VA Compensation Rates (effective December 1, 2024)
@@ -287,18 +321,36 @@ VA_COMPENSATION_RATES_2025 = {
 
 # Additional amounts for dependents at 30%+ rating (2025)
 DEPENDENT_RATES_2025 = {
-    'spouse': {
-        30: 63.55, 40: 85.08, 50: 106.60, 60: 128.13,
-        70: 149.65, 80: 170.15, 90: 191.68, 100: 213.59
+    "spouse": {
+        30: 63.55,
+        40: 85.08,
+        50: 106.60,
+        60: 128.13,
+        70: 149.65,
+        80: 170.15,
+        90: 191.68,
+        100: 213.59,
     },
-    'child_under_18': {
-        30: 31.78, 40: 42.03, 50: 53.30, 60: 63.55,
-        70: 73.80, 80: 85.08, 90: 95.33, 100: 106.14
+    "child_under_18": {
+        30: 31.78,
+        40: 42.03,
+        50: 53.30,
+        60: 63.55,
+        70: 73.80,
+        80: 85.08,
+        90: 95.33,
+        100: 106.14,
     },
-    'parent_one': {
-        30: 55.35, 40: 72.78, 50: 91.23, 60: 109.68,
-        70: 128.13, 80: 146.58, 90: 165.03, 100: 183.10
-    }
+    "parent_one": {
+        30: 55.35,
+        40: 72.78,
+        50: 91.23,
+        60: 109.68,
+        70: 128.13,
+        80: 146.58,
+        90: 165.03,
+        100: 183.10,
+    },
 }
 
 # 2024 VA Compensation Rates (effective December 1, 2023)
@@ -319,18 +371,36 @@ VA_COMPENSATION_RATES_2024 = {
 
 # Additional amounts for dependents at 30%+ rating
 DEPENDENT_RATES_2024 = {
-    'spouse': {
-        30: 62.00, 40: 83.00, 50: 104.00, 60: 125.00,
-        70: 146.00, 80: 166.00, 90: 187.00, 100: 208.38
+    "spouse": {
+        30: 62.00,
+        40: 83.00,
+        50: 104.00,
+        60: 125.00,
+        70: 146.00,
+        80: 166.00,
+        90: 187.00,
+        100: 208.38,
     },
-    'child_under_18': {
-        30: 31.00, 40: 41.00, 50: 52.00, 60: 62.00,
-        70: 72.00, 80: 83.00, 90: 93.00, 100: 103.55
+    "child_under_18": {
+        30: 31.00,
+        40: 41.00,
+        50: 52.00,
+        60: 62.00,
+        70: 72.00,
+        80: 83.00,
+        90: 93.00,
+        100: 103.55,
     },
-    'parent_one': {
-        30: 54.00, 40: 71.00, 50: 89.00, 60: 107.00,
-        70: 125.00, 80: 143.00, 90: 161.00, 100: 178.63
-    }
+    "parent_one": {
+        30: 54.00,
+        40: 71.00,
+        50: 89.00,
+        60: 107.00,
+        70: 125.00,
+        80: 143.00,
+        90: 161.00,
+        100: 178.63,
+    },
 }
 
 # 2023 VA Compensation Rates (effective December 1, 2022)
@@ -424,7 +494,7 @@ def estimate_monthly_compensation(
     spouse: bool = False,
     children_under_18: int = 0,
     dependent_parents: int = 0,
-    year: int = 2026
+    year: int = 2026,
 ) -> float:
     """
     Estimate monthly VA disability compensation.
@@ -453,16 +523,16 @@ def estimate_monthly_compensation(
     # Dependents only add to 30%+ ratings
     dep_rates = DEPENDENT_RATES_BY_YEAR.get(year)
     if combined_rating >= 30 and dep_rates:
-        if spouse and combined_rating in dep_rates['spouse']:
-            total += dep_rates['spouse'][combined_rating]
+        if spouse and combined_rating in dep_rates["spouse"]:
+            total += dep_rates["spouse"][combined_rating]
 
         for _ in range(children_under_18):
-            if combined_rating in dep_rates['child_under_18']:
-                total += dep_rates['child_under_18'][combined_rating]
+            if combined_rating in dep_rates["child_under_18"]:
+                total += dep_rates["child_under_18"][combined_rating]
 
         for _ in range(min(2, dependent_parents)):  # Max 2 parents
-            if combined_rating in dep_rates['parent_one']:
-                total += dep_rates['parent_one'][combined_rating]
+            if combined_rating in dep_rates["parent_one"]:
+                total += dep_rates["parent_one"][combined_rating]
 
     return round(total, 2)
 

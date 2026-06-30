@@ -22,7 +22,7 @@ def enforce_data_retention():
     Checks DataRetentionPolicy records and purges expired data accordingly.
     Should be scheduled via Celery Beat (e.g., daily at 2 AM).
     """
-    from .models import DataRetentionPolicy, AuditLog
+    from .models import DataRetentionPolicy
 
     policies = DataRetentionPolicy.objects.filter(is_active=True, retention_days__gt=0)
     results = {}
@@ -32,18 +32,18 @@ def enforce_data_retention():
             cutoff_date = timezone.now() - timedelta(days=policy.retention_days)
             deleted_count = 0
 
-            if policy.data_type == 'audit_logs':
+            if policy.data_type == "audit_logs":
                 deleted_count = _purge_audit_logs(cutoff_date)
-            elif policy.data_type == 'documents':
+            elif policy.data_type == "documents":
                 deleted_count = _purge_old_documents(cutoff_date)
-            elif policy.data_type == 'analyses':
+            elif policy.data_type == "analyses":
                 deleted_count = _purge_old_analyses(cutoff_date)
-            elif policy.data_type == 'session_data':
+            elif policy.data_type == "session_data":
                 deleted_count = _purge_session_data(cutoff_date)
 
             # Update last cleanup timestamp
             policy.last_cleanup = timezone.now()
-            policy.save(update_fields=['last_cleanup'])
+            policy.save(update_fields=["last_cleanup"])
 
             results[policy.data_type] = deleted_count
             logger.info(
@@ -76,10 +76,7 @@ def _purge_old_documents(cutoff_date):
     from claims.models import Document
 
     # Only purge documents that were soft-deleted before the cutoff
-    old_docs = Document.objects.filter(
-        is_deleted=True,
-        deleted_at__lt=cutoff_date
-    )
+    old_docs = Document.objects.filter(is_deleted=True, deleted_at__lt=cutoff_date)
     count = old_docs.count()
 
     for doc in old_docs:
@@ -97,7 +94,11 @@ def _purge_old_documents(cutoff_date):
 def _purge_old_analyses(cutoff_date):
     """Purge old AI analysis records."""
     try:
-        from agents.models import AgentInteraction, DecisionLetterAnalysis, DenialDecoding
+        from agents.models import (
+            AgentInteraction,
+            DecisionLetterAnalysis,
+            DenialDecoding,
+        )
 
         # Delete old denial decodings first (depends on analysis)
         old_decodings = DenialDecoding.objects.filter(
@@ -107,16 +108,12 @@ def _purge_old_analyses(cutoff_date):
         old_decodings.delete()
 
         # Delete old analyses
-        old_analyses = DecisionLetterAnalysis.objects.filter(
-            created_at__lt=cutoff_date
-        )
+        old_analyses = DecisionLetterAnalysis.objects.filter(created_at__lt=cutoff_date)
         analysis_count = old_analyses.count()
         old_analyses.delete()
 
         # Delete old agent interactions
-        old_interactions = AgentInteraction.objects.filter(
-            created_at__lt=cutoff_date
-        )
+        old_interactions = AgentInteraction.objects.filter(created_at__lt=cutoff_date)
         interaction_count = old_interactions.count()
         old_interactions.delete()
 
@@ -148,36 +145,36 @@ def create_default_retention_policies():
 
     defaults = [
         {
-            'data_type': 'audit_logs',
-            'retention_days': 365,  # 1 year
-            'description': 'Security audit logs retained for compliance',
+            "data_type": "audit_logs",
+            "retention_days": 365,  # 1 year
+            "description": "Security audit logs retained for compliance",
         },
         {
-            'data_type': 'documents',
-            'retention_days': 90,  # 90 days after soft delete
-            'description': 'Soft-deleted documents purged after 90 days',
+            "data_type": "documents",
+            "retention_days": 90,  # 90 days after soft delete
+            "description": "Soft-deleted documents purged after 90 days",
         },
         {
-            'data_type': 'analyses',
-            'retention_days': 180,  # 6 months
-            'description': 'AI analysis results retained for 6 months',
+            "data_type": "analyses",
+            "retention_days": 180,  # 6 months
+            "description": "AI analysis results retained for 6 months",
         },
         {
-            'data_type': 'session_data',
-            'retention_days': 30,  # 30 days
-            'description': 'Expired sessions cleaned up after 30 days',
+            "data_type": "session_data",
+            "retention_days": 30,  # 30 days
+            "description": "Expired sessions cleaned up after 30 days",
         },
     ]
 
     created = 0
     for policy_data in defaults:
         policy, was_created = DataRetentionPolicy.objects.get_or_create(
-            data_type=policy_data['data_type'],
+            data_type=policy_data["data_type"],
             defaults={
-                'retention_days': policy_data['retention_days'],
-                'description': policy_data['description'],
-                'is_active': True,
-            }
+                "retention_days": policy_data["retention_days"],
+                "description": policy_data["description"],
+                "is_active": True,
+            },
         )
         if was_created:
             created += 1
@@ -189,6 +186,7 @@ def create_default_retention_policies():
 # =============================================================================
 # EMAIL NOTIFICATION TASKS
 # =============================================================================
+
 
 @shared_task(acks_late=True)
 def send_deadline_reminders():
@@ -212,7 +210,7 @@ def send_deadline_reminders():
         is_completed=False,
         reminder_sent=False,
         deadline_date__gte=today,
-    ).select_related('user', 'claim', 'appeal')
+    ).select_related("user", "claim", "appeal")
 
     for deadline in upcoming_deadlines:
         try:
@@ -237,15 +235,19 @@ def send_deadline_reminders():
             if success:
                 # Mark reminder as sent
                 deadline.reminder_sent = True
-                deadline.save(update_fields=['reminder_sent', 'updated_at'])
+                deadline.save(update_fields=["reminder_sent", "updated_at"])
 
                 # Update user's notification tracking
                 prefs.last_email_sent = timezone.now()
                 prefs.emails_sent_count += 1
-                prefs.save(update_fields=['last_email_sent', 'emails_sent_count', 'updated_at'])
+                prefs.save(
+                    update_fields=["last_email_sent", "emails_sent_count", "updated_at"]
+                )
 
                 reminders_sent += 1
-                logger.info(f"Sent deadline reminder to user_id={deadline.user_id} for deadline_id={deadline.id}")
+                logger.info(
+                    f"Sent deadline reminder to user_id={deadline.user_id} for deadline_id={deadline.id}"
+                )
 
         except Exception as e:
             error_msg = f"Failed to send reminder for deadline {deadline.id}: {e}"
@@ -281,7 +283,7 @@ def send_exam_reminders():
     upcoming_exams = ExamChecklist.objects.filter(
         exam_completed=False,
         exam_date__gte=today,
-    ).select_related('user', 'guidance')
+    ).select_related("user", "guidance")
 
     for exam in upcoming_exams:
         try:
@@ -313,15 +315,19 @@ def send_exam_reminders():
                 # Mark this reminder window as sent
                 metadata[reminder_key] = timezone.now().isoformat()
                 exam.metadata = metadata
-                exam.save(update_fields=['metadata', 'updated_at'])
+                exam.save(update_fields=["metadata", "updated_at"])
 
                 # Update user's notification tracking
                 prefs.last_email_sent = timezone.now()
                 prefs.emails_sent_count += 1
-                prefs.save(update_fields=['last_email_sent', 'emails_sent_count', 'updated_at'])
+                prefs.save(
+                    update_fields=["last_email_sent", "emails_sent_count", "updated_at"]
+                )
 
                 reminders_sent += 1
-                logger.info(f"Sent exam reminder to user_id={exam.user_id} for exam_id={exam.id}")
+                logger.info(
+                    f"Sent exam reminder to user_id={exam.user_id} for exam_id={exam.id}"
+                )
 
         except Exception as e:
             error_msg = f"Failed to send reminder for exam {exam.id}: {e}"
@@ -346,26 +352,26 @@ def _send_deadline_reminder_email(deadline, days_remaining: int) -> bool:
 
     # Determine urgency for email tone
     if days_remaining <= 3:
-        urgency = 'critical'
+        urgency = "critical"
     elif days_remaining <= 7:
-        urgency = 'urgent'
+        urgency = "urgent"
     else:
-        urgency = 'upcoming'
+        urgency = "upcoming"
 
     # Build email context
     context = {
-        'user': user,
-        'deadline': deadline,
-        'days_remaining': days_remaining,
-        'urgency': urgency,
-        'site_name': getattr(settings, 'SITE_NAME', 'Benefits Navigator'),
-        'site_url': getattr(settings, 'SITE_URL', 'https://benefitsnavigator.com'),
+        "user": user,
+        "deadline": deadline,
+        "days_remaining": days_remaining,
+        "urgency": urgency,
+        "site_name": getattr(settings, "SITE_NAME", "Benefits Navigator"),
+        "site_url": getattr(settings, "SITE_URL", "https://benefitsnavigator.com"),
     }
 
     # Render email templates
     subject = f"{'URGENT: ' if urgency == 'critical' else ''}Deadline Reminder: {deadline.title}"
-    text_content = render_to_string('emails/deadline_reminder.txt', context)
-    html_content = render_to_string('emails/deadline_reminder.html', context)
+    text_content = render_to_string("emails/deadline_reminder.txt", context)
+    html_content = render_to_string("emails/deadline_reminder.html", context)
 
     try:
         send_mail(
@@ -392,23 +398,23 @@ def _send_exam_reminder_email(exam, days_until: int) -> bool:
 
     # Determine urgency
     if days_until <= 1:
-        urgency = 'tomorrow'
+        urgency = "tomorrow"
     elif days_until <= 3:
-        urgency = 'critical'
+        urgency = "critical"
     elif days_until <= 7:
-        urgency = 'upcoming'
+        urgency = "upcoming"
     else:
-        urgency = 'scheduled'
+        urgency = "scheduled"
 
     # Build email context
     context = {
-        'user': user,
-        'exam': exam,
-        'days_until': days_until,
-        'urgency': urgency,
-        'completion_percentage': exam.completion_percentage,
-        'site_name': getattr(settings, 'SITE_NAME', 'Benefits Navigator'),
-        'site_url': getattr(settings, 'SITE_URL', 'https://benefitsnavigator.com'),
+        "user": user,
+        "exam": exam,
+        "days_until": days_until,
+        "urgency": urgency,
+        "completion_percentage": exam.completion_percentage,
+        "site_name": getattr(settings, "SITE_NAME", "Benefits Navigator"),
+        "site_url": getattr(settings, "SITE_URL", "https://benefitsnavigator.com"),
     }
 
     # Render email templates
@@ -419,8 +425,8 @@ def _send_exam_reminder_email(exam, days_until: int) -> bool:
     else:
         subject = f"Reminder: {exam.condition} C&P Exam in {days_until} days"
 
-    text_content = render_to_string('emails/exam_reminder.txt', context)
-    html_content = render_to_string('emails/exam_reminder.html', context)
+    text_content = render_to_string("emails/exam_reminder.txt", context)
+    html_content = render_to_string("emails/exam_reminder.html", context)
 
     try:
         send_mail(
@@ -449,8 +455,8 @@ def send_all_reminders():
     exam_result = send_exam_reminders()
 
     return {
-        'deadlines': deadline_result,
-        'exams': exam_result,
+        "deadlines": deadline_result,
+        "exams": exam_result,
     }
 
 
@@ -466,7 +472,7 @@ def send_document_analysis_complete_email(document_id: int):
     from accounts.models import NotificationPreferences
 
     try:
-        document = Document.objects.select_related('user').get(id=document_id)
+        document = Document.objects.select_related("user").get(id=document_id)
         user = document.user
 
         # Get user's notification preferences
@@ -477,7 +483,9 @@ def send_document_analysis_complete_email(document_id: int):
 
         # Check if user wants document analysis notifications
         if not prefs.should_send_document_analysis_notification():
-            logger.info(f"User user_id={user.id} has disabled document analysis notifications")
+            logger.info(
+                f"User user_id={user.id} has disabled document analysis notifications"
+            )
             return "Notification disabled by user preferences"
 
         # Send the email
@@ -487,9 +495,13 @@ def send_document_analysis_complete_email(document_id: int):
             # Update notification tracking
             prefs.last_email_sent = timezone.now()
             prefs.emails_sent_count += 1
-            prefs.save(update_fields=['last_email_sent', 'emails_sent_count', 'updated_at'])
+            prefs.save(
+                update_fields=["last_email_sent", "emails_sent_count", "updated_at"]
+            )
 
-            logger.info(f"Sent document analysis complete email to user_id={user.id} for document_id={document_id}")
+            logger.info(
+                f"Sent document analysis complete email to user_id={user.id} for document_id={document_id}"
+            )
             return f"Email sent to user_id={user.id}"
 
         return "Email sending failed"
@@ -512,33 +524,33 @@ def _send_document_analysis_email(document) -> bool:
 
     # Determine document type label for email (matches Document.DOCUMENT_TYPE_CHOICES)
     doc_type_labels = {
-        'medical_records': 'Medical Records',
-        'service_records': 'Service Records',
-        'decision_letter': 'VA Decision Letter',
-        'buddy_statement': 'Buddy Statement',
-        'lay_statement': 'Lay Statement',
-        'nexus_letter': 'Medical Nexus/Opinion Letter',
-        'employment_records': 'Employment Records',
-        'personal_statement': 'Personal Statement',
-        'other': 'Document',
+        "medical_records": "Medical Records",
+        "service_records": "Service Records",
+        "decision_letter": "VA Decision Letter",
+        "buddy_statement": "Buddy Statement",
+        "lay_statement": "Lay Statement",
+        "nexus_letter": "Medical Nexus/Opinion Letter",
+        "employment_records": "Employment Records",
+        "personal_statement": "Personal Statement",
+        "other": "Document",
     }
-    doc_type_label = doc_type_labels.get(document.document_type, 'Document')
+    doc_type_label = doc_type_labels.get(document.document_type, "Document")
 
     # Build email context
     context = {
-        'user': user,
-        'document': document,
-        'doc_type_label': doc_type_label,
-        'has_summary': bool(document.ai_summary),
-        'page_count': document.page_count or 0,
-        'site_name': getattr(settings, 'SITE_NAME', 'Benefits Navigator'),
-        'site_url': getattr(settings, 'SITE_URL', 'https://benefitsnavigator.com'),
+        "user": user,
+        "document": document,
+        "doc_type_label": doc_type_label,
+        "has_summary": bool(document.ai_summary),
+        "page_count": document.page_count or 0,
+        "site_name": getattr(settings, "SITE_NAME", "Benefits Navigator"),
+        "site_url": getattr(settings, "SITE_URL", "https://benefitsnavigator.com"),
     }
 
     # Render email templates
     subject = f"Your {doc_type_label} Analysis is Ready"
-    text_content = render_to_string('emails/document_analysis_complete.txt', context)
-    html_content = render_to_string('emails/document_analysis_complete.html', context)
+    text_content = render_to_string("emails/document_analysis_complete.txt", context)
+    html_content = render_to_string("emails/document_analysis_complete.html", context)
 
     try:
         send_mail(
@@ -559,6 +571,7 @@ def _send_document_analysis_email(document) -> bool:
 # HEALTH MONITORING TASKS
 # =============================================================================
 
+
 @shared_task
 def record_health_metrics():
     """
@@ -572,12 +585,12 @@ def record_health_metrics():
         health = record_metrics()
         logger.info(f"Recorded health metrics: status={health['status']}")
         return {
-            'status': health['status'],
-            'timestamp': health['timestamp'],
+            "status": health["status"],
+            "timestamp": health["timestamp"],
         }
     except Exception as e:
         logger.error(f"Failed to record health metrics: {e}")
-        return {'error': str(e)}
+        return {"error": str(e)}
 
 
 @shared_task
@@ -599,14 +612,15 @@ def check_processing_health():
 
     # Check failure rate in last hour
     failure_stats = ProcessingFailure.get_failure_stats(hours=1)
-    if failure_stats['total'] >= 5:
-        alerts.append(f"High failure rate: {failure_stats['total']} failures in last hour")
+    if failure_stats["total"] >= 5:
+        alerts.append(
+            f"High failure rate: {failure_stats['total']} failures in last hour"
+        )
 
     # Check for documents stuck in processing
     stuck_threshold = timezone.now() - timezone.timedelta(hours=1)
     stuck_docs = Document.objects.filter(
-        status__in=['processing', 'analyzing'],
-        updated_at__lt=stuck_threshold
+        status__in=["processing", "analyzing"], updated_at__lt=stuck_threshold
     ).count()
 
     if stuck_docs > 0:
@@ -615,10 +629,13 @@ def check_processing_health():
     # Check Celery queue length
     try:
         from .health import check_celery
+
         celery_status = check_celery()
-        if celery_status.get('queue_length', 0) > 100:
-            alerts.append(f"High Celery queue: {celery_status['queue_length']} tasks waiting")
-        if celery_status.get('workers', 0) == 0:
+        if celery_status.get("queue_length", 0) > 100:
+            alerts.append(
+                f"High Celery queue: {celery_status['queue_length']} tasks waiting"
+            )
+        if celery_status.get("workers", 0) == 0:
             alerts.append("No Celery workers available")
     except Exception as e:
         logger.error(f"Failed to check Celery status: {e}")
@@ -626,16 +643,19 @@ def check_processing_health():
     # Send alert if issues found
     if alerts:
         import sentry_sdk
-        alert_message = "Processing Health Alert:\n" + "\n".join(f"- {a}" for a in alerts)
+
+        alert_message = "Processing Health Alert:\n" + "\n".join(
+            f"- {a}" for a in alerts
+        )
 
         try:
             sentry_sdk.capture_message(
                 alert_message,
                 level="warning",
                 extras={
-                    'failure_stats': failure_stats,
-                    'stuck_docs': stuck_docs,
-                }
+                    "failure_stats": failure_stats,
+                    "stuck_docs": stuck_docs,
+                },
             )
         except Exception:
             pass  # Sentry might not be configured
@@ -643,9 +663,9 @@ def check_processing_health():
         logger.warning(alert_message)
 
     return {
-        'alerts': alerts,
-        'failure_stats': failure_stats,
-        'stuck_docs': stuck_docs,
+        "alerts": alerts,
+        "failure_stats": failure_stats,
+        "stuck_docs": stuck_docs,
     }
 
 
@@ -660,9 +680,7 @@ def cleanup_old_health_metrics():
     from .models import SystemHealthMetric
 
     threshold = timezone.now() - timezone.timedelta(days=30)
-    deleted, _ = SystemHealthMetric.objects.filter(
-        timestamp__lt=threshold
-    ).delete()
+    deleted, _ = SystemHealthMetric.objects.filter(timestamp__lt=threshold).delete()
 
     logger.info(f"Cleaned up {deleted} old health metrics")
     return f"Deleted {deleted} old metrics"
@@ -685,14 +703,14 @@ def run_monitoring_checks():
     results = run_all_monitoring_checks()
 
     total_alerts = (
-        len(results.get('health_alerts', [])) +
-        len(results.get('download_anomalies', [])) +
-        len(results.get('stale_tasks', []))
+        len(results.get("health_alerts", []))
+        + len(results.get("download_anomalies", []))
+        + len(results.get("stale_tasks", []))
     )
 
     return {
-        'total_alerts': total_alerts,
-        'results': results,
+        "total_alerts": total_alerts,
+        "results": results,
     }
 
 
@@ -716,14 +734,15 @@ def check_download_anomalies_task(hours: int = 1):
         logger.warning(f"Detected {len(anomalies)} download anomalies")
 
     return {
-        'anomalies_detected': len(anomalies),
-        'details': anomalies,
+        "anomalies_detected": len(anomalies),
+        "details": anomalies,
     }
 
 
 # =============================================================================
 # PILOT USER DATA RETENTION
 # =============================================================================
+
 
 @shared_task(acks_late=True)
 def enforce_pilot_data_retention():
@@ -747,20 +766,23 @@ def enforce_pilot_data_retention():
     from claims.models import Document
     from .models import AuditLog
 
-    retention_days = getattr(settings, 'PILOT_DATA_RETENTION_DAYS', 30)
+    retention_days = getattr(settings, "PILOT_DATA_RETENTION_DAYS", 30)
 
     # Skip if retention is disabled (set to 0)
     if retention_days <= 0:
         logger.info("Pilot data retention disabled (PILOT_DATA_RETENTION_DAYS=0)")
-        return {'status': 'disabled', 'reason': 'PILOT_DATA_RETENTION_DAYS is 0 or negative'}
+        return {
+            "status": "disabled",
+            "reason": "PILOT_DATA_RETENTION_DAYS is 0 or negative",
+        }
 
     cutoff_date = timezone.now() - timedelta(days=retention_days)
     results = {
-        'pilot_users_checked': 0,
-        'documents_soft_deleted': 0,
-        'analyses_deleted': 0,
-        'statements_deleted': 0,
-        'errors': [],
+        "pilot_users_checked": 0,
+        "documents_soft_deleted": 0,
+        "analyses_deleted": 0,
+        "statements_deleted": 0,
+        "errors": [],
     }
 
     # Get all users and check if they're pilot users
@@ -773,16 +795,14 @@ def enforce_pilot_data_retention():
     for user in users:
         try:
             # Check if user is a pilot user
-            if not getattr(user, 'is_pilot_user', False):
+            if not getattr(user, "is_pilot_user", False):
                 continue
 
-            results['pilot_users_checked'] += 1
+            results["pilot_users_checked"] += 1
 
             # Soft-delete old documents for this pilot user
             old_docs = Document.objects.filter(
-                user=user,
-                is_deleted=False,
-                created_at__lt=cutoff_date
+                user=user, is_deleted=False, created_at__lt=cutoff_date
             )
 
             doc_count = old_docs.count()
@@ -790,32 +810,32 @@ def enforce_pilot_data_retention():
                 for doc in old_docs:
                     doc.soft_delete()
 
-                results['documents_soft_deleted'] += doc_count
+                results["documents_soft_deleted"] += doc_count
 
                 # Log the retention action
                 AuditLog.objects.create(
                     user=user,
-                    action='pilot_retention_documents',
-                    resource_type='document',
+                    action="pilot_retention_documents",
+                    resource_type="document",
                     details={
-                        'count': doc_count,
-                        'retention_days': retention_days,
-                        'reason': 'pilot_data_retention',
-                    }
+                        "count": doc_count,
+                        "retention_days": retention_days,
+                        "reason": "pilot_data_retention",
+                    },
                 )
 
             # Delete old AI analyses for this pilot user
             analysis_count = _purge_pilot_user_analyses(user, cutoff_date)
-            results['analyses_deleted'] += analysis_count
+            results["analyses_deleted"] += analysis_count
 
             # Delete old personal statements for this pilot user
             statement_count = _purge_pilot_user_statements(user, cutoff_date)
-            results['statements_deleted'] += statement_count
+            results["statements_deleted"] += statement_count
 
         except Exception as e:
             error_msg = f"Error processing pilot retention for user {user.id}: {e}"
             logger.error(error_msg)
-            results['errors'].append(error_msg)
+            results["errors"].append(error_msg)
 
     # Log summary
     logger.info(
@@ -846,22 +866,19 @@ def _purge_pilot_user_analyses(user, cutoff_date) -> int:
 
         # Delete decision letter analyses
         dla_deleted, _ = DecisionLetterAnalysis.objects.filter(
-            user=user,
-            created_at__lt=cutoff_date
+            user=user, created_at__lt=cutoff_date
         ).delete()
         total_deleted += dla_deleted
 
         # Delete evidence gap analyses
         ega_deleted, _ = EvidenceGapAnalysis.objects.filter(
-            user=user,
-            created_at__lt=cutoff_date
+            user=user, created_at__lt=cutoff_date
         ).delete()
         total_deleted += ega_deleted
 
         # Delete agent interactions
         ai_deleted, _ = AgentInteraction.objects.filter(
-            user=user,
-            created_at__lt=cutoff_date
+            user=user, created_at__lt=cutoff_date
         ).delete()
         total_deleted += ai_deleted
 
@@ -881,8 +898,7 @@ def _purge_pilot_user_statements(user, cutoff_date) -> int:
         from agents.models import PersonalStatement
 
         deleted, _ = PersonalStatement.objects.filter(
-            user=user,
-            created_at__lt=cutoff_date
+            user=user, created_at__lt=cutoff_date
         ).delete()
         return deleted
 
@@ -905,11 +921,11 @@ def notify_pilot_users_before_retention():
     from claims.models import Document
     from django.core.mail import send_mail
 
-    retention_days = getattr(settings, 'PILOT_DATA_RETENTION_DAYS', 30)
+    retention_days = getattr(settings, "PILOT_DATA_RETENTION_DAYS", 30)
     warning_days = 7  # Warn 7 days before deletion
 
     if retention_days <= warning_days:
-        return {'status': 'skipped', 'reason': 'retention_days too short for warning'}
+        return {"status": "skipped", "reason": "retention_days too short for warning"}
 
     # Calculate the date when data will be at risk
     warning_cutoff = timezone.now() - timedelta(days=retention_days - warning_days)
@@ -920,14 +936,12 @@ def notify_pilot_users_before_retention():
 
     for user in users:
         try:
-            if not getattr(user, 'is_pilot_user', False):
+            if not getattr(user, "is_pilot_user", False):
                 continue
 
             # Check if user has documents that will be deleted soon
             at_risk_docs = Document.objects.filter(
-                user=user,
-                is_deleted=False,
-                created_at__lt=warning_cutoff
+                user=user, is_deleted=False, created_at__lt=warning_cutoff
             ).count()
 
             if at_risk_docs == 0:
@@ -969,6 +983,6 @@ The {settings.SITE_NAME} Team
             errors.append(error_msg)
 
     return {
-        'notifications_sent': notifications_sent,
-        'errors': errors,
+        "notifications_sent": notifications_sent,
+        "errors": errors,
     }

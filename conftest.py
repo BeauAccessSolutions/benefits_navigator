@@ -11,14 +11,13 @@ import os
 import django
 
 # Configure Django settings before any Django imports
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'benefits_navigator.settings')
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "benefits_navigator.settings")
 django.setup()
 
 import pytest
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
-from django.test import Client
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.contrib.auth import get_user_model
 
@@ -28,6 +27,7 @@ User = get_user_model()
 # =============================================================================
 # USER & ACCOUNT FIXTURES
 # =============================================================================
+
 
 @pytest.fixture
 def user_password():
@@ -70,8 +70,8 @@ def premium_user(db, user_password):
     profile.save()
     Subscription.objects.create(
         user=user,
-        plan_type='premium',
-        status='active',
+        plan_type="premium",
+        status="active",
         current_period_end=datetime.now() + timedelta(days=30),
     )
     return user
@@ -129,6 +129,7 @@ def admin_client(client, admin_user, user_password):
 # DOCUMENT & FILE FIXTURES
 # =============================================================================
 
+
 @pytest.fixture
 def sample_pdf():
     """Create a simple PDF file for testing."""
@@ -148,9 +149,7 @@ startxref
 190
 %%EOF"""
     return SimpleUploadedFile(
-        name="test_document.pdf",
-        content=pdf_content,
-        content_type="application/pdf"
+        name="test_document.pdf", content=pdf_content, content_type="application/pdf"
     )
 
 
@@ -159,15 +158,13 @@ def sample_image():
     """Create a simple PNG image for testing."""
     # Minimal 1x1 PNG
     png_content = (
-        b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01'
-        b'\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00'
-        b'\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00'
-        b'\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82'
+        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
+        b"\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00"
+        b"\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00"
+        b"\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82"
     )
     return SimpleUploadedFile(
-        name="test_image.png",
-        content=png_content,
-        content_type="image/png"
+        name="test_image.png", content=png_content, content_type="image/png"
     )
 
 
@@ -216,7 +213,6 @@ def document_with_file(db, user, tmp_path, settings):
     Used for testing file download/view operations.
     """
     from claims.models import Document
-    import os
 
     # Set MEDIA_ROOT to temp path for this test
     settings.MEDIA_ROOT = str(tmp_path)
@@ -245,7 +241,7 @@ startxref
 190
 %%EOF"""
 
-    with open(file_path, 'wb') as f:
+    with open(file_path, "wb") as f:
         f.write(pdf_content)
 
     # Create the Document object pointing to this file
@@ -265,6 +261,7 @@ startxref
 # =============================================================================
 # CLAIMS FIXTURES
 # =============================================================================
+
 
 @pytest.fixture
 def claim(db, user):
@@ -298,6 +295,7 @@ def submitted_claim(db, user):
 # =============================================================================
 # APPEALS FIXTURES
 # =============================================================================
+
 
 @pytest.fixture
 def appeal_guidance(db):
@@ -366,6 +364,7 @@ def board_appeal(db, user):
 # =============================================================================
 # EXAMPREP FIXTURES
 # =============================================================================
+
 
 @pytest.fixture
 def exam_guidance(db):
@@ -487,6 +486,7 @@ def evidence_checklist(db, user):
 # CORE APP FIXTURES
 # =============================================================================
 
+
 @pytest.fixture
 def journey_stage(db):
     """Create a journey stage."""
@@ -565,6 +565,7 @@ def past_deadline(db, user):
 # AGENTS FIXTURES
 # =============================================================================
 
+
 @pytest.fixture
 def agent_interaction(db, user):
     """Create an agent interaction."""
@@ -592,9 +593,7 @@ def decision_analysis(db, user, agent_interaction, document):
         conditions_granted=[
             {"condition": "Tinnitus", "rating": 10, "effective_date": "2024-01-01"}
         ],
-        conditions_denied=[
-            {"condition": "PTSD", "reason": "No nexus to service"}
-        ],
+        conditions_denied=[{"condition": "PTSD", "reason": "No nexus to service"}],
         conditions_deferred=[],
         summary="Your claim for tinnitus was granted at 10%. PTSD was denied.",
         appeal_options=[
@@ -620,10 +619,18 @@ def denial_decoding(db, decision_analysis):
                 "denial_reason": "No nexus to service",
                 "denial_category": "nexus",
                 "matched_m21_sections": [
-                    {"reference": "M21-1.V.ii.2.A", "title": "Service Connection", "relevance_score": 0.95}
+                    {
+                        "reference": "M21-1.V.ii.2.A",
+                        "title": "Service Connection",
+                        "relevance_score": 0.95,
+                    }
                 ],
                 "required_evidence": [
-                    {"type": "nexus_letter", "description": "IMO from psychiatrist", "priority": "critical"}
+                    {
+                        "type": "nexus_letter",
+                        "description": "IMO from psychiatrist",
+                        "priority": "critical",
+                    }
                 ],
                 "suggested_actions": ["Get IMO from treating psychiatrist"],
                 "va_standard": "At least as likely as not (50%+)",
@@ -665,6 +672,7 @@ def m21_section(db):
 # MOCKS FOR EXTERNAL SERVICES
 # =============================================================================
 
+
 def _mock_anthropic_message(text='{"test": "data"}', input_tokens=60, output_tokens=40):
     """Build a MagicMock shaped like an anthropic Message response."""
     block = MagicMock()
@@ -683,7 +691,7 @@ def _mock_anthropic_message(text='{"test": "data"}', input_tokens=60, output_tok
 @pytest.fixture
 def mock_anthropic():
     """Mock Anthropic API responses (module-level client)."""
-    with patch('anthropic.Anthropic') as mock:
+    with patch("anthropic.Anthropic") as mock:
         mock_client = MagicMock()
         mock.return_value = mock_client
         mock_client.messages.create.return_value = _mock_anthropic_message(
@@ -707,7 +715,7 @@ def mock_ai_gateway():
     consistent mock for all tests that use AI functionality. Covers both
     messages.create (complete) and messages.parse (complete_structured).
     """
-    with patch('agents.ai_gateway.Anthropic') as mock:
+    with patch("agents.ai_gateway.Anthropic") as mock:
         mock_client = MagicMock()
         mock.return_value = mock_client
 
@@ -734,11 +742,13 @@ def ai_gateway(mock_ai_gateway):
     # Reset the singleton to ensure fresh instance
     reset_gateway()
 
-    gateway = AIGateway(GatewayConfig(
-        timeout_seconds=30,
-        max_retries=2,
-        retry_base_delay=0.01,  # Fast retries for tests
-    ))
+    gateway = AIGateway(
+        GatewayConfig(
+            timeout_seconds=30,
+            max_retries=2,
+            retry_base_delay=0.01,  # Fast retries for tests
+        )
+    )
     yield gateway
 
     # Reset after test to avoid state leakage
@@ -748,24 +758,25 @@ def ai_gateway(mock_ai_gateway):
 @pytest.fixture
 def mock_celery():
     """Mock Celery task execution to run synchronously."""
-    with patch('claims.tasks.process_document_task.delay') as mock_process, \
-         patch('claims.tasks.decode_denial_letter_task.delay') as mock_decode:
+    with patch("claims.tasks.process_document_task.delay") as mock_process, patch(
+        "claims.tasks.decode_denial_letter_task.delay"
+    ) as mock_decode:
         yield {
-            'process_document': mock_process,
-            'decode_denial': mock_decode,
+            "process_document": mock_process,
+            "decode_denial": mock_decode,
         }
 
 
 @pytest.fixture
 def mock_ocr():
     """Mock OCR service."""
-    with patch('claims.services.ocr_service.OCRService') as mock:
+    with patch("claims.services.ocr_service.OCRService") as mock:
         mock_instance = MagicMock()
         mock.return_value = mock_instance
         mock_instance.extract_text.return_value = {
-            'text': 'Extracted text from document',
-            'confidence': 95.0,
-            'page_count': 1,
+            "text": "Extracted text from document",
+            "confidence": 95.0,
+            "page_count": 1,
         }
         yield mock_instance
 
@@ -774,12 +785,13 @@ def mock_ocr():
 # DJANGO SETTINGS OVERRIDES
 # =============================================================================
 
+
 @pytest.fixture(autouse=True)
 def use_dummy_cache(settings):
     """Use local memory cache for tests."""
     settings.CACHES = {
-        'default': {
-            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
         }
     }
 
@@ -793,13 +805,14 @@ def disable_rate_limiting(settings):
 @pytest.fixture(autouse=True)
 def use_test_file_storage(settings, tmp_path):
     """Use temporary directory for file storage in tests."""
-    settings.MEDIA_ROOT = tmp_path / 'media'
+    settings.MEDIA_ROOT = tmp_path / "media"
     settings.MEDIA_ROOT.mkdir(exist_ok=True)
 
 
 # =============================================================================
 # UTILITY FUNCTIONS
 # =============================================================================
+
 
 def create_test_user(email="test@example.com", password="TestPass123!", **kwargs):
     """Helper to create a test user."""

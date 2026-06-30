@@ -17,18 +17,13 @@ this service analyzes rating decisions to identify:
 import json
 import logging
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
-from django.conf import settings
 
 from agents.services import BaseAgent
-from agents.reference_data import (
-    get_rating_guidance,
-    get_musculoskeletal_guidance,
-    get_service_connection_guidance,
-)
+
 # Use centralized sanitization from the AI gateway
 from agents.ai_gateway import sanitize_input
 
@@ -240,7 +235,6 @@ CONDITION_SPECIFIC_PROMPTS = {
     DC 5258 (Dislocated meniscus): 20%
     DC 5259 (Removed meniscus, symptomatic): 10%
     """,
-
     "mental_health": """For mental health conditions, analyze against the General Rating Formula:
     - 0%: Diagnosed but symptoms controlled by medication
     - 10%: Mild symptoms with decreased work efficiency during stress
@@ -259,7 +253,6 @@ CONDITION_SPECIFIC_PROMPTS = {
     - Impaired judgment
     - Difficulty maintaining work AND social relationships
     """,
-
     "lyme_disease": """For Lyme disease / post-treatment Lyme disease syndrome:
     - Active vs inactive disease status
     - PTLDS can cause numerous residuals that should be SEPARATELY rated:
@@ -282,7 +275,6 @@ CONDITION_SPECIFIC_PROMPTS = {
 
     If ANY residuals present → File for separate ratings!
     """,
-
     "back": """For back/spine conditions:
     - Range of motion measurements for each plane (forward flexion is key)
     - Incapacitating episodes in past 12 months (bed rest prescribed by physician)
@@ -303,7 +295,7 @@ CONDITION_SPECIFIC_PROMPTS = {
     20%: 2-4 weeks total
     40%: 4-6 weeks total
     60%: 6+ weeks total
-    """
+    """,
 }
 
 
@@ -311,15 +303,17 @@ CONDITION_SPECIFIC_PROMPTS = {
 # DATA CLASSES
 # ============================================================================
 
+
 @dataclass
 class RatingAnalysisResult:
     """Structured result from rating decision analysis"""
+
     extracted_data: dict
     analysis: dict
     raw_text: str
     generated_at: datetime
     tokens_used: int = 0
-    cost_estimate: Decimal = Decimal('0')
+    cost_estimate: Decimal = Decimal("0")
 
     def get_priority_actions(self) -> list:
         """Return actions sorted by priority"""
@@ -350,13 +344,16 @@ class RatingAnalysisResult:
 
     def get_confidence_scoring(self) -> dict:
         """Return confidence scoring information"""
-        return self.analysis.get("confidence_scoring", {
-            "overall_confidence": 0,
-            "extraction_quality": 0,
-            "document_completeness": 0,
-            "analysis_reliability": 0,
-            "confidence_factors": []
-        })
+        return self.analysis.get(
+            "confidence_scoring",
+            {
+                "overall_confidence": 0,
+                "extraction_quality": 0,
+                "document_completeness": 0,
+                "analysis_reliability": 0,
+                "confidence_factors": [],
+            },
+        )
 
     def get_overall_confidence(self) -> int:
         """Return overall confidence score (0-100)"""
@@ -367,13 +364,13 @@ class RatingAnalysisResult:
         """Return confidence level as human-readable string"""
         score = self.get_overall_confidence()
         if score >= 85:
-            return 'high'
+            return "high"
         elif score >= 70:
-            return 'medium'
+            return "medium"
         elif score >= 50:
-            return 'low'
+            return "low"
         else:
-            return 'very_low'
+            return "very_low"
 
     def get_confidence_warnings(self) -> list:
         """Return any warnings based on confidence factors"""
@@ -382,13 +379,13 @@ class RatingAnalysisResult:
         factors = scoring.get("confidence_factors", [])
 
         for factor in factors:
-            if factor.get('type') == 'warning':
-                warnings.append(factor.get('message', ''))
+            if factor.get("type") == "warning":
+                warnings.append(factor.get("message", ""))
 
         if self.get_overall_confidence() < 70:
             warnings.append(
-                'This analysis has lower confidence. Consider consulting a VSO '
-                'or accredited claims agent for verification.'
+                "This analysis has lower confidence. Consider consulting a VSO "
+                "or accredited claims agent for verification."
             )
 
         return warnings
@@ -411,14 +408,15 @@ class RatingAnalysisResult:
                     "analysis_reliability": confidence.get("analysis_reliability", 0),
                 },
                 "factors": confidence.get("confidence_factors", []),
-                "warnings": self.get_confidence_warnings()
-            }
+                "warnings": self.get_confidence_warnings(),
+            },
         }
 
 
 # ============================================================================
 # SERVICE CLASS
 # ============================================================================
+
 
 class RatingDecisionAnalyzer(BaseAgent):
     """
@@ -453,7 +451,9 @@ class RatingDecisionAnalyzer(BaseAgent):
         if model:
             self.model = model
 
-    def analyze(self, document_text: str, decision_date: Optional[date] = None) -> RatingAnalysisResult:
+    def analyze(
+        self, document_text: str, decision_date: Optional[date] = None
+    ) -> RatingAnalysisResult:
         """
         Analyze a VA rating decision document.
 
@@ -472,13 +472,15 @@ class RatingDecisionAnalyzer(BaseAgent):
 
         # Use provided decision date or extracted one
         if decision_date:
-            extracted_data['decision_date'] = decision_date.isoformat()
+            extracted_data["decision_date"] = decision_date.isoformat()
 
         # Step 2: Identify condition types for specialized analysis
         condition_types = self._identify_condition_types(extracted_data)
 
         # Step 3: Generate actionable analysis
-        analysis, analysis_tokens = self._generate_analysis(extracted_data, condition_types)
+        analysis, analysis_tokens = self._generate_analysis(
+            extracted_data, condition_types
+        )
         total_tokens += analysis_tokens
 
         cost = self.estimate_cost(total_tokens)
@@ -489,7 +491,7 @@ class RatingDecisionAnalyzer(BaseAgent):
             raw_text=document_text,
             generated_at=datetime.now(),
             tokens_used=total_tokens,
-            cost_estimate=cost
+            cost_estimate=cost,
         )
 
     def _extract_data(self, document_text: str) -> tuple[dict, int]:
@@ -501,7 +503,7 @@ class RatingDecisionAnalyzer(BaseAgent):
         response, tokens = self._call_openai(
             system_prompt="You are a VA claims data extraction specialist. Return only valid JSON.",
             user_prompt=prompt,
-            temperature=0.1  # Low temperature for consistent extraction
+            temperature=0.1,  # Low temperature for consistent extraction
         )
 
         result = self._parse_json_response(response)
@@ -513,10 +515,39 @@ class RatingDecisionAnalyzer(BaseAgent):
         conditions = extracted_data.get("conditions", [])
 
         keywords = {
-            "knee": ["knee", "patella", "meniscus", "acl", "mcl", "5260", "5261", "5257"],
-            "mental_health": ["anxiety", "depression", "ptsd", "adjustment disorder", "mood", "mental", "9440", "9411", "9434"],
+            "knee": [
+                "knee",
+                "patella",
+                "meniscus",
+                "acl",
+                "mcl",
+                "5260",
+                "5261",
+                "5257",
+            ],
+            "mental_health": [
+                "anxiety",
+                "depression",
+                "ptsd",
+                "adjustment disorder",
+                "mood",
+                "mental",
+                "9440",
+                "9411",
+                "9434",
+            ],
             "lyme_disease": ["lyme", "tick", "6319"],
-            "back": ["spine", "back", "lumbar", "thoracic", "cervical", "disc", "5237", "5242", "5243"]
+            "back": [
+                "spine",
+                "back",
+                "lumbar",
+                "thoracic",
+                "cervical",
+                "disc",
+                "5237",
+                "5242",
+                "5243",
+            ],
         }
 
         for condition in conditions:
@@ -530,7 +561,9 @@ class RatingDecisionAnalyzer(BaseAgent):
 
         return condition_types
 
-    def _generate_analysis(self, extracted_data: dict, condition_types: list) -> tuple[dict, int]:
+    def _generate_analysis(
+        self, extracted_data: dict, condition_types: list
+    ) -> tuple[dict, int]:
         """Generate actionable analysis"""
 
         # Build specialized guidance based on conditions present
@@ -548,7 +581,7 @@ class RatingDecisionAnalyzer(BaseAgent):
         prompt = ANALYSIS_PROMPT.format(
             extracted_data=json.dumps(extracted_data, indent=2),
             current_date=current_date,
-            decision_date=decision_date or "Unknown"
+            decision_date=decision_date or "Unknown",
         )
 
         prompt += specialized_guidance
@@ -556,7 +589,7 @@ class RatingDecisionAnalyzer(BaseAgent):
         response, tokens = self._call_openai(
             system_prompt="You are a VA disability claims strategist. Provide specific, actionable advice. Return only valid JSON.",
             user_prompt=prompt,
-            temperature=0.3  # Slightly higher for strategic thinking
+            temperature=0.3,  # Slightly higher for strategic thinking
         )
 
         result = self._parse_json_response(response)
@@ -653,14 +686,13 @@ class SimpleRatingAnalyzer(BaseAgent):
         # Sanitize user-provided document text to prevent prompt injection
         sanitized_text = sanitize_document_text(document_text)
         prompt = ACTIONABLE_ANALYSIS_PROMPT.format(
-            document_text=sanitized_text,
-            today=datetime.now().strftime("%B %d, %Y")
+            document_text=sanitized_text, today=datetime.now().strftime("%B %d, %Y")
         )
 
         response, tokens = self._call_openai(
             system_prompt="You are a VA disability claims expert. Provide specific, actionable advice that helps veterans get the benefits they deserve. Never give generic summaries - always give concrete next steps.",
             user_prompt=prompt,
-            temperature=0.3
+            temperature=0.3,
         )
 
         return response, tokens
@@ -670,7 +702,10 @@ class SimpleRatingAnalyzer(BaseAgent):
 # CONVENIENCE FUNCTIONS
 # ============================================================================
 
-def analyze_rating_decision(document_text: str, decision_date: Optional[date] = None) -> dict:
+
+def analyze_rating_decision(
+    document_text: str, decision_date: Optional[date] = None
+) -> dict:
     """
     Analyze a rating decision and return actionable insights.
 

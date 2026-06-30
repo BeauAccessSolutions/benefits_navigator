@@ -6,7 +6,6 @@ Covers:
 - Text truncation limits
 """
 
-import pytest
 from django.test import TestCase
 
 from benefits_navigator.schema import (
@@ -17,10 +16,10 @@ from benefits_navigator.schema import (
     MAX_AI_SUMMARY_LENGTH,
 )
 
-
 # =============================================================================
 # PII REDACTION TESTS
 # =============================================================================
+
 
 class TestPIIRedaction(TestCase):
     """Tests for PII redaction utilities."""
@@ -58,9 +57,7 @@ class TestPIIRedaction(TestCase):
         text = "File: 123456789"
         result = redact_pii(text)
         # Note: 9 digits matches both SSN and VA_FILE patterns
-        self.assertTrue(
-            "[REDACTED:SSN]" in result or "[REDACTED:VA_FILE]" in result
-        )
+        self.assertTrue("[REDACTED:SSN]" in result or "[REDACTED:VA_FILE]" in result)
 
     def test_redact_va_file_with_c_prefix(self):
         """VA file number with C prefix is redacted."""
@@ -147,6 +144,7 @@ class TestPIIRedaction(TestCase):
 # TEXT TRUNCATION TESTS
 # =============================================================================
 
+
 class TestTextTruncation(TestCase):
     """Tests for text truncation utility."""
 
@@ -182,6 +180,7 @@ class TestTextTruncation(TestCase):
 # =============================================================================
 # SANITIZE GRAPHQL TEXT TESTS
 # =============================================================================
+
 
 class TestSanitizeGraphQLText(TestCase):
     """Tests for combined sanitization function."""
@@ -220,6 +219,7 @@ class TestSanitizeGraphQLText(TestCase):
 # =============================================================================
 # CONSTANTS TESTS
 # =============================================================================
+
 
 class TestConstants(TestCase):
     """Tests for GraphQL security constants."""

@@ -1,0 +1,39 @@
+# Ruff configuration (pinned ruff 0.1.15).
+# Default rule set is pyflakes (F) + pycodestyle errors (E). The exceptions
+# below reflect deliberate, idiomatic patterns in this codebase rather than
+# blanket suppression.
+
+target-version = "py311"
+line-length = 88
+
+# E402 (module-level import not at top): Django code here intentionally uses
+# late imports — mid-module to break import cycles in views/urls, and after
+# model definitions to wire signals/related models. Enforcing E402 would force
+# unsafe import reordering, so it is disabled project-wide.
+ignore = ["E402"]
+
+# One-off operational/scraping scripts are not part of the app runtime and are
+# also excluded from coverage; don't lint them.
+extend-exclude = [
+    ".auditvenv",
+    "**/migrations/**",
+    "agents/discover_article_ids.py",
+    "agents/discover_from_toc.py",
+    "agents/analyze_article_id_pattern.py",
+    "agents/knowva_scraper.py",
+    "check_m21_status.py",
+]
+
+[per-file-ignores]
+# F841 (unused local): common and harmless in tests, where locals are bound for
+# readability or to document intent without an assertion. E722 (bare except)
+# appears only in resilience/chaos test helpers that intentionally swallow all
+# failures.
+"tests/**" = ["F841", "E722"]
+"**/tests.py" = ["F841"]
+"**/conftest.py" = ["F841"]
+"conftest.py" = ["F841"]
+"scripts/**" = ["F841"]
+# `O` is a VA Special Monthly Compensation level code (K, L, M, N, O, R1, R2, S),
+# not an ambiguous identifier.
+"examprep/va_special_compensation.py" = ["E741"]

@@ -23,10 +23,9 @@ import re
 import time
 import logging
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict
 
-from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
-from bs4 import BeautifulSoup
+from playwright.sync_api import sync_playwright
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -48,7 +47,7 @@ class M21ArticleDiscoverer:
 
     def __init__(self, headless: bool = True, output_file: str = None):
         self.headless = headless
-        self.output_file = output_file or 'agents/data/discovered_m21_articles.json'
+        self.output_file = output_file or "agents/data/discovered_m21_articles.json"
 
     def discover_all(self) -> Dict[str, Dict]:
         """
@@ -62,7 +61,7 @@ class M21ArticleDiscoverer:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=self.headless)
             context = browser.new_context(
-                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
             )
             page = context.new_page()
 
@@ -83,7 +82,9 @@ class M21ArticleDiscoverer:
             browser.close()
 
         if not all_articles:
-            logger.warning("No articles discovered. You may need to manually find article IDs.")
+            logger.warning(
+                "No articles discovered. You may need to manually find article IDs."
+            )
             logger.info("To manually discover article IDs:")
             logger.info("1. Visit https://www.knowva.ebenefits.va.gov")
             logger.info("2. Search for 'M21-1'")
@@ -99,15 +100,15 @@ class M21ArticleDiscoverer:
         articles = {}
 
         try:
-            page.goto(url, wait_until='networkidle', timeout=30000)
+            page.goto(url, wait_until="networkidle", timeout=30000)
             time.sleep(3)  # Let JavaScript render
 
             # Get all links on the page
-            links = page.query_selector_all('a')
+            links = page.query_selector_all("a")
 
             for link in links:
                 try:
-                    href = link.get_attribute('href')
+                    href = link.get_attribute("href")
                     text = link.inner_text().strip()
 
                     if not href or not text:
@@ -115,20 +116,24 @@ class M21ArticleDiscoverer:
 
                     # Look for M21-1 article links
                     # Pattern: /content/{article_id}/...
-                    article_id_match = re.search(r'/content/(\d+)/', href)
+                    article_id_match = re.search(r"/content/(\d+)/", href)
 
-                    if article_id_match and 'M21-1' in text:
+                    if article_id_match and "M21-1" in text:
                         article_id = article_id_match.group(1)
 
                         # Parse reference from text
                         ref_data = self._parse_reference_from_text(text)
 
                         if ref_data:
-                            articles[ref_data['reference']] = {
-                                'article_id': article_id,
-                                'url': f"https://www.knowva.ebenefits.va.gov{href}" if href.startswith('/') else href,
-                                'title': text,
-                                **ref_data
+                            articles[ref_data["reference"]] = {
+                                "article_id": article_id,
+                                "url": (
+                                    f"https://www.knowva.ebenefits.va.gov{href}"
+                                    if href.startswith("/")
+                                    else href
+                                ),
+                                "title": text,
+                                **ref_data,
                             }
 
                 except Exception as e:
@@ -146,7 +151,7 @@ class M21ArticleDiscoverer:
 
         Example: "M21-1, Part I, Subpart i, Chapter 1, Section A - Title"
         """
-        pattern = r'M21-1.*?Part\s+([IVX]+).*?Subpart\s+([ivx]+).*?Chapter\s+(\d+).*?Section\s+([A-Z])'
+        pattern = r"M21-1.*?Part\s+([IVX]+).*?Subpart\s+([ivx]+).*?Chapter\s+(\d+).*?Section\s+([A-Z])"
         match = re.search(pattern, text, re.IGNORECASE)
 
         if match:
@@ -156,11 +161,11 @@ class M21ArticleDiscoverer:
             section = match.group(4).upper()
 
             return {
-                'part': part,
-                'subpart': subpart,
-                'chapter': chapter,
-                'section': section,
-                'reference': f"{part}.{subpart}.{chapter}.{section}"
+                "part": part,
+                "subpart": subpart,
+                "chapter": chapter,
+                "section": section,
+                "reference": f"{part}.{subpart}.{chapter}.{section}",
             }
 
         return None
@@ -171,7 +176,7 @@ class M21ArticleDiscoverer:
         filepath = Path(filename)
         filepath.parent.mkdir(parents=True, exist_ok=True)
 
-        with open(filepath, 'w') as f:
+        with open(filepath, "w") as f:
             json.dump(articles, f, indent=2)
 
         logger.info(f"Saved {len(articles)} articles to {filepath}")
@@ -180,9 +185,9 @@ class M21ArticleDiscoverer:
         """
         Print a guide for manually discovering article IDs.
         """
-        print("\n" + "="*70)
+        print("\n" + "=" * 70)
         print("MANUAL M21-1 ARTICLE ID DISCOVERY GUIDE")
-        print("="*70)
+        print("=" * 70)
         print("\nIf automated discovery fails, follow these steps:\n")
         print("1. Open browser and go to:")
         print("   https://www.knowva.ebenefits.va.gov\n")
@@ -209,7 +214,7 @@ class M21ArticleDiscoverer:
         """)
         print("\n9. Import using:")
         print("   python manage.py scrape_m21 --import-from-file your_file.json")
-        print("\n" + "="*70 + "\n")
+        print("\n" + "=" * 70 + "\n")
 
 
 def discover_m21_articles(headless: bool = True, save: bool = True) -> Dict:
@@ -243,10 +248,16 @@ def main():
     """CLI entry point."""
     import argparse
 
-    parser = argparse.ArgumentParser(description='Discover M21-1 article IDs from KnowVA')
-    parser.add_argument('--no-headless', action='store_true', help='Show browser window')
-    parser.add_argument('--output', '-o', help='Output JSON file')
-    parser.add_argument('--manual-guide', action='store_true', help='Show manual discovery guide')
+    parser = argparse.ArgumentParser(
+        description="Discover M21-1 article IDs from KnowVA"
+    )
+    parser.add_argument(
+        "--no-headless", action="store_true", help="Show browser window"
+    )
+    parser.add_argument("--output", "-o", help="Output JSON file")
+    parser.add_argument(
+        "--manual-guide", action="store_true", help="Show manual discovery guide"
+    )
 
     args = parser.parse_args()
 
@@ -255,20 +266,19 @@ def main():
         discoverer.manual_discovery_guide()
         return
 
-    articles = discover_m21_articles(
-        headless=not args.no_headless,
-        save=True
-    )
+    articles = discover_m21_articles(headless=not args.no_headless, save=True)
 
     if articles:
         print(f"\n✓ Discovered {len(articles)} articles")
-        print(f"✓ Saved to agents/data/discovered_m21_articles.json")
+        print("✓ Saved to agents/data/discovered_m21_articles.json")
         print("\nUse them with:")
-        print("  python manage.py scrape_m21 --import-from-file agents/data/discovered_m21_articles.json")
+        print(
+            "  python manage.py scrape_m21 --import-from-file agents/data/discovered_m21_articles.json"
+        )
     else:
         print("\n✗ No articles discovered automatically")
         print("  Run with --manual-guide for instructions on manual discovery")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

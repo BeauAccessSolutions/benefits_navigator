@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 @dataclass
 class SecondaryCondition:
     """A potential secondary condition related to a primary condition."""
+
     condition: str
     connection_type: str  # "caused_by" or "aggravated_by"
     medical_rationale: str
@@ -28,6 +29,7 @@ class SecondaryCondition:
 @dataclass
 class PrimaryCondition:
     """A primary service-connected condition with its secondary relationships."""
+
     condition: str
     category: str
     diagnostic_codes: List[str] = field(default_factory=list)
@@ -57,8 +59,8 @@ SECONDARY_CONDITIONS_DATA: List[Dict[str, Any]] = [
                     "Sleep study (polysomnography) confirming diagnosis",
                     "Medical opinion linking sleep apnea to PTSD",
                     "Documentation of sleep disturbance from PTSD records",
-                    "Research studies showing PTSD-sleep apnea connection"
-                ]
+                    "Research studies showing PTSD-sleep apnea connection",
+                ],
             },
             {
                 "condition": "Hypertension",
@@ -71,8 +73,8 @@ SECONDARY_CONDITIONS_DATA: List[Dict[str, Any]] = [
                     "Blood pressure readings over time",
                     "Medical opinion linking hypertension to PTSD",
                     "Documentation of medication use",
-                    "Studies on PTSD and cardiovascular effects"
-                ]
+                    "Studies on PTSD and cardiovascular effects",
+                ],
             },
             {
                 "condition": "Migraines/Headaches",
@@ -85,8 +87,8 @@ SECONDARY_CONDITIONS_DATA: List[Dict[str, Any]] = [
                     "Headache diary documenting frequency and severity",
                     "Medical records showing headache treatment",
                     "Nexus letter from neurologist or primary care",
-                    "Documentation of headache onset timing relative to PTSD"
-                ]
+                    "Documentation of headache onset timing relative to PTSD",
+                ],
             },
             {
                 "condition": "Gastrointestinal Disorders (GERD, IBS)",
@@ -98,8 +100,8 @@ SECONDARY_CONDITIONS_DATA: List[Dict[str, Any]] = [
                 "evidence_tips": [
                     "Endoscopy or other diagnostic testing",
                     "Medication records for GI conditions",
-                    "Medical opinion connecting GI issues to PTSD stress"
-                ]
+                    "Medical opinion connecting GI issues to PTSD stress",
+                ],
             },
             {
                 "condition": "Erectile Dysfunction",
@@ -111,8 +113,8 @@ SECONDARY_CONDITIONS_DATA: List[Dict[str, Any]] = [
                 "evidence_tips": [
                     "List of medications causing ED as side effect",
                     "Medical records documenting ED diagnosis",
-                    "Note: ED qualifies for Special Monthly Compensation (SMC-K)"
-                ]
+                    "Note: ED qualifies for Special Monthly Compensation (SMC-K)",
+                ],
             },
             {
                 "condition": "Weight Gain/Obesity",
@@ -124,8 +126,8 @@ SECONDARY_CONDITIONS_DATA: List[Dict[str, Any]] = [
                 "evidence_tips": [
                     "Weight records before and after PTSD treatment",
                     "Medication documentation with weight gain side effects",
-                    "This can support secondary claims for sleep apnea, heart disease, diabetes"
-                ]
+                    "This can support secondary claims for sleep apnea, heart disease, diabetes",
+                ],
             },
             {
                 "condition": "Substance Abuse Disorder",
@@ -137,8 +139,8 @@ SECONDARY_CONDITIONS_DATA: List[Dict[str, Any]] = [
                 "evidence_tips": [
                     "Treatment records for substance abuse",
                     "Mental health records showing self-medication pattern",
-                    "Therapist statements linking substance use to PTSD symptoms"
-                ]
+                    "Therapist statements linking substance use to PTSD symptoms",
+                ],
             },
             {
                 "condition": "Depression/Anxiety",
@@ -149,12 +151,11 @@ SECONDARY_CONDITIONS_DATA: List[Dict[str, Any]] = [
                 "max_rating": "Note: Only ONE mental health rating allowed",
                 "evidence_tips": [
                     "Mental health evaluations documenting both conditions",
-                    "Note: Mental health conditions are rated together under the General Rating Formula"
-                ]
-            }
-        ]
+                    "Note: Mental health conditions are rated together under the General Rating Formula",
+                ],
+            },
+        ],
     },
-
     # =========================================================================
     # TBI (TRAUMATIC BRAIN INJURY)
     # =========================================================================
@@ -174,8 +175,8 @@ SECONDARY_CONDITIONS_DATA: List[Dict[str, Any]] = [
                 "evidence_tips": [
                     "Headache diary with frequency and severity",
                     "Documentation of headache onset after TBI",
-                    "Medical records showing headache treatment"
-                ]
+                    "Medical records showing headache treatment",
+                ],
             },
             {
                 "condition": "Tinnitus",
@@ -187,8 +188,8 @@ SECONDARY_CONDITIONS_DATA: List[Dict[str, Any]] = [
                 "evidence_tips": [
                     "Audiology evaluation",
                     "Documentation of TBI mechanism (blast, impact)",
-                    "Statement describing tinnitus onset relative to TBI"
-                ]
+                    "Statement describing tinnitus onset relative to TBI",
+                ],
             },
             {
                 "condition": "Hearing Loss",
@@ -200,8 +201,8 @@ SECONDARY_CONDITIONS_DATA: List[Dict[str, Any]] = [
                 "evidence_tips": [
                     "Audiogram results",
                     "Documentation of noise exposure or blast in service",
-                    "Comparison of hearing before and after TBI event"
-                ]
+                    "Comparison of hearing before and after TBI event",
+                ],
             },
             {
                 "condition": "Sleep Apnea",
@@ -213,8 +214,8 @@ SECONDARY_CONDITIONS_DATA: List[Dict[str, Any]] = [
                 "evidence_tips": [
                     "Sleep study confirming diagnosis",
                     "Medical opinion linking to TBI",
-                    "Research on TBI and sleep-disordered breathing"
-                ]
+                    "Research on TBI and sleep-disordered breathing",
+                ],
             },
             {
                 "condition": "PTSD/Depression/Anxiety",
@@ -226,8 +227,8 @@ SECONDARY_CONDITIONS_DATA: List[Dict[str, Any]] = [
                 "evidence_tips": [
                     "Mental health evaluation",
                     "Documentation of personality/mood changes after TBI",
-                    "Buddy statements describing behavioral changes"
-                ]
+                    "Buddy statements describing behavioral changes",
+                ],
             },
             {
                 "condition": "Vestibular Disorder (Vertigo/Dizziness)",
@@ -239,8 +240,8 @@ SECONDARY_CONDITIONS_DATA: List[Dict[str, Any]] = [
                 "evidence_tips": [
                     "Vestibular function testing",
                     "Balance assessment",
-                    "Documentation of dizziness symptoms"
-                ]
+                    "Documentation of dizziness symptoms",
+                ],
             },
             {
                 "condition": "Seizure Disorder",
@@ -252,8 +253,8 @@ SECONDARY_CONDITIONS_DATA: List[Dict[str, Any]] = [
                 "evidence_tips": [
                     "EEG results",
                     "Seizure diary",
-                    "Neurologist evaluation"
-                ]
+                    "Neurologist evaluation",
+                ],
             },
             {
                 "condition": "Erectile Dysfunction",
@@ -265,12 +266,11 @@ SECONDARY_CONDITIONS_DATA: List[Dict[str, Any]] = [
                 "evidence_tips": [
                     "Medical documentation of ED diagnosis",
                     "Hormone level testing",
-                    "Note: Qualifies for Special Monthly Compensation (SMC-K)"
-                ]
-            }
-        ]
+                    "Note: Qualifies for Special Monthly Compensation (SMC-K)",
+                ],
+            },
+        ],
     },
-
     # =========================================================================
     # BACK CONDITIONS
     # =========================================================================
@@ -291,8 +291,8 @@ SECONDARY_CONDITIONS_DATA: List[Dict[str, Any]] = [
                     "EMG/nerve conduction study",
                     "MRI showing nerve compression",
                     "Neurological examination documenting sensory/motor deficits",
-                    "Each leg is rated separately"
-                ]
+                    "Each leg is rated separately",
+                ],
             },
             {
                 "condition": "Depression",
@@ -304,8 +304,8 @@ SECONDARY_CONDITIONS_DATA: List[Dict[str, Any]] = [
                 "evidence_tips": [
                     "Mental health evaluation",
                     "Documentation of chronic pain",
-                    "Research on chronic pain and depression"
-                ]
+                    "Research on chronic pain and depression",
+                ],
             },
             {
                 "condition": "Bowel/Bladder Dysfunction",
@@ -317,8 +317,8 @@ SECONDARY_CONDITIONS_DATA: List[Dict[str, Any]] = [
                 "evidence_tips": [
                     "Urological evaluation",
                     "Documentation of cauda equina symptoms",
-                    "MRI showing significant nerve compression"
-                ]
+                    "MRI showing significant nerve compression",
+                ],
             },
             {
                 "condition": "Knee Condition (Secondary)",
@@ -330,8 +330,8 @@ SECONDARY_CONDITIONS_DATA: List[Dict[str, Any]] = [
                 "evidence_tips": [
                     "Gait analysis or documentation of abnormal gait",
                     "X-rays showing degenerative changes",
-                    "Medical opinion on altered biomechanics"
-                ]
+                    "Medical opinion on altered biomechanics",
+                ],
             },
             {
                 "condition": "Hip Condition",
@@ -343,12 +343,11 @@ SECONDARY_CONDITIONS_DATA: List[Dict[str, Any]] = [
                 "evidence_tips": [
                     "Documentation of altered gait",
                     "Imaging of hip joints",
-                    "Medical opinion on compensatory mechanics"
-                ]
-            }
-        ]
+                    "Medical opinion on compensatory mechanics",
+                ],
+            },
+        ],
     },
-
     # =========================================================================
     # KNEE CONDITIONS
     # =========================================================================
@@ -368,8 +367,8 @@ SECONDARY_CONDITIONS_DATA: List[Dict[str, Any]] = [
                 "evidence_tips": [
                     "Imaging showing degeneration in both knees",
                     "Gait analysis documentation",
-                    "Medical opinion on compensatory stress"
-                ]
+                    "Medical opinion on compensatory stress",
+                ],
             },
             {
                 "condition": "Hip Condition",
@@ -381,8 +380,8 @@ SECONDARY_CONDITIONS_DATA: List[Dict[str, Any]] = [
                 "evidence_tips": [
                     "Imaging of hips",
                     "Documentation of gait abnormality",
-                    "Orthopedic opinion on biomechanical relationship"
-                ]
+                    "Orthopedic opinion on biomechanical relationship",
+                ],
             },
             {
                 "condition": "Back Condition",
@@ -394,8 +393,8 @@ SECONDARY_CONDITIONS_DATA: List[Dict[str, Any]] = [
                 "evidence_tips": [
                     "Spine imaging",
                     "Documentation of onset after knee injury",
-                    "Medical opinion on compensatory spinal stress"
-                ]
+                    "Medical opinion on compensatory spinal stress",
+                ],
             },
             {
                 "condition": "Depression",
@@ -407,12 +406,11 @@ SECONDARY_CONDITIONS_DATA: List[Dict[str, Any]] = [
                 "evidence_tips": [
                     "Mental health evaluation",
                     "Documentation of functional limitations",
-                    "Impact on quality of life"
-                ]
-            }
-        ]
+                    "Impact on quality of life",
+                ],
+            },
+        ],
     },
-
     # =========================================================================
     # DIABETES
     # =========================================================================
@@ -432,8 +430,8 @@ SECONDARY_CONDITIONS_DATA: List[Dict[str, Any]] = [
                 "evidence_tips": [
                     "EMG/nerve conduction studies",
                     "Documentation of symptoms",
-                    "Each extremity rated separately"
-                ]
+                    "Each extremity rated separately",
+                ],
             },
             {
                 "condition": "Coronary Artery Disease",
@@ -445,8 +443,8 @@ SECONDARY_CONDITIONS_DATA: List[Dict[str, Any]] = [
                 "evidence_tips": [
                     "Cardiac testing (stress test, echo, catheterization)",
                     "Medical records documenting CAD diagnosis",
-                    "Research on diabetes and cardiovascular disease"
-                ]
+                    "Research on diabetes and cardiovascular disease",
+                ],
             },
             {
                 "condition": "Hypertension",
@@ -458,8 +456,8 @@ SECONDARY_CONDITIONS_DATA: List[Dict[str, Any]] = [
                 "evidence_tips": [
                     "Blood pressure records",
                     "Medication documentation",
-                    "Kidney function tests"
-                ]
+                    "Kidney function tests",
+                ],
             },
             {
                 "condition": "Kidney Disease (Nephropathy)",
@@ -471,8 +469,8 @@ SECONDARY_CONDITIONS_DATA: List[Dict[str, Any]] = [
                 "evidence_tips": [
                     "Kidney function tests (eGFR, creatinine)",
                     "Urinalysis showing protein",
-                    "Nephrology evaluation"
-                ]
+                    "Nephrology evaluation",
+                ],
             },
             {
                 "condition": "Vision Problems (Retinopathy)",
@@ -484,8 +482,8 @@ SECONDARY_CONDITIONS_DATA: List[Dict[str, Any]] = [
                 "evidence_tips": [
                     "Ophthalmology evaluation",
                     "Retinal imaging",
-                    "Documentation of vision changes"
-                ]
+                    "Documentation of vision changes",
+                ],
             },
             {
                 "condition": "Erectile Dysfunction",
@@ -496,12 +494,11 @@ SECONDARY_CONDITIONS_DATA: List[Dict[str, Any]] = [
                 "max_rating": "SMC-K",
                 "evidence_tips": [
                     "Urology evaluation",
-                    "Note: Qualifies for Special Monthly Compensation (SMC-K)"
-                ]
-            }
-        ]
+                    "Note: Qualifies for Special Monthly Compensation (SMC-K)",
+                ],
+            },
+        ],
     },
-
     # =========================================================================
     # SLEEP APNEA
     # =========================================================================
@@ -521,8 +518,8 @@ SECONDARY_CONDITIONS_DATA: List[Dict[str, Any]] = [
                 "evidence_tips": [
                     "Blood pressure records",
                     "Sleep study showing oxygen desaturation",
-                    "Research on OSA and hypertension"
-                ]
+                    "Research on OSA and hypertension",
+                ],
             },
             {
                 "condition": "Heart Disease",
@@ -534,8 +531,8 @@ SECONDARY_CONDITIONS_DATA: List[Dict[str, Any]] = [
                 "evidence_tips": [
                     "Cardiac evaluation",
                     "Documentation of arrhythmias",
-                    "Research on OSA and cardiovascular disease"
-                ]
+                    "Research on OSA and cardiovascular disease",
+                ],
             },
             {
                 "condition": "Stroke",
@@ -547,8 +544,8 @@ SECONDARY_CONDITIONS_DATA: List[Dict[str, Any]] = [
                 "evidence_tips": [
                     "Medical records documenting stroke",
                     "Sleep study results",
-                    "Research on OSA and stroke risk"
-                ]
+                    "Research on OSA and stroke risk",
+                ],
             },
             {
                 "condition": "Depression",
@@ -560,12 +557,11 @@ SECONDARY_CONDITIONS_DATA: List[Dict[str, Any]] = [
                 "evidence_tips": [
                     "Mental health evaluation",
                     "Documentation of fatigue and mood symptoms",
-                    "Research on sleep deprivation and mental health"
-                ]
-            }
-        ]
+                    "Research on sleep deprivation and mental health",
+                ],
+            },
+        ],
     },
-
     # =========================================================================
     # HYPERTENSION
     # =========================================================================
@@ -585,8 +581,8 @@ SECONDARY_CONDITIONS_DATA: List[Dict[str, Any]] = [
                 "evidence_tips": [
                     "Echocardiogram",
                     "Cardiac stress test",
-                    "Documentation of blood pressure history"
-                ]
+                    "Documentation of blood pressure history",
+                ],
             },
             {
                 "condition": "Stroke",
@@ -598,8 +594,8 @@ SECONDARY_CONDITIONS_DATA: List[Dict[str, Any]] = [
                 "evidence_tips": [
                     "Medical records documenting stroke",
                     "Blood pressure history",
-                    "Neurological evaluation"
-                ]
+                    "Neurological evaluation",
+                ],
             },
             {
                 "condition": "Kidney Disease",
@@ -611,8 +607,8 @@ SECONDARY_CONDITIONS_DATA: List[Dict[str, Any]] = [
                 "evidence_tips": [
                     "Kidney function tests",
                     "Blood pressure history",
-                    "Nephrology evaluation"
-                ]
+                    "Nephrology evaluation",
+                ],
             },
             {
                 "condition": "Vision Problems",
@@ -621,14 +617,10 @@ SECONDARY_CONDITIONS_DATA: List[Dict[str, Any]] = [
                 "strength": "established",
                 "diagnostic_code": "6006",
                 "max_rating": "100%",
-                "evidence_tips": [
-                    "Ophthalmology evaluation",
-                    "Retinal imaging"
-                ]
-            }
-        ]
+                "evidence_tips": ["Ophthalmology evaluation", "Retinal imaging"],
+            },
+        ],
     },
-
     # =========================================================================
     # TINNITUS
     # =========================================================================
@@ -648,8 +640,8 @@ SECONDARY_CONDITIONS_DATA: List[Dict[str, Any]] = [
                 "evidence_tips": [
                     "Mental health evaluation",
                     "Documentation of tinnitus severity",
-                    "Sleep disturbance records"
-                ]
+                    "Sleep disturbance records",
+                ],
             },
             {
                 "condition": "Sleep Disorder",
@@ -661,8 +653,8 @@ SECONDARY_CONDITIONS_DATA: List[Dict[str, Any]] = [
                 "evidence_tips": [
                     "Sleep study if available",
                     "Documentation of sleep problems",
-                    "Medical records showing treatment attempts"
-                ]
+                    "Medical records showing treatment attempts",
+                ],
             },
             {
                 "condition": "Migraines/Headaches",
@@ -674,11 +666,11 @@ SECONDARY_CONDITIONS_DATA: List[Dict[str, Any]] = [
                 "evidence_tips": [
                     "Headache diary showing correlation",
                     "Neurology evaluation",
-                    "Documentation of symptom pattern"
-                ]
-            }
-        ]
-    }
+                    "Documentation of symptom pattern",
+                ],
+            },
+        ],
+    },
 ]
 
 
@@ -757,11 +749,13 @@ def get_conditions_count() -> Dict[str, int]:
     Get count statistics for display.
     """
     total_primary = len(SECONDARY_CONDITIONS_DATA)
-    total_secondary = sum(len(c["secondary_conditions"]) for c in SECONDARY_CONDITIONS_DATA)
+    total_secondary = sum(
+        len(c["secondary_conditions"]) for c in SECONDARY_CONDITIONS_DATA
+    )
     total_categories = len(get_categories())
 
     return {
         "primary_conditions": total_primary,
         "secondary_relationships": total_secondary,
-        "categories": total_categories
+        "categories": total_categories,
     }

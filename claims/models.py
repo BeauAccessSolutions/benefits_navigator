@@ -13,7 +13,7 @@ from core.encryption import EncryptedJSONField
 
 def document_upload_path(instance, filename):
     """Generate unique file path for uploaded documents"""
-    ext = filename.split('.')[-1]
+    ext = filename.split(".")[-1]
     filename = f"{uuid.uuid4()}.{ext}"
     return f"documents/user_{instance.user.id}/{filename}"
 
@@ -25,118 +25,114 @@ class Document(TimeStampedModel, SoftDeleteModel):
     """
 
     STATUS_CHOICES = [
-        ('uploading', 'Uploading'),
-        ('processing', 'Processing'),
-        ('analyzing', 'Analyzing'),
-        ('completed', 'Completed'),
-        ('failed', 'Failed'),
+        ("uploading", "Uploading"),
+        ("processing", "Processing"),
+        ("analyzing", "Analyzing"),
+        ("completed", "Completed"),
+        ("failed", "Failed"),
     ]
 
     DOCUMENT_TYPE_CHOICES = [
-        ('medical_records', 'Medical Records'),
-        ('service_records', 'Service Records / STRs'),
-        ('decision_letter', 'VA Decision Letter'),
-        ('buddy_statement', 'Buddy Statement'),
-        ('lay_statement', 'Lay Statement'),
-        ('nexus_letter', 'Medical Nexus/Opinion Letter'),
-        ('employment_records', 'Employment Records'),
-        ('personal_statement', 'Personal Statement'),
-        ('other', 'Other'),
+        ("medical_records", "Medical Records"),
+        ("service_records", "Service Records / STRs"),
+        ("decision_letter", "VA Decision Letter"),
+        ("buddy_statement", "Buddy Statement"),
+        ("lay_statement", "Lay Statement"),
+        ("nexus_letter", "Medical Nexus/Opinion Letter"),
+        ("employment_records", "Employment Records"),
+        ("personal_statement", "Personal Statement"),
+        ("other", "Other"),
     ]
 
     user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name='documents'
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="documents"
     )
     file = models.FileField(
-        'Document file',
+        "Document file",
         upload_to=document_upload_path,
-        validators=[FileExtensionValidator(allowed_extensions=['pdf', 'jpg', 'jpeg', 'png', 'tiff'])]
+        validators=[
+            FileExtensionValidator(
+                allowed_extensions=["pdf", "jpg", "jpeg", "png", "tiff"]
+            )
+        ],
     )
-    file_name = models.CharField('Original filename', max_length=255)
-    file_size = models.IntegerField('File size (bytes)', default=0)
-    mime_type = models.CharField('MIME type', max_length=100, blank=True)
+    file_name = models.CharField("Original filename", max_length=255)
+    file_size = models.IntegerField("File size (bytes)", default=0)
+    mime_type = models.CharField("MIME type", max_length=100, blank=True)
 
     document_type = models.CharField(
-        'Document type',
-        max_length=50,
-        choices=DOCUMENT_TYPE_CHOICES,
-        default='other'
+        "Document type", max_length=50, choices=DOCUMENT_TYPE_CHOICES, default="other"
     )
 
     status = models.CharField(
-        'Processing status',
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='uploading'
+        "Processing status", max_length=20, choices=STATUS_CHOICES, default="uploading"
     )
 
     # OCR Results
     # NOTE: ocr_text field removed for PHI protection (Ephemeral OCR Refactor PR 6)
     # Raw text is no longer persisted - only metadata is stored
     ocr_confidence = models.FloatField(
-        'OCR confidence score',
+        "OCR confidence score",
         null=True,
         blank=True,
-        help_text='Average confidence score from OCR (0-100)'
+        help_text="Average confidence score from OCR (0-100)",
     )
-    page_count = models.IntegerField('Number of pages', default=0)
+    page_count = models.IntegerField("Number of pages", default=0)
 
     # OCR Metadata (for observability without storing PHI)
     OCR_STATUS_CHOICES = [
-        ('pending', 'Pending'),
-        ('completed', 'Completed'),
-        ('failed', 'Failed'),
+        ("pending", "Pending"),
+        ("completed", "Completed"),
+        ("failed", "Failed"),
     ]
     ocr_length = models.IntegerField(
-        'Extracted text length',
+        "Extracted text length",
         default=0,
-        help_text='Character count of extracted text (metadata only, no PHI)'
+        help_text="Character count of extracted text (metadata only, no PHI)",
     )
     ocr_status = models.CharField(
-        'OCR status',
+        "OCR status",
         max_length=20,
         choices=OCR_STATUS_CHOICES,
-        default='pending',
-        help_text='Status of OCR extraction process'
+        default="pending",
+        help_text="Status of OCR extraction process",
     )
 
     # AI Analysis Results (encrypted at rest — may contain PII from documents)
     ai_summary = EncryptedJSONField(
-        'AI analysis summary',
+        "AI analysis summary",
         null=True,
         blank=True,
-        help_text='Structured analysis results from Claude (encrypted)'
+        help_text="Structured analysis results from Claude (encrypted)",
     )
-    ai_model_used = models.CharField('AI model', max_length=50, blank=True)
-    ai_tokens_used = models.IntegerField('Tokens used', default=0)
+    ai_model_used = models.CharField("AI model", max_length=50, blank=True)
+    ai_tokens_used = models.IntegerField("Tokens used", default=0)
 
     # Condition tags (for organizing documents by claimed condition)
     condition_tags = models.JSONField(
-        'Condition tags',
+        "Condition tags",
         default=list,
         blank=True,
-        help_text='List of condition names this document relates to'
+        help_text="List of condition names this document relates to",
     )
 
     # Processing metadata
-    processed_at = models.DateTimeField('Processing completed at', null=True, blank=True)
-    processing_duration = models.FloatField(
-        'Processing duration (seconds)',
-        null=True,
-        blank=True
+    processed_at = models.DateTimeField(
+        "Processing completed at", null=True, blank=True
     )
-    error_message = models.TextField('Error message', blank=True)
+    processing_duration = models.FloatField(
+        "Processing duration (seconds)", null=True, blank=True
+    )
+    error_message = models.TextField("Error message", blank=True)
 
     class Meta:
-        verbose_name = 'Document'
-        verbose_name_plural = 'Documents'
-        ordering = ['-created_at']
+        verbose_name = "Document"
+        verbose_name_plural = "Documents"
+        ordering = ["-created_at"]
         indexes = [
-            models.Index(fields=['user', 'status']),
-            models.Index(fields=['user', 'document_type']),
-            models.Index(fields=['created_at']),
+            models.Index(fields=["user", "status"]),
+            models.Index(fields=["user", "document_type"]),
+            models.Index(fields=["created_at"]),
         ]
 
     def __str__(self):
@@ -150,29 +146,31 @@ class Document(TimeStampedModel, SoftDeleteModel):
     @property
     def is_processing(self):
         """Check if document is currently being processed"""
-        return self.status in ['uploading', 'processing', 'analyzing']
+        return self.status in ["uploading", "processing", "analyzing"]
 
     @property
     def is_complete(self):
         """Check if processing is complete"""
-        return self.status == 'completed'
+        return self.status == "completed"
 
     @property
     def has_failed(self):
         """Check if processing failed"""
-        return self.status == 'failed'
+        return self.status == "failed"
 
     def mark_processing(self):
         """Mark document as processing"""
-        self.status = 'processing'
-        self.save(update_fields=['status'])
+        self.status = "processing"
+        self.save(update_fields=["status"])
 
     def mark_analyzing(self):
         """Mark document as being analyzed by AI"""
-        self.status = 'analyzing'
-        self.save(update_fields=['status'])
+        self.status = "analyzing"
+        self.save(update_fields=["status"])
 
-    def mark_completed(self, ocr_confidence=None, page_count=None, duration=None, ocr_length=None):
+    def mark_completed(
+        self, ocr_confidence=None, page_count=None, duration=None, ocr_length=None
+    ):
         """
         Mark document processing as completed.
 
@@ -184,27 +182,27 @@ class Document(TimeStampedModel, SoftDeleteModel):
         """
         from django.utils import timezone
 
-        self.status = 'completed'
+        self.status = "completed"
         self.processed_at = timezone.now()
-        self.ocr_status = 'completed'
+        self.ocr_status = "completed"
 
-        update_fields = ['status', 'processed_at', 'ocr_status']
+        update_fields = ["status", "processed_at", "ocr_status"]
 
         if ocr_length is not None:
             self.ocr_length = ocr_length
-            update_fields.append('ocr_length')
+            update_fields.append("ocr_length")
 
         if ocr_confidence is not None:
             self.ocr_confidence = ocr_confidence
-            update_fields.append('ocr_confidence')
+            update_fields.append("ocr_confidence")
 
         if page_count is not None:
             self.page_count = page_count
-            update_fields.append('page_count')
+            update_fields.append("page_count")
 
         if duration is not None:
             self.processing_duration = duration
-            update_fields.append('processing_duration')
+            update_fields.append("processing_duration")
 
         self.save(update_fields=update_fields)
 
@@ -217,14 +215,15 @@ class Document(TimeStampedModel, SoftDeleteModel):
             ocr_failed: If True, marks OCR status as failed (vs AI analysis failure)
         """
         from django.utils import timezone
-        self.status = 'failed'
+
+        self.status = "failed"
         self.error_message = error_message
         self.processed_at = timezone.now()
-        update_fields = ['status', 'error_message', 'processed_at']
+        update_fields = ["status", "error_message", "processed_at"]
 
         if ocr_failed:
-            self.ocr_status = 'failed'
-            update_fields.append('ocr_status')
+            self.ocr_status = "failed"
+            update_fields.append("ocr_status")
 
         self.save(update_fields=update_fields)
 
@@ -243,12 +242,12 @@ class Document(TimeStampedModel, SoftDeleteModel):
 
         generator = get_signed_url_generator()
         return generator.generate_url(
-            resource_type='document',
+            resource_type="document",
             resource_id=self.pk,
             user_id=self.user_id,
-            action='download',
+            action="download",
             expires_minutes=expires_minutes,
-            request=request
+            request=request,
         )
 
     def get_signed_view_url(self, expires_minutes: int = 30, request=None) -> str:
@@ -266,12 +265,12 @@ class Document(TimeStampedModel, SoftDeleteModel):
 
         generator = get_signed_url_generator()
         return generator.generate_url(
-            resource_type='document',
+            resource_type="document",
             resource_id=self.pk,
             user_id=self.user_id,
-            action='view',
+            action="view",
             expires_minutes=expires_minutes,
-            request=request
+            request=request,
         )
 
 
@@ -282,58 +281,50 @@ class Claim(TimeStampedModel, SoftDeleteModel):
     """
 
     CLAIM_TYPE_CHOICES = [
-        ('initial', 'Initial Claim'),
-        ('increase', 'Claim for Increase'),
-        ('secondary', 'Secondary Condition'),
-        ('new_condition', 'New Condition'),
+        ("initial", "Initial Claim"),
+        ("increase", "Claim for Increase"),
+        ("secondary", "Secondary Condition"),
+        ("new_condition", "New Condition"),
     ]
 
     STATUS_CHOICES = [
-        ('draft', 'Draft'),
-        ('gathering_evidence', 'Gathering Evidence'),
-        ('submitted', 'Submitted to VA'),
-        ('pending', 'Pending VA Decision'),
-        ('decided', 'Decision Received'),
-        ('appealed', 'Under Appeal'),
+        ("draft", "Draft"),
+        ("gathering_evidence", "Gathering Evidence"),
+        ("submitted", "Submitted to VA"),
+        ("pending", "Pending VA Decision"),
+        ("decided", "Decision Received"),
+        ("appealed", "Under Appeal"),
     ]
 
     user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name='claims'
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="claims"
     )
     title = models.CharField(
-        'Claim title',
+        "Claim title",
         max_length=200,
-        help_text='e.g., "PTSD Service Connection" or "Knee Injury Increase"'
+        help_text='e.g., "PTSD Service Connection" or "Knee Injury Increase"',
     )
-    description = models.TextField('Description', blank=True)
+    description = models.TextField("Description", blank=True)
     claim_type = models.CharField(
-        'Claim type',
-        max_length=20,
-        choices=CLAIM_TYPE_CHOICES,
-        default='initial'
+        "Claim type", max_length=20, choices=CLAIM_TYPE_CHOICES, default="initial"
     )
     status = models.CharField(
-        'Status',
-        max_length=30,
-        choices=STATUS_CHOICES,
-        default='draft'
+        "Status", max_length=30, choices=STATUS_CHOICES, default="draft"
     )
 
     # Key dates
-    submission_date = models.DateField('Date submitted to VA', null=True, blank=True)
-    decision_date = models.DateField('Decision received date', null=True, blank=True)
+    submission_date = models.DateField("Date submitted to VA", null=True, blank=True)
+    decision_date = models.DateField("Decision received date", null=True, blank=True)
 
     # Link to documents
     # documents = ForeignKey relationship from Document model
 
-    notes = models.TextField('Internal notes', blank=True)
+    notes = models.TextField("Internal notes", blank=True)
 
     class Meta:
-        verbose_name = 'Claim'
-        verbose_name_plural = 'Claims'
-        ordering = ['-created_at']
+        verbose_name = "Claim"
+        verbose_name_plural = "Claims"
+        ordering = ["-created_at"]
 
     def __str__(self):
         return f"{self.title} ({self.get_claim_type_display()})"
@@ -348,6 +339,7 @@ class Claim(TimeStampedModel, SoftDeleteModel):
         """Calculate days since claim was submitted"""
         if self.submission_date:
             from datetime import date
+
             delta = date.today() - self.submission_date
             return delta.days
         return None
@@ -356,13 +348,13 @@ class Claim(TimeStampedModel, SoftDeleteModel):
 # Add optional foreign key to link documents to claims
 # This allows documents to exist independently or be grouped into claims
 Document.add_to_class(
-    'claim',
+    "claim",
     models.ForeignKey(
         Claim,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='documents',
-        help_text='Optional: Associate this document with a claim'
-    )
+        related_name="documents",
+        help_text="Optional: Associate this document with a claim",
+    ),
 )
