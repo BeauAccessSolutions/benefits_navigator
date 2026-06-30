@@ -107,7 +107,7 @@ class Document(TimeStampedModel, SoftDeleteModel):
         'AI analysis summary',
         null=True,
         blank=True,
-        help_text='Structured analysis results from OpenAI (encrypted)'
+        help_text='Structured analysis results from Claude (encrypted)'
     )
     ai_model_used = models.CharField('AI model', max_length=50, blank=True)
     ai_tokens_used = models.IntegerField('Tokens used', default=0)
