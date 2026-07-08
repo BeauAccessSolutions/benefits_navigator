@@ -462,10 +462,11 @@ CRISPY_TEMPLATE_PACK = "tailwind"
 # ANTHROPIC (CLAUDE) CONFIGURATION
 # ==============================================================================
 # All Claude calls go through the AI Gateway (agents/ai_gateway.py).
-# Model can be overridden per-environment: claude-sonnet-4-6 and
-# claude-haiku-4-5 are cheaper tiers if cost requires it.
+# Default is Sonnet, the cost-optimized tier for routine document analysis.
+# Override per-environment: claude-opus-4-8 for premium deep-appeal-review
+# actions, claude-haiku-4-5-20251001 for lighter extraction calls.
 ANTHROPIC_API_KEY = env("ANTHROPIC_API_KEY", default="")
-ANTHROPIC_MODEL = env("ANTHROPIC_MODEL", default="claude-opus-4-8")
+ANTHROPIC_MODEL = env("ANTHROPIC_MODEL", default="claude-sonnet-5")
 ANTHROPIC_MAX_TOKENS = env.int("ANTHROPIC_MAX_TOKENS", default=8192)
 # Adaptive thinking lets Claude decide when/how much to reason per request
 ANTHROPIC_ADAPTIVE_THINKING = env.bool("ANTHROPIC_ADAPTIVE_THINKING", default=True)

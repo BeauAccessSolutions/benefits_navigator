@@ -3,7 +3,7 @@
 **Last Audit:** 2026-02-11 | **Production-Readiness:** 8.0/10 | See `TODO.md` for prioritized issues
 
 ## Project Summary
-Django 5.1.14 app deployed on DigitalOcean App Platform, using the Anthropic Claude API (claude-opus-4-8 default; model env-configurable).
+Django 5.1.14 app deployed on DigitalOcean App Platform, using the Anthropic Claude API (claude-sonnet-5 default; model env-configurable).
 Celery + Redis (DO Managed Valkey) for async document processing. PostgreSQL database. Stripe for subscriptions.
 
 **Two user flows:**

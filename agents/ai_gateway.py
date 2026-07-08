@@ -255,7 +255,7 @@ def sanitize_input(text: str) -> str:
 class GatewayConfig:
     """Configuration for AI Gateway."""
 
-    model: str = "claude-opus-4-8"
+    model: str = "claude-sonnet-5"
     max_tokens: int = 8192
     # Retained for call-site compatibility; Claude 4.7+ models do not accept
     # sampling parameters, so this value is never sent to the API.
@@ -270,7 +270,7 @@ class GatewayConfig:
     def from_settings(cls) -> "GatewayConfig":
         """Create config from Django settings."""
         return cls(
-            model=getattr(settings, "ANTHROPIC_MODEL", "claude-opus-4-8"),
+            model=getattr(settings, "ANTHROPIC_MODEL", "claude-sonnet-5"),
             max_tokens=getattr(settings, "ANTHROPIC_MAX_TOKENS", 8192),
             adaptive_thinking=getattr(settings, "ANTHROPIC_ADAPTIVE_THINKING", True),
             timeout_seconds=getattr(settings, "ANTHROPIC_TIMEOUT_SECONDS", 120),
@@ -689,7 +689,7 @@ class AIGateway:
                 Decimal("0.000005"),
                 Decimal("0.000025"),
             ),  # $5 / $25 per MTok
-            "claude-sonnet-4-6": (
+            "claude-sonnet-5": (
                 Decimal("0.000003"),
                 Decimal("0.000015"),
             ),  # $3 / $15 per MTok
