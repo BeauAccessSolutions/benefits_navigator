@@ -317,23 +317,24 @@ def check_download_anomalies(hours: int = 1) -> List[Dict]:
     anomalies = []
 
     # Check downloads per user in the time window
-    user_downloads = AuditLog.objects.filter(
-        action='document_download',
-        timestamp__gte=since,
-        user__isnull=False
-    ).values('user_id').annotate(
-        download_count=Count('id')
-    ).order_by('-download_count')
+    user_downloads = (
+        AuditLog.objects.filter(
+            action="document_download", timestamp__gte=since, user__isnull=False
+        )
+        .values("user_id")
+        .annotate(download_count=Count("id"))
+        .order_by("-download_count")
+    )
 
     for entry in user_downloads:
         count = entry["download_count"]
         if count >= thresholds.downloads_per_hour_critical:
             anomaly = {
-                'type': 'high_download_volume',
-                'severity': AlertSeverity.CRITICAL,
-                'user_id': entry['user_id'],
-                'download_count': count,
-                'period_hours': hours,
+                "type": "high_download_volume",
+                "severity": AlertSeverity.CRITICAL,
+                "user_id": entry["user_id"],
+                "download_count": count,
+                "period_hours": hours,
             }
             anomalies.append(anomaly)
             send_alert(
@@ -345,11 +346,11 @@ def check_download_anomalies(hours: int = 1) -> List[Dict]:
             )
         elif count >= thresholds.downloads_per_hour_warning:
             anomaly = {
-                'type': 'elevated_download_volume',
-                'severity': AlertSeverity.WARNING,
-                'user_id': entry['user_id'],
-                'download_count': count,
-                'period_hours': hours,
+                "type": "elevated_download_volume",
+                "severity": AlertSeverity.WARNING,
+                "user_id": entry["user_id"],
+                "download_count": count,
+                "period_hours": hours,
             }
             anomalies.append(anomaly)
             send_alert(

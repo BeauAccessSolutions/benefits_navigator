@@ -6,13 +6,17 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('accounts', '0010_encrypt_phone_number_data'),
+        ("accounts", "0010_encrypt_phone_number_data"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='organization',
-            name='restrict_caseworker_visibility',
-            field=models.BooleanField(default=False, help_text='When enabled, caseworkers see only cases assigned to them (or unassigned); org admins see all cases.', verbose_name='Restrict caseworker visibility'),
+            model_name="organization",
+            name="restrict_caseworker_visibility",
+            field=models.BooleanField(
+                default=False,
+                help_text="When enabled, caseworkers see only cases assigned to them (or unassigned); org admins see all cases.",
+                verbose_name="Restrict caseworker visibility",
+            ),
         ),
     ]

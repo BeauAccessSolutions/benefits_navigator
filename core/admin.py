@@ -517,12 +517,12 @@ class PIIRedactedAdminMixin:
         exclude = super().get_exclude(request, obj) or ()
         return tuple(exclude) + tuple(self.pii_redacted_fields)
 
-    def change_view(self, request, object_id, form_url='', extra_context=None):
-        self._log_admin_access(request, object_id, 'admin_change_view')
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        self._log_admin_access(request, object_id, "admin_change_view")
         return super().change_view(request, object_id, form_url, extra_context)
 
     def history_view(self, request, object_id, extra_context=None):
-        self._log_admin_access(request, object_id, 'admin_history_view')
+        self._log_admin_access(request, object_id, "admin_history_view")
         return super().history_view(request, object_id, extra_context)
 
     def _log_admin_access(self, request, object_id, event):
@@ -531,9 +531,9 @@ class PIIRedactedAdminMixin:
         except (TypeError, ValueError):
             resource_id = None
         AuditLog.log(
-            action='admin_action',
+            action="admin_action",
             request=request,
             resource_type=self.audit_resource_type or self.model.__name__,
             resource_id=resource_id,
-            details={'event': event, 'model': self.model._meta.label},
+            details={"event": event, "model": self.model._meta.label},
         )

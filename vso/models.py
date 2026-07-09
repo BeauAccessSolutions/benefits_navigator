@@ -65,9 +65,9 @@ class VeteranCase(TimeStampedModel):
         "Case title", max_length=200, help_text="Brief description of the case"
     )
     description = EncryptedTextField(
-        'Description',
+        "Description",
         blank=True,
-        help_text='Detailed notes about the case (encrypted at rest)'
+        help_text="Detailed notes about the case (encrypted at rest)",
     )
     status = models.CharField(
         "Status", max_length=30, choices=STATUS_CHOICES, default="intake"
@@ -79,10 +79,10 @@ class VeteranCase(TimeStampedModel):
     # Claimed conditions being worked on
     # Format: [{"condition": "PTSD", "status": "pending", "current_rating": 0, "target_rating": 70}]
     conditions = EncryptedJSONField(
-        'Conditions',
+        "Conditions",
         default=list,
         blank=True,
-        help_text='List of conditions being claimed (encrypted at rest)'
+        help_text="List of conditions being claimed (encrypted at rest)",
     )
 
     # Key dates
@@ -139,7 +139,7 @@ class VeteranCase(TimeStampedModel):
         blank=True,
         related_name="closed_cases",
     )
-    closure_notes = EncryptedTextField('Closure notes', blank=True)
+    closure_notes = EncryptedTextField("Closure notes", blank=True)
 
     # Activity tracking for lifecycle hygiene
     last_activity_at = models.DateTimeField("Last Activity", null=True, blank=True)
@@ -158,9 +158,9 @@ class VeteranCase(TimeStampedModel):
         help_text="Location/facility for the exam",
     )
     c_and_p_exam_notes = EncryptedTextField(
-        'C&P Exam Notes',
+        "C&P Exam Notes",
         blank=True,
-        help_text='Notes about the exam (conditions being evaluated, etc.; encrypted at rest)'
+        help_text="Notes about the exam (conditions being evaluated, etc.; encrypted at rest)",
     )
 
     # Archive functionality

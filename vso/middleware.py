@@ -65,46 +65,47 @@ class VSOStaffMFAMiddleware:
 
             user_devices = list(devices_for_user(request.user, confirmed=True))
 
-            if not user_devices and path.startswith('/vso/'):
+            if not user_devices and path.startswith("/vso/"):
                 # User has no MFA devices set up
-                mfa_required = getattr(settings, 'VSO_MFA_REQUIRED', False)
+                mfa_required = getattr(settings, "VSO_MFA_REQUIRED", False)
 
                 if mfa_required:
-                    grace_days = getattr(settings, 'VSO_MFA_GRACE_PERIOD_DAYS', 7)
+                    grace_days = getattr(settings, "VSO_MFA_GRACE_PERIOD_DAYS", 7)
                     joined_at = (
-                        memberships.order_by('created_at')
-                        .values_list('created_at', flat=True)
+                        memberships.order_by("created_at")
+                        .values_list("created_at", flat=True)
                         .first()
                     )
                     grace_ends = (
                         joined_at + timedelta(days=grace_days)
-                        if joined_at else timezone.now()
+                        if joined_at
+                        else timezone.now()
                     )
 
                     if timezone.now() >= grace_ends:
                         # Grace period over: block VSO access until 2FA exists
                         messages.error(
                             request,
-                            'Two-factor authentication is required for VSO '
-                            'staff accounts. Please set up 2FA to continue.'
+                            "Two-factor authentication is required for VSO "
+                            "staff accounts. Please set up 2FA to continue.",
                         )
-                        return redirect('two-factor-setup')
+                        return redirect("two-factor-setup")
 
                     # Still in grace period: warn with the deadline
                     days_left = max(0, (grace_ends - timezone.now()).days)
-                    if not request.session.get('mfa_warning_shown'):
+                    if not request.session.get("mfa_warning_shown"):
                         messages.warning(
                             request,
-                            f'Two-factor authentication will be required for '
-                            f'VSO access in {days_left} day(s). '
+                            f"Two-factor authentication will be required for "
+                            f"VSO access in {days_left} day(s). "
                             '<a href="/accounts/2fa/setup/" class="underline font-medium">'
-                            'Set up 2FA now</a>',
-                            extra_tags='safe'
+                            "Set up 2FA now</a>",
+                            extra_tags="safe",
                         )
-                        request.session['mfa_warning_shown'] = True
+                        request.session["mfa_warning_shown"] = True
                 else:
                     # Encouragement mode: warn once per session, don't block
-                    if not request.session.get('mfa_warning_shown'):
+                    if not request.session.get("mfa_warning_shown"):
                         messages.warning(
                             request,
                             "For enhanced security, please enable two-factor authentication. "

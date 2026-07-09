@@ -72,7 +72,7 @@ class ChecklistItemInline(admin.TabularInline):
 
 @admin.register(VeteranCase)
 class VeteranCaseAdmin(PIIRedactedAdminMixin, admin.ModelAdmin):
-    audit_resource_type = 'VeteranCase'
+    audit_resource_type = "VeteranCase"
     list_display = (
         "title",
         "veteran_email",
@@ -83,44 +83,69 @@ class VeteranCaseAdmin(PIIRedactedAdminMixin, admin.ModelAdmin):
         "days_open_display",
         "created_at",
     )
-    list_filter = ('status', 'priority', 'organization', 'created_at')
+    list_filter = ("status", "priority", "organization", "created_at")
     # description is encrypted PHI — not searchable, not shown in admin
-    search_fields = ('title', 'veteran__email', 'veteran__first_name',
-                     'veteran__last_name')
-    readonly_fields = ('created_at', 'updated_at', 'closed_at', 'closed_by')
-    date_hierarchy = 'created_at'
+    search_fields = (
+        "title",
+        "veteran__email",
+        "veteran__first_name",
+        "veteran__last_name",
+    )
+    readonly_fields = ("created_at", "updated_at", "closed_at", "closed_by")
+    date_hierarchy = "created_at"
 
     fieldsets = (
-        ('Case Information', {
-            # description removed for PHI protection
-            'fields': ('title', 'status', 'priority')
-        }),
-        ('Relationships', {
-            'fields': ('organization', 'veteran', 'assigned_to')
-        }),
+        (
+            "Case Information",
+            {
+                # description removed for PHI protection
+                "fields": ("title", "status", "priority")
+            },
+        ),
+        ("Relationships", {"fields": ("organization", "veteran", "assigned_to")}),
         # conditions removed for PHI protection (encrypted medical data)
-        ('Key Dates', {
-            'fields': ('intake_date', 'claim_filed_date', 'decision_date',
-                      'appeal_deadline', 'next_action_date')
-        }),
-        ('Outcome Tracking', {
-            'fields': ('initial_combined_rating', 'final_combined_rating',
-                      'retroactive_pay'),
-            'classes': ('collapse',)
-        }),
-        ('Veteran Consent', {
-            'fields': ('veteran_consent_date', 'consent_document'),
-            'classes': ('collapse',)
-        }),
-        ('Closure', {
-            # closure_notes removed for PHI protection
-            'fields': ('closed_at', 'closed_by'),
-            'classes': ('collapse',)
-        }),
-        ('Timestamps', {
-            'fields': ('created_at', 'updated_at'),
-            'classes': ('collapse',)
-        }),
+        (
+            "Key Dates",
+            {
+                "fields": (
+                    "intake_date",
+                    "claim_filed_date",
+                    "decision_date",
+                    "appeal_deadline",
+                    "next_action_date",
+                )
+            },
+        ),
+        (
+            "Outcome Tracking",
+            {
+                "fields": (
+                    "initial_combined_rating",
+                    "final_combined_rating",
+                    "retroactive_pay",
+                ),
+                "classes": ("collapse",),
+            },
+        ),
+        (
+            "Veteran Consent",
+            {
+                "fields": ("veteran_consent_date", "consent_document"),
+                "classes": ("collapse",),
+            },
+        ),
+        (
+            "Closure",
+            {
+                # closure_notes removed for PHI protection
+                "fields": ("closed_at", "closed_by"),
+                "classes": ("collapse",),
+            },
+        ),
+        (
+            "Timestamps",
+            {"fields": ("created_at", "updated_at"), "classes": ("collapse",)},
+        ),
     )
 
     inlines = [

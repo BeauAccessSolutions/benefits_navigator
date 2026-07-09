@@ -21,9 +21,7 @@ pytestmark = [pytest.mark.django_db, pytest.mark.integration]
 
 @pytest.fixture
 def org(db):
-    return Organization.objects.create(
-        name="Test VSO", slug="test-vso", org_type="vso"
-    )
+    return Organization.objects.create(name="Test VSO", slug="test-vso", org_type="vso")
 
 
 @pytest.fixture
@@ -115,9 +113,7 @@ class TestDocumentUnshare:
         assert response.status_code == 404
         assert SharedDocument.objects.filter(pk=shared_doc.pk).exists()
 
-    def test_get_method_not_allowed(
-        self, authenticated_client, document, shared_doc
-    ):
+    def test_get_method_not_allowed(self, authenticated_client, document, shared_doc):
         response = authenticated_client.get(_revoke_url(document, shared_doc))
         assert response.status_code == 405
         assert SharedDocument.objects.filter(pk=shared_doc.pk).exists()
@@ -172,8 +168,15 @@ class TestDocumentUnshare:
         assert _revoke_url(document, shared_doc) in content
 
     def test_vso_loses_access_after_revoke(
-        self, authenticated_client, client, user, user_password,
-        document, shared_doc, case, vso_staff
+        self,
+        authenticated_client,
+        client,
+        user,
+        user_password,
+        document,
+        shared_doc,
+        case,
+        vso_staff,
     ):
         """End-to-end: after revocation the share is gone from the VSO's case."""
         authenticated_client.post(_revoke_url(document, shared_doc))

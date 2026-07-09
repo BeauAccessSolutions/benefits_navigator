@@ -110,10 +110,10 @@ class Document(TimeStampedModel, SoftDeleteModel):
 
     # Condition tags (for organizing documents by claimed condition)
     condition_tags = EncryptedJSONField(
-        'Condition tags',
+        "Condition tags",
         default=list,
         blank=True,
-        help_text='List of condition names this document relates to (encrypted at rest)'
+        help_text="List of condition names this document relates to (encrypted at rest)",
     )
 
     # Processing metadata

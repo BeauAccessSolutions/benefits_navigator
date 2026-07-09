@@ -22,7 +22,6 @@ from core.signed_urls import (
     TokenExpiredError,
 )
 
-
 pytestmark = pytest.mark.unit
 
 

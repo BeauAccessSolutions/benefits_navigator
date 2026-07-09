@@ -20,16 +20,16 @@ pytestmark = [pytest.mark.django_db, pytest.mark.integration]
 
 @pytest.fixture
 def org(db):
-    return Organization.objects.create(
-        name="Test VSO", slug="test-vso", org_type="vso"
-    )
+    return Organization.objects.create(name="Test VSO", slug="test-vso", org_type="vso")
 
 
 @pytest.fixture
 def vso_staff(db, org, django_user_model, user_password):
     staff = django_user_model.objects.create_user(
-        email="caseworker@vso.org", password=user_password,
-        first_name="Casey", last_name="Worker",
+        email="caseworker@vso.org",
+        password=user_password,
+        first_name="Casey",
+        last_name="Worker",
     )
     OrganizationMembership.objects.create(
         organization=org, user=staff, role="caseworker"
@@ -86,9 +86,7 @@ class TestVSOAccessLogging:
     """VSO access points must write AuditLog rows the veteran can see."""
 
     def test_case_view_is_logged(self, vso_client, case, user):
-        response = vso_client.get(
-            reverse("vso:case_detail", kwargs={"pk": case.pk})
-        )
+        response = vso_client.get(reverse("vso:case_detail", kwargs={"pk": case.pk}))
         assert response.status_code == 200
 
         log = AuditLog.objects.filter(

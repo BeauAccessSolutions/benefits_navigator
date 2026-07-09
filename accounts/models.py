@@ -44,10 +44,13 @@ class User(AbstractUser):
     Custom User model extending Django's AbstractUser
     Uses email as the primary identifier instead of username
     """
-    email = models.EmailField('Email address', unique=True)
-    phone_number = EncryptedCharField('Phone number', max_length=255, blank=True)
-    is_verified = models.BooleanField('Email verified', default=False)
-    stripe_customer_id = models.CharField('Stripe customer ID', max_length=255, blank=True)
+
+    email = models.EmailField("Email address", unique=True)
+    phone_number = EncryptedCharField("Phone number", max_length=255, blank=True)
+    is_verified = models.BooleanField("Email verified", default=False)
+    stripe_customer_id = models.CharField(
+        "Stripe customer ID", max_length=255, blank=True
+    )
 
     # Make username optional since we're using email
     username = models.CharField("Username", max_length=150, blank=True, null=True)
@@ -443,11 +446,11 @@ class Organization(TimeStampedModel):
 
     # Privacy: least-privilege mode for caseworkers
     restrict_caseworker_visibility = models.BooleanField(
-        'Restrict caseworker visibility',
+        "Restrict caseworker visibility",
         default=False,
         help_text=(
-            'When enabled, caseworkers see only cases assigned to them '
-            '(or unassigned); org admins see all cases.'
+            "When enabled, caseworkers see only cases assigned to them "
+            "(or unassigned); org admins see all cases."
         ),
     )
 

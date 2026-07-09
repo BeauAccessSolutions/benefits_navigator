@@ -88,16 +88,15 @@ if not env.bool("DEBUG", default=False):
 # Application definition
 INSTALLED_APPS = [
     # Django apps
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.staticfiles',
-    'django.contrib.sites',
-    'django.contrib.sitemaps',
-    'django.contrib.postgres',  # SearchVectorField/GinIndex in documentation app
-
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
+    "django.contrib.sites",
+    "django.contrib.sitemaps",
+    "django.contrib.postgres",  # SearchVectorField/GinIndex in documentation app
     # Third-party apps
     "django_htmx",
     "widget_tweaks",
@@ -628,13 +627,13 @@ RATELIMIT_USE_CACHE = "default"
 # blocked from /vso/ pages after the grace period (measured from when their
 # staff membership was created) and redirected to 2FA setup.
 
-VSO_MFA_REQUIRED = env.bool('VSO_MFA_REQUIRED', default=False)
-VSO_MFA_GRACE_PERIOD_DAYS = env.int('VSO_MFA_GRACE_PERIOD_DAYS', default=7)
+VSO_MFA_REQUIRED = env.bool("VSO_MFA_REQUIRED", default=False)
+VSO_MFA_GRACE_PERIOD_DAYS = env.int("VSO_MFA_GRACE_PERIOD_DAYS", default=7)
 
 # When True, /admin requires a verified TOTP device (django-otp OTPAdminSite).
 # Enable in production once superusers have enrolled devices; bootstrapping a
 # device requires this to be off (or use `manage.py addstatictoken`).
-ADMIN_OTP_REQUIRED = env.bool('ADMIN_OTP_REQUIRED', default=False)
+ADMIN_OTP_REQUIRED = env.bool("ADMIN_OTP_REQUIRED", default=False)
 
 # ==============================================================================
 # FEATURE FLAGS

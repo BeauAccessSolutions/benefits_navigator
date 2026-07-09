@@ -17,13 +17,12 @@ from django_ratelimit.decorators import ratelimit
 
 from accounts.models import OrganizationMembership, OrganizationInvitation
 from core.models import AuditLog
-from .models import (
-    VeteranCase, CaseNote, SharedDocument,
-    SharedAnalysis, CaseCondition
-)
+from .models import VeteranCase, CaseNote, SharedDocument, SharedAnalysis, CaseCondition
 from .permissions import (
-    get_user_organization_membership, vso_staff_required,
-    member_is_org_admin, scope_cases_for_member
+    get_user_organization_membership,
+    vso_staff_required,
+    member_is_org_admin,
+    scope_cases_for_member,
 )
 from .services import GapCheckerService
 from appeals.models import Appeal
@@ -337,9 +336,8 @@ def case_list(request):
 
     # Base queryset - exclude archived by default
     cases = VeteranCase.objects.filter(
-        organization=org,
-        is_archived=False
-    ).select_related('veteran', 'assigned_to')
+        organization=org, is_archived=False
+    ).select_related("veteran", "assigned_to")
     cases = scope_cases_for_member(request.user, org, cases)
 
     # Filtering
@@ -372,10 +370,10 @@ def case_list(request):
 
     if search_query:
         cases = cases.filter(
-            Q(title__icontains=search_query) |
-            Q(veteran__email__icontains=search_query) |
-            Q(veteran__first_name__icontains=search_query) |
-            Q(veteran__last_name__icontains=search_query)
+            Q(title__icontains=search_query)
+            | Q(veteran__email__icontains=search_query)
+            | Q(veteran__first_name__icontains=search_query)
+            | Q(veteran__last_name__icontains=search_query)
             # description is encrypted at rest — not searchable via icontains
         )
 
@@ -448,47 +446,60 @@ def _export_cases_csv(cases, request=None, org=None):
     if request is not None and org is not None:
         if not member_is_org_admin(request.user, org):
             messages.error(
-                request,
-                'Bulk export is limited to organization administrators.'
+                request, "Bulk export is limited to organization administrators."
             )
-            return redirect('vso:case_list')
+            return redirect("vso:case_list")
 
         if is_ratelimited(
-            request, group='vso_case_export', key='user',
-            rate='5/h', increment=True,
+            request,
+            group="vso_case_export",
+            key="user",
+            rate="5/h",
+            increment=True,
         ):
             messages.error(
-                request,
-                'Export limit reached (5 per hour). Please try again later.'
+                request, "Export limit reached (5 per hour). Please try again later."
             )
-            return redirect('vso:case_list')
+            return redirect("vso:case_list")
 
-    response = HttpResponse(content_type='text/csv')
-    response['Content-Disposition'] = 'attachment; filename="cases_export.csv"'
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = 'attachment; filename="cases_export.csv"'
 
     writer = csv.writer(response)
-    writer.writerow([
-        'Case Title', 'Veteran Name', 'Status', 'Priority',
-        'Assigned To', 'Triage Status', 'Days Open', 'Intake Date',
-        'Initial Rating', 'Final Rating', 'Conditions Count'
-    ])
+    writer.writerow(
+        [
+            "Case Title",
+            "Veteran Name",
+            "Status",
+            "Priority",
+            "Assigned To",
+            "Triage Status",
+            "Days Open",
+            "Intake Date",
+            "Initial Rating",
+            "Final Rating",
+            "Conditions Count",
+        ]
+    )
 
     case_ids = []
     for case in cases:
         case_ids.append(case.pk)
-        writer.writerow([
-            case.title,
-            case.veteran.get_full_name() or '',
-            case.get_status_display(),
-            case.get_priority_display(),
-            case.assigned_to.email if case.assigned_to else 'Unassigned',
-            getattr(case, 'triage_display', ''),
-            case.days_open,
-            case.intake_date.isoformat() if case.intake_date else '',
-            case.initial_combined_rating or '',
-            case.final_combined_rating or '',
-            case.case_conditions.count(),
-        ])
+        writer.writerow(
+            [
+                case.title,
+                case.veteran.get_full_name() or "",
+                case.get_status_display(),
+                case.get_priority_display(),
+                case.assigned_to.email if case.assigned_to else "Unassigned",
+                getattr(case, "triage_display", ""),
+                case.days_open,
+                case.intake_date.isoformat() if case.intake_date else "",
+                case.initial_combined_rating or "",
+                case.final_combined_rating or "",
+                case.case_conditions.count(),
+            ]
+        )
 
     # Audit log the export
     if request and request.user.is_authenticated:
@@ -510,6 +521,7 @@ def _export_cases_csv(cases, request=None, org=None):
 
         # Ops visibility: bulk pulls of veteran data should never be silent
         from core.alerting import AlertSeverity, send_alert
+
         send_alert(
             title="VSO Bulk Case Export",
             message=(
@@ -518,9 +530,9 @@ def _export_cases_csv(cases, request=None, org=None):
             ),
             severity=AlertSeverity.INFO,
             details={
-                'user_id': request.user.pk,
-                'case_count': len(case_ids),
-                'organization': org.slug if org else None,
+                "user_id": request.user.pk,
+                "case_count": len(case_ids),
+                "organization": org.slug if org else None,
             },
         )
 
@@ -646,7 +658,9 @@ def case_detail(request, pk):
         scope_cases_for_member(
             request.user,
             org,
-            VeteranCase.objects.select_related('veteran', 'assigned_to', 'organization'),
+            VeteranCase.objects.select_related(
+                "veteran", "assigned_to", "organization"
+            ),
         ),
         pk=pk,
         organization=org,
@@ -654,11 +668,11 @@ def case_detail(request, pk):
 
     # Surfaced to the veteran on their data-activity page
     AuditLog.log(
-        action='vso_case_view',
+        action="vso_case_view",
         request=request,
-        resource_type='VeteranCase',
+        resource_type="VeteranCase",
         resource_id=case.pk,
-        details={'veteran_id': case.veteran_id, 'organization_id': org.pk},
+        details={"veteran_id": case.veteran_id, "organization_id": org.pk},
     )
 
     # Get related data
@@ -959,20 +973,20 @@ def shared_document_review(request, pk, doc_pk):
 
     # Surfaced to the veteran on their data-activity page
     AuditLog.log(
-        action='vso_document_review',
+        action="vso_document_review",
         request=request,
-        resource_type='Document',
+        resource_type="Document",
         resource_id=shared_doc.document_id,
         details={
-            'event': 'review_saved' if request.method == 'POST' else 'viewed',
-            'case_id': case.pk,
-            'veteran_id': case.veteran_id,
-            'organization_id': org.pk,
-            'include_ai_analysis': shared_doc.include_ai_analysis,
+            "event": "review_saved" if request.method == "POST" else "viewed",
+            "case_id": case.pk,
+            "veteran_id": case.veteran_id,
+            "organization_id": org.pk,
+            "include_ai_analysis": shared_doc.include_ai_analysis,
         },
     )
 
-    if request.method == 'POST':
+    if request.method == "POST":
         # Archived cases are read-only
         if is_case_read_only(case):
             messages.error(request, "Archived cases cannot be modified.")
@@ -1494,8 +1508,9 @@ def reports(request):
 
     # Get all cases for this organization (excluding archived, least-privilege scoped)
     cases = scope_cases_for_member(
-        request.user, org,
-        VeteranCase.objects.filter(organization=org, is_archived=False)
+        request.user,
+        org,
+        VeteranCase.objects.filter(organization=org, is_archived=False),
     )
 
     # --- Cases by Status ---

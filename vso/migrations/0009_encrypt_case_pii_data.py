@@ -10,12 +10,12 @@ import json
 
 from django.db import migrations
 
-TEXT_FIELDS = ['description', 'closure_notes', 'c_and_p_exam_notes']
-JSON_FIELDS = ['conditions']
+TEXT_FIELDS = ["description", "closure_notes", "c_and_p_exam_notes"]
+JSON_FIELDS = ["conditions"]
 
 
 def _is_encrypted(value):
-    return isinstance(value, str) and len(value) > 100 and value.startswith('Z0FB')
+    return isinstance(value, str) and len(value) > 100 and value.startswith("Z0FB")
 
 
 def encrypt_case_fields(apps, schema_editor):
@@ -26,16 +26,14 @@ def encrypt_case_fields(apps, schema_editor):
     columns = TEXT_FIELDS + JSON_FIELDS
 
     with connection.cursor() as cursor:
-        cursor.execute(
-            f'SELECT id, {", ".join(columns)} FROM vso_veterancase'
-        )
+        cursor.execute(f'SELECT id, {", ".join(columns)} FROM vso_veterancase')
         rows = cursor.fetchall()
 
     for row in rows:
         pk, values = row[0], row[1:]
         updates = {}
         for column, value in zip(columns, values):
-            if value is None or value == '' or _is_encrypted(value):
+            if value is None or value == "" or _is_encrypted(value):
                 continue
             if column in JSON_FIELDS:
                 # Value may arrive as a JSON string or a parsed object
@@ -46,10 +44,10 @@ def encrypt_case_fields(apps, schema_editor):
                 updates[column] = FieldEncryption.encrypt(str(value))
 
         if updates:
-            set_clause = ', '.join(f'{col} = %s' for col in updates)
+            set_clause = ", ".join(f"{col} = %s" for col in updates)
             with connection.cursor() as cursor:
                 cursor.execute(
-                    f'UPDATE vso_veterancase SET {set_clause} WHERE id = %s',
+                    f"UPDATE vso_veterancase SET {set_clause} WHERE id = %s",
                     [*updates.values(), pk],
                 )
 
@@ -62,9 +60,7 @@ def decrypt_case_fields(apps, schema_editor):
     columns = TEXT_FIELDS + JSON_FIELDS
 
     with connection.cursor() as cursor:
-        cursor.execute(
-            f'SELECT id, {", ".join(columns)} FROM vso_veterancase'
-        )
+        cursor.execute(f'SELECT id, {", ".join(columns)} FROM vso_veterancase')
         rows = cursor.fetchall()
 
     for row in rows:
@@ -73,13 +69,13 @@ def decrypt_case_fields(apps, schema_editor):
         for column, value in zip(columns, values):
             if not _is_encrypted(value):
                 continue
-            updates[column] = FieldEncryption.decrypt(value) or ''
+            updates[column] = FieldEncryption.decrypt(value) or ""
 
         if updates:
-            set_clause = ', '.join(f'{col} = %s' for col in updates)
+            set_clause = ", ".join(f"{col} = %s" for col in updates)
             with connection.cursor() as cursor:
                 cursor.execute(
-                    f'UPDATE vso_veterancase SET {set_clause} WHERE id = %s',
+                    f"UPDATE vso_veterancase SET {set_clause} WHERE id = %s",
                     [*updates.values(), pk],
                 )
 
@@ -87,7 +83,7 @@ def decrypt_case_fields(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('vso', '0008_alter_veterancase_c_and_p_exam_notes_and_more'),
+        ("vso", "0008_alter_veterancase_c_and_p_exam_notes_and_more"),
     ]
 
     operations = [

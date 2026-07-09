@@ -874,12 +874,13 @@ def admin_stats_dashboard(request):
         "pilot_domains": pilot_domains,
     }
 
-    return render(request, 'core/admin_stats.html', context)
+    return render(request, "core/admin_stats.html", context)
 
 
 # =============================================================================
 # Data Activity (access transparency)
 # =============================================================================
+
 
 @login_required
 def data_activity(request):
@@ -899,43 +900,45 @@ def data_activity(request):
     from core.models import AuditLog
     from vso.models import VeteranCase
 
-    document_ids = list(
-        request.user.documents.values_list('pk', flat=True)
-    )
+    document_ids = list(request.user.documents.values_list("pk", flat=True))
     case_ids = list(
-        VeteranCase.objects.filter(veteran=request.user).values_list('pk', flat=True)
+        VeteranCase.objects.filter(veteran=request.user).values_list("pk", flat=True)
     )
 
-    access_filter = Q(resource_type='Document', resource_id__in=document_ids)
+    access_filter = Q(resource_type="Document", resource_id__in=document_ids)
     if case_ids:
-        access_filter |= Q(resource_type='VeteranCase', resource_id__in=case_ids)
+        access_filter |= Q(resource_type="VeteranCase", resource_id__in=case_ids)
 
     logs = (
         AuditLog.objects.filter(access_filter)
         .exclude(user=request.user)
-        .select_related('user')
-        .order_by('-timestamp')
+        .select_related("user")
+        .order_by("-timestamp")
     )
 
     paginator = Paginator(logs, 25)
-    page = paginator.get_page(request.GET.get('page'))
+    page = paginator.get_page(request.GET.get("page"))
 
     # Resolve org names referenced in log details (one query per page)
     org_ids = {
-        log.details.get('organization_id')
+        log.details.get("organization_id")
         for log in page.object_list
-        if isinstance(log.details, dict) and log.details.get('organization_id')
+        if isinstance(log.details, dict) and log.details.get("organization_id")
     }
     org_names = dict(
-        Organization.objects.filter(pk__in=org_ids).values_list('pk', 'name')
+        Organization.objects.filter(pk__in=org_ids).values_list("pk", "name")
     )
     for log in page.object_list:
-        org_id = log.details.get('organization_id') if isinstance(log.details, dict) else None
+        org_id = (
+            log.details.get("organization_id")
+            if isinstance(log.details, dict)
+            else None
+        )
         log.org_name = org_names.get(org_id)
 
     context = {
-        'page': page,
-        'total_accesses': paginator.count,
+        "page": page,
+        "total_accesses": paginator.count,
     }
 
-    return render(request, 'core/data_activity.html', context)
+    return render(request, "core/data_activity.html", context)

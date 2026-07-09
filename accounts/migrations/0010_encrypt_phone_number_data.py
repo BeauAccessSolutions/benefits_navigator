@@ -11,7 +11,7 @@ from django.db import migrations
 def _is_encrypted(value):
     # Fernet tokens are base64 strings starting with 'gAAA' ('Z0FB' when
     # double-encoded); plaintext phone numbers are short.
-    return isinstance(value, str) and len(value) > 100 and value.startswith('Z0FB')
+    return isinstance(value, str) and len(value) > 100 and value.startswith("Z0FB")
 
 
 def encrypt_phone_numbers(apps, schema_editor):
@@ -58,14 +58,14 @@ def decrypt_phone_numbers(apps, schema_editor):
         with connection.cursor() as cursor:
             cursor.execute(
                 "UPDATE accounts_user SET phone_number = %s WHERE id = %s",
-                [decrypted or '', pk],
+                [decrypted or "", pk],
             )
 
 
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('accounts', '0009_alter_user_phone_number'),
+        ("accounts", "0009_alter_user_phone_number"),
     ]
 
     operations = [

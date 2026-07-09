@@ -35,29 +35,42 @@ class DocumentAdmin(PIIRedactedAdminMixin, admin.ModelAdmin):
     ]
 
     fieldsets = (
-        ('Basic Information', {
-            'fields': ('user', 'claim', 'file', 'file_name', 'document_type')
-        }),
-        ('File Details', {
-            'fields': ('file_size', 'mime_type', 'page_count')
-        }),
-        ('Processing Status', {
-            'fields': ('status', 'processed_at', 'processing_duration', 'error_message')
-        }),
-        ('OCR Results', {
-            # ocr_text removed for PHI protection - only metadata displayed
-            'fields': ('ocr_status', 'ocr_length', 'ocr_confidence'),
-            'classes': ('collapse',)
-        }),
-        ('AI Analysis', {
-            # ai_summary removed for PHI protection - metadata only
-            'fields': ('ai_model_used', 'ai_tokens_used'),
-            'classes': ('collapse',)
-        }),
-        ('Timestamps', {
-            'fields': ('created_at', 'updated_at'),
-            'classes': ('collapse',)
-        }),
+        (
+            "Basic Information",
+            {"fields": ("user", "claim", "file", "file_name", "document_type")},
+        ),
+        ("File Details", {"fields": ("file_size", "mime_type", "page_count")}),
+        (
+            "Processing Status",
+            {
+                "fields": (
+                    "status",
+                    "processed_at",
+                    "processing_duration",
+                    "error_message",
+                )
+            },
+        ),
+        (
+            "OCR Results",
+            {
+                # ocr_text removed for PHI protection - only metadata displayed
+                "fields": ("ocr_status", "ocr_length", "ocr_confidence"),
+                "classes": ("collapse",),
+            },
+        ),
+        (
+            "AI Analysis",
+            {
+                # ai_summary removed for PHI protection - metadata only
+                "fields": ("ai_model_used", "ai_tokens_used"),
+                "classes": ("collapse",),
+            },
+        ),
+        (
+            "Timestamps",
+            {"fields": ("created_at", "updated_at"), "classes": ("collapse",)},
+        ),
     )
 
 

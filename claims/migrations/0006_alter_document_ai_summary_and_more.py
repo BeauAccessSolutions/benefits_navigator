@@ -7,18 +7,28 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('claims', '0005_encrypt_ai_summary'),
+        ("claims", "0005_encrypt_ai_summary"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='document',
-            name='ai_summary',
-            field=core.encryption.EncryptedJSONField(blank=True, help_text='Structured analysis results from OpenAI (encrypted)', null=True, verbose_name='AI analysis summary'),
+            model_name="document",
+            name="ai_summary",
+            field=core.encryption.EncryptedJSONField(
+                blank=True,
+                help_text="Structured analysis results from OpenAI (encrypted)",
+                null=True,
+                verbose_name="AI analysis summary",
+            ),
         ),
         migrations.AlterField(
-            model_name='document',
-            name='condition_tags',
-            field=core.encryption.EncryptedJSONField(blank=True, default=list, help_text='List of condition names this document relates to (encrypted at rest)', verbose_name='Condition tags'),
+            model_name="document",
+            name="condition_tags",
+            field=core.encryption.EncryptedJSONField(
+                blank=True,
+                default=list,
+                help_text="List of condition names this document relates to (encrypted at rest)",
+                verbose_name="Condition tags",
+            ),
         ),
     ]

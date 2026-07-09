@@ -127,13 +127,13 @@ def document_detail(request, pk):
     """
     document = get_object_or_404(Document, pk=pk, user=request.user, is_deleted=False)
 
-    active_shares = document.case_shares.select_related(
-        'case__organization'
-    ).order_by('-shared_at')
+    active_shares = document.case_shares.select_related("case__organization").order_by(
+        "-shared_at"
+    )
 
     context = {
-        'document': document,
-        'active_shares': active_shares,
+        "document": document,
+        "active_shares": active_shares,
     }
 
     return render(request, "claims/document_detail.html", context)
@@ -527,7 +527,8 @@ def document_view_inline(request, pk):
 # Signed URL Access (Token-based, no session required)
 # =============================================================================
 
-@ratelimit(key='ip', rate='30/m', method='GET', block=True)
+
+@ratelimit(key="ip", rate="30/m", method="GET", block=True)
 @require_http_methods(["GET"])
 def document_download_signed(request, token):
     """
@@ -610,7 +611,7 @@ def document_download_signed(request, token):
     return response
 
 
-@ratelimit(key='ip', rate='30/m', method='GET', block=True)
+@ratelimit(key="ip", rate="30/m", method="GET", block=True)
 @require_http_methods(["GET"])
 def document_view_signed(request, token):
     """
@@ -906,7 +907,7 @@ def document_share(request, pk):
         "active_cases": active_cases,
     }
 
-    return render(request, 'claims/document_share.html', context)
+    return render(request, "claims/document_share.html", context)
 
 
 @login_required
@@ -921,12 +922,7 @@ def document_unshare(request, pk, share_pk):
     """
     from vso.models import SharedDocument
 
-    document = get_object_or_404(
-        Document,
-        pk=pk,
-        user=request.user,
-        is_deleted=False
-    )
+    document = get_object_or_404(Document, pk=pk, user=request.user, is_deleted=False)
 
     shared_doc = get_object_or_404(
         SharedDocument,
@@ -937,27 +933,27 @@ def document_unshare(request, pk, share_pk):
 
     case = shared_doc.case
     details = {
-        'document_id': document.pk,
-        'case_id': case.pk,
-        'organization_id': case.organization.pk,
-        'was_shared_at': shared_doc.shared_at.isoformat(),
+        "document_id": document.pk,
+        "case_id": case.pk,
+        "organization_id": case.organization.pk,
+        "was_shared_at": shared_doc.shared_at.isoformat(),
     }
 
     shared_doc.delete()
 
     AuditLog.log(
-        action='vso_document_unshare',
+        action="vso_document_unshare",
         request=request,
-        resource_type='SharedDocument',
+        resource_type="SharedDocument",
         resource_id=share_pk,
         details=details,
-        success=True
+        success=True,
     )
 
     messages.success(
         request,
-        f'Sharing revoked. {case.organization.name} no longer has access '
-        f'to this document.'
+        f"Sharing revoked. {case.organization.name} no longer has access "
+        f"to this document.",
     )
 
-    return redirect('claims:document_detail', pk=pk)
+    return redirect("claims:document_detail", pk=pk)

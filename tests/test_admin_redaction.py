@@ -105,9 +105,7 @@ class TestAdminPIIRedaction:
 
 class TestAdminAccessLogging:
     def test_document_change_view_logged(self, admin_client_, document):
-        admin_client_.get(
-            reverse("admin:claims_document_change", args=[document.pk])
-        )
+        admin_client_.get(reverse("admin:claims_document_change", args=[document.pk]))
         log = AuditLog.objects.filter(
             action="admin_action",
             resource_type="Document",
@@ -117,9 +115,7 @@ class TestAdminAccessLogging:
         assert log.details["event"] == "admin_change_view"
 
     def test_case_change_view_logged(self, admin_client_, case):
-        admin_client_.get(
-            reverse("admin:vso_veterancase_change", args=[case.pk])
-        )
+        admin_client_.get(reverse("admin:vso_veterancase_change", args=[case.pk]))
         assert AuditLog.objects.filter(
             action="admin_action",
             resource_type="VeteranCase",
@@ -130,9 +126,7 @@ class TestAdminAccessLogging:
         self, admin_client_, authenticated_client, document
     ):
         # Operator opens the veteran's document in admin...
-        admin_client_.get(
-            reverse("admin:claims_document_change", args=[document.pk])
-        )
+        admin_client_.get(reverse("admin:claims_document_change", args=[document.pk]))
 
         # ...and the veteran sees it on their data-activity page
         response = authenticated_client.get(reverse("core:data_activity"))

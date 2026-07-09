@@ -7,28 +7,43 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('vso', '0007_add_exam_tracking_and_case_link'),
+        ("vso", "0007_add_exam_tracking_and_case_link"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='veterancase',
-            name='c_and_p_exam_notes',
-            field=core.encryption.EncryptedTextField(blank=True, help_text='Notes about the exam (conditions being evaluated, etc.; encrypted at rest)', verbose_name='C&P Exam Notes'),
+            model_name="veterancase",
+            name="c_and_p_exam_notes",
+            field=core.encryption.EncryptedTextField(
+                blank=True,
+                help_text="Notes about the exam (conditions being evaluated, etc.; encrypted at rest)",
+                verbose_name="C&P Exam Notes",
+            ),
         ),
         migrations.AlterField(
-            model_name='veterancase',
-            name='closure_notes',
-            field=core.encryption.EncryptedTextField(blank=True, verbose_name='Closure notes'),
+            model_name="veterancase",
+            name="closure_notes",
+            field=core.encryption.EncryptedTextField(
+                blank=True, verbose_name="Closure notes"
+            ),
         ),
         migrations.AlterField(
-            model_name='veterancase',
-            name='conditions',
-            field=core.encryption.EncryptedJSONField(blank=True, default=list, help_text='List of conditions being claimed (encrypted at rest)', verbose_name='Conditions'),
+            model_name="veterancase",
+            name="conditions",
+            field=core.encryption.EncryptedJSONField(
+                blank=True,
+                default=list,
+                help_text="List of conditions being claimed (encrypted at rest)",
+                verbose_name="Conditions",
+            ),
         ),
         migrations.AlterField(
-            model_name='veterancase',
-            name='description',
-            field=core.encryption.EncryptedTextField(blank=True, help_text='Detailed notes about the case (encrypted at rest)', verbose_name='Description'),
+            model_name="veterancase",
+            name="description",
+            field=core.encryption.EncryptedTextField(
+                blank=True,
+                help_text="Detailed notes about the case (encrypted at rest)",
+                verbose_name="Description",
+            ),
         ),
     ]

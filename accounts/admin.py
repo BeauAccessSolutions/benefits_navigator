@@ -43,12 +43,24 @@ class UserAdmin(BaseUserAdmin):
     ordering = ["-date_joined"]
 
     fieldsets = (
-        (None, {'fields': ('email', 'password')}),
+        (None, {"fields": ("email", "password")}),
         # phone_number removed for PII protection (encrypted at rest)
-        ('Personal info', {'fields': ('first_name', 'last_name')}),
-        ('Permissions', {'fields': ('is_active', 'is_staff', 'is_superuser', 'is_verified', 'groups', 'user_permissions')}),
-        ('Stripe', {'fields': ('stripe_customer_id',)}),
-        ('Important dates', {'fields': ('last_login', 'date_joined')}),
+        ("Personal info", {"fields": ("first_name", "last_name")}),
+        (
+            "Permissions",
+            {
+                "fields": (
+                    "is_active",
+                    "is_staff",
+                    "is_superuser",
+                    "is_verified",
+                    "groups",
+                    "user_permissions",
+                )
+            },
+        ),
+        ("Stripe", {"fields": ("stripe_customer_id",)}),
+        ("Important dates", {"fields": ("last_login", "date_joined")}),
     )
 
     add_fieldsets = (
@@ -65,12 +77,13 @@ class UserAdmin(BaseUserAdmin):
 @admin.register(UserProfile)
 class UserProfileAdmin(PIIRedactedAdminMixin, admin.ModelAdmin):
     """Admin for UserProfile — encrypted PII never rendered in admin."""
-    pii_redacted_fields = ('date_of_birth', 'va_file_number')
+
+    pii_redacted_fields = ("date_of_birth", "va_file_number")
     # 'age' (derived from DOB) removed from list_display for PII protection
-    list_display = ['user', 'branch_of_service', 'disability_rating']
-    list_filter = ['branch_of_service']
-    search_fields = ['user__email', 'user__first_name', 'user__last_name']
-    raw_id_fields = ['user']
+    list_display = ["user", "branch_of_service", "disability_rating"]
+    list_filter = ["branch_of_service"]
+    search_fields = ["user__email", "user__first_name", "user__last_name"]
+    raw_id_fields = ["user"]
 
 
 @admin.register(Subscription)

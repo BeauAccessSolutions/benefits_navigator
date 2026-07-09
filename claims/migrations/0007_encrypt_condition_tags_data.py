@@ -11,7 +11,7 @@ from django.db import migrations
 
 
 def _is_encrypted(value):
-    return isinstance(value, str) and len(value) > 100 and value.startswith('Z0FB')
+    return isinstance(value, str) and len(value) > 100 and value.startswith("Z0FB")
 
 
 def encrypt_condition_tags(apps, schema_editor):
@@ -28,7 +28,7 @@ def encrypt_condition_tags(apps, schema_editor):
         rows = cursor.fetchall()
 
     for pk, value in rows:
-        if value is None or value == '' or _is_encrypted(value):
+        if value is None or value == "" or _is_encrypted(value):
             continue
         json_str = value if isinstance(value, str) else json.dumps(value)
         encrypted = FieldEncryption.encrypt(json_str)
@@ -59,14 +59,14 @@ def decrypt_condition_tags(apps, schema_editor):
         with connection.cursor() as cursor:
             cursor.execute(
                 "UPDATE claims_document SET condition_tags = %s WHERE id = %s",
-                [decrypted or '[]', pk],
+                [decrypted or "[]", pk],
             )
 
 
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('claims', '0006_alter_document_ai_summary_and_more'),
+        ("claims", "0006_alter_document_ai_summary_and_more"),
     ]
 
     operations = [

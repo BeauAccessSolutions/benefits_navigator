@@ -19,9 +19,7 @@ pytestmark = [pytest.mark.django_db, pytest.mark.integration]
 
 @pytest.fixture
 def org(db):
-    return Organization.objects.create(
-        name="Test VSO", slug="test-vso", org_type="vso"
-    )
+    return Organization.objects.create(name="Test VSO", slug="test-vso", org_type="vso")
 
 
 @pytest.fixture
@@ -56,16 +54,24 @@ def veteran(django_user_model, user_password):
 class TestCaseworkerScoping:
     def _cases(self, org, veteran, caseworker, other_worker):
         mine = VeteranCase.objects.create(
-            organization=org, veteran=veteran, assigned_to=caseworker,
-            title="Mine", status="intake",
+            organization=org,
+            veteran=veteran,
+            assigned_to=caseworker,
+            title="Mine",
+            status="intake",
         )
         unassigned = VeteranCase.objects.create(
-            organization=org, veteran=veteran,
-            title="Unassigned", status="intake",
+            organization=org,
+            veteran=veteran,
+            title="Unassigned",
+            status="intake",
         )
         someone_elses = VeteranCase.objects.create(
-            organization=org, veteran=veteran, assigned_to=other_worker,
-            title="Someone Else's", status="intake",
+            organization=org,
+            veteran=veteran,
+            assigned_to=other_worker,
+            title="Someone Else's",
+            status="intake",
         )
         return mine, unassigned, someone_elses
 
@@ -73,39 +79,53 @@ class TestCaseworkerScoping:
         self, restricted_org, veteran, django_user_model, user_password
     ):
         worker = _make_staff(
-            django_user_model, user_password, restricted_org,
-            "worker@vso.org", "caseworker",
+            django_user_model,
+            user_password,
+            restricted_org,
+            "worker@vso.org",
+            "caseworker",
         )
         other = _make_staff(
-            django_user_model, user_password, restricted_org,
-            "other@vso.org", "caseworker",
+            django_user_model,
+            user_password,
+            restricted_org,
+            "other@vso.org",
+            "caseworker",
         )
         mine, unassigned, someone_elses = self._cases(
             restricted_org, veteran, worker, other
         )
 
         scoped = scope_cases_for_member(
-            worker, restricted_org,
+            worker,
+            restricted_org,
             VeteranCase.objects.filter(organization=restricted_org),
         )
-        pks = set(scoped.values_list('pk', flat=True))
+        pks = set(scoped.values_list("pk", flat=True))
         assert pks == {mine.pk, unassigned.pk}
 
     def test_restricted_org_admin_sees_all(
         self, restricted_org, veteran, django_user_model, user_password
     ):
         admin = _make_staff(
-            django_user_model, user_password, restricted_org,
-            "admin@vso.org", "admin",
+            django_user_model,
+            user_password,
+            restricted_org,
+            "admin@vso.org",
+            "admin",
         )
         worker = _make_staff(
-            django_user_model, user_password, restricted_org,
-            "worker@vso.org", "caseworker",
+            django_user_model,
+            user_password,
+            restricted_org,
+            "worker@vso.org",
+            "caseworker",
         )
         self._cases(restricted_org, veteran, worker, admin)
 
         scoped = scope_cases_for_member(
-            admin, restricted_org,
+            admin,
+            restricted_org,
             VeteranCase.objects.filter(organization=restricted_org),
         )
         assert scoped.count() == 3
@@ -130,12 +150,18 @@ class TestCaseworkerScoping:
         self, restricted_org, veteran, django_user_model, user_password
     ):
         worker = _make_staff(
-            django_user_model, user_password, restricted_org,
-            "worker@vso.org", "caseworker",
+            django_user_model,
+            user_password,
+            restricted_org,
+            "worker@vso.org",
+            "caseworker",
         )
         other = _make_staff(
-            django_user_model, user_password, restricted_org,
-            "other@vso.org", "caseworker",
+            django_user_model,
+            user_password,
+            restricted_org,
+            "other@vso.org",
+            "caseworker",
         )
         _, _, someone_elses = self._cases(restricted_org, veteran, worker, other)
 
@@ -153,8 +179,11 @@ class TestExportPrivilege:
             django_user_model, user_password, org, "worker@vso.org", "caseworker"
         )
         VeteranCase.objects.create(
-            organization=org, veteran=veteran, assigned_to=worker,
-            title="Case A", status="intake",
+            organization=org,
+            veteran=veteran,
+            assigned_to=worker,
+            title="Case A",
+            status="intake",
         )
         return worker
 
@@ -238,9 +267,7 @@ class TestMFAEnforcement:
         if response.status_code == 302:
             assert "two-factor" not in response.url
 
-    def test_required_mode_ignores_non_vso_pages(
-        self, staff, user_password, settings
-    ):
+    def test_required_mode_ignores_non_vso_pages(self, staff, user_password, settings):
         settings.VSO_MFA_REQUIRED = True
         settings.VSO_MFA_GRACE_PERIOD_DAYS = 0
 

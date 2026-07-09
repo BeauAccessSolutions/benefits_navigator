@@ -7,13 +7,15 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('accounts', '0008_encrypt_existing_pii_data'),
+        ("accounts", "0008_encrypt_existing_pii_data"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='user',
-            name='phone_number',
-            field=core.encryption.EncryptedCharField(blank=True, max_length=255, verbose_name='Phone number'),
+            model_name="user",
+            name="phone_number",
+            field=core.encryption.EncryptedCharField(
+                blank=True, max_length=255, verbose_name="Phone number"
+            ),
         ),
     ]
