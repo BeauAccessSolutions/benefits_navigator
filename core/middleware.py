@@ -25,11 +25,8 @@ class HealthCheckMiddleware:
 
     def __call__(self, request):
         # Respond to health check without checking ALLOWED_HOSTS
-        if request.path == '/health/' or request.path == '/health':
-            return JsonResponse({
-                'status': 'ok',
-                'message': 'Service is running'
-            })
+        if request.path == "/health/" or request.path == "/health":
+            return JsonResponse({"status": "ok", "message": "Service is running"})
 
         return self.get_response(request)
 
@@ -47,23 +44,23 @@ class AuditMiddleware(MiddlewareMixin):
 
     # Paths that trigger document-related audit logs
     DOCUMENT_PATHS = [
-        '/claims/document/',
-        '/claims/decode/',
+        "/claims/document/",
+        "/claims/decode/",
     ]
 
     # Paths that trigger AI analysis logs
     AI_ANALYSIS_PATHS = [
-        '/agents/',
-        '/claims/decode/',
+        "/agents/",
+        "/claims/decode/",
     ]
 
     # Paths to skip (high-frequency, low-security)
     SKIP_PATHS = [
-        '/static/',
-        '/media/',
-        '/favicon.ico',
-        '/__debug__/',
-        '/health/',
+        "/static/",
+        "/media/",
+        "/favicon.ico",
+        "/__debug__/",
+        "/health/",
     ]
 
     def process_request(self, request):
@@ -80,11 +77,11 @@ class AuditMiddleware(MiddlewareMixin):
     def process_response(self, request, response):
         """Log completed requests based on path and response."""
         # Skip if marked
-        if getattr(request, '_skip_audit', True):
+        if getattr(request, "_skip_audit", True):
             return response
 
         # Skip non-authenticated requests for most logging
-        if not hasattr(request, 'user') or not request.user.is_authenticated:
+        if not hasattr(request, "user") or not request.user.is_authenticated:
             return response
 
         # Skip non-successful responses for most operations
@@ -107,73 +104,81 @@ class AuditMiddleware(MiddlewareMixin):
         method = request.method
 
         # Document upload (POST to upload endpoint)
-        if '/document/upload/' in path and method == 'POST' and response.status_code in [200, 201, 302]:
+        if (
+            "/document/upload/" in path
+            and method == "POST"
+            and response.status_code in [200, 201, 302]
+        ):
             AuditLog.log(
-                action='document_upload',
+                action="document_upload",
                 request=request,
-                details={'upload_path': path},
+                details={"upload_path": path},
             )
             return
 
         # Document view (GET on document detail)
-        if '/document/' in path and method == 'GET' and '/download/' not in path:
+        if "/document/" in path and method == "GET" and "/download/" not in path:
             # Try to extract document ID from path
-            doc_id = self._extract_id_from_path(path, 'document')
+            doc_id = self._extract_id_from_path(path, "document")
             if doc_id:
                 AuditLog.log(
-                    action='document_view',
+                    action="document_view",
                     request=request,
-                    resource_type='Document',
+                    resource_type="Document",
                     resource_id=doc_id,
                 )
             return
 
         # Document download
-        if '/document/' in path and '/download/' in path and method == 'GET':
-            doc_id = self._extract_id_from_path(path, 'document')
+        if "/document/" in path and "/download/" in path and method == "GET":
+            doc_id = self._extract_id_from_path(path, "document")
             if doc_id:
                 AuditLog.log(
-                    action='document_download',
+                    action="document_download",
                     request=request,
-                    resource_type='Document',
+                    resource_type="Document",
                     resource_id=doc_id,
                 )
             return
 
         # Document delete
-        if '/document/' in path and '/delete/' in path and method == 'POST':
-            doc_id = self._extract_id_from_path(path, 'document')
+        if "/document/" in path and "/delete/" in path and method == "POST":
+            doc_id = self._extract_id_from_path(path, "document")
             if doc_id:
                 AuditLog.log(
-                    action='document_delete',
+                    action="document_delete",
                     request=request,
-                    resource_type='Document',
+                    resource_type="Document",
                     resource_id=doc_id,
                 )
             return
 
         # Denial decoder (AI analysis)
-        if '/decode/' in path and method == 'POST' and response.status_code in [200, 201, 302]:
+        if (
+            "/decode/" in path
+            and method == "POST"
+            and response.status_code in [200, 201, 302]
+        ):
             AuditLog.log(
-                action='denial_decode',
+                action="denial_decode",
                 request=request,
-                details={'decode_path': path},
+                details={"decode_path": path},
             )
             return
 
         # AI analysis endpoints
-        if '/agents/' in path and '/analyze' in path and method == 'POST':
+        if "/agents/" in path and "/analyze" in path and method == "POST":
             AuditLog.log(
-                action='ai_analysis',
+                action="ai_analysis",
                 request=request,
-                details={'analysis_path': path},
+                details={"analysis_path": path},
             )
             return
 
         # Profile update
-        if '/accounts/profile/' in path and method == 'POST':
+        if "/accounts/profile/" in path and method == "POST":
             AuditLog.log(
-                action='profile_update',
+                action="profile_update",
                 request=request,
             )
             return
@@ -181,7 +186,7 @@ class AuditMiddleware(MiddlewareMixin):
     def _extract_id_from_path(self, path: str, resource_name: str) -> int | None:
         """Extract numeric ID from URL path after resource name."""
         try:
-            parts = path.split('/')
+            parts = path.split("/")
             for i, part in enumerate(parts):
                 if part == resource_name and i + 1 < len(parts):
                     next_part = parts[i + 1]
@@ -210,7 +215,7 @@ class SecurityHeadersMiddleware(MiddlewareMixin):
     def process_response(self, request, response):
         # Only add Permissions-Policy as it's not covered by Django settings
         # This restricts access to browser features for security
-        if 'Permissions-Policy' not in response:
-            response['Permissions-Policy'] = 'geolocation=(), microphone=(), camera=()'
+        if "Permissions-Policy" not in response:
+            response["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
 
         return response

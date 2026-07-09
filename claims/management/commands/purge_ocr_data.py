@@ -19,19 +19,19 @@ from django.core.management.base import BaseCommand
 
 
 class Command(BaseCommand):
-    help = '[DEPRECATED] OCR text fields have been removed from the database schema.'
+    help = "[DEPRECATED] OCR text fields have been removed from the database schema."
 
     def handle(self, *args, **options):
-        self.stdout.write(self.style.WARNING(
-            '\n⚠️  This command is DEPRECATED.\n'
-        ))
+        self.stdout.write(self.style.WARNING("\n⚠️  This command is DEPRECATED.\n"))
         self.stdout.write(
-            'The following PHI text fields have been REMOVED from the database schema:\n'
-            '  - Document.ocr_text (removed in migration claims/0003)\n'
-            '  - DecisionLetterAnalysis.raw_text (removed in migration agents/0008)\n'
-            '  - RatingAnalysis.raw_text (removed in migration agents/0008)\n'
+            "The following PHI text fields have been REMOVED from the database schema:\n"
+            "  - Document.ocr_text (removed in migration claims/0003)\n"
+            "  - DecisionLetterAnalysis.raw_text (removed in migration agents/0008)\n"
+            "  - RatingAnalysis.raw_text (removed in migration agents/0008)\n"
         )
-        self.stdout.write(self.style.SUCCESS(
-            '\n✅ No action needed - PHI text fields no longer exist in the database.\n'
-            '   OCR text is now ephemeral: extracted during processing, never stored.\n'
-        ))
+        self.stdout.write(
+            self.style.SUCCESS(
+                "\n✅ No action needed - PHI text fields no longer exist in the database.\n"
+                "   OCR text is now ephemeral: extracted during processing, never stored.\n"
+            )
+        )

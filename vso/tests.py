@@ -8,7 +8,7 @@ Covers:
 """
 
 import pytest
-from django.test import TestCase, Client
+from django.test import TestCase
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 
@@ -26,13 +26,13 @@ User = get_user_model()
 # MULTI-ORG SCOPING TESTS
 # =============================================================================
 
+
 class TestGetUserStaffMemberships(TestCase):
     """Tests for get_user_staff_memberships function."""
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email="vsostaff@example.com",
-            password="TestPass123!"
+            email="vsostaff@example.com", password="TestPass123!"
         )
         self.org1 = Organization.objects.create(
             name="VSO Org 1",
@@ -48,6 +48,7 @@ class TestGetUserStaffMemberships(TestCase):
     def test_returns_empty_for_unauthenticated(self):
         """Unauthenticated user gets empty queryset."""
         from django.contrib.auth.models import AnonymousUser
+
         anon = AnonymousUser()
         result = get_user_staff_memberships(anon)
         self.assertEqual(result.count(), 0)
@@ -62,7 +63,7 @@ class TestGetUserStaffMemberships(TestCase):
         OrganizationMembership.objects.create(
             user=self.user,
             organization=self.org1,
-            role='admin',
+            role="admin",
             is_active=True,
         )
         result = get_user_staff_memberships(self.user)
@@ -74,7 +75,7 @@ class TestGetUserStaffMemberships(TestCase):
         OrganizationMembership.objects.create(
             user=self.user,
             organization=self.org1,
-            role='caseworker',
+            role="caseworker",
             is_active=True,
         )
         result = get_user_staff_memberships(self.user)
@@ -85,7 +86,7 @@ class TestGetUserStaffMemberships(TestCase):
         OrganizationMembership.objects.create(
             user=self.user,
             organization=self.org1,
-            role='member',
+            role="member",
             is_active=True,
         )
         result = get_user_staff_memberships(self.user)
@@ -96,7 +97,7 @@ class TestGetUserStaffMemberships(TestCase):
         OrganizationMembership.objects.create(
             user=self.user,
             organization=self.org1,
-            role='admin',
+            role="admin",
             is_active=False,  # Inactive
         )
         result = get_user_staff_memberships(self.user)
@@ -107,13 +108,13 @@ class TestGetUserStaffMemberships(TestCase):
         OrganizationMembership.objects.create(
             user=self.user,
             organization=self.org1,
-            role='admin',
+            role="admin",
             is_active=True,
         )
         OrganizationMembership.objects.create(
             user=self.user,
             organization=self.org2,
-            role='caseworker',
+            role="caseworker",
             is_active=True,
         )
         result = get_user_staff_memberships(self.user)
@@ -125,8 +126,7 @@ class TestGetUserOrganization(TestCase):
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email="vsouser@example.com",
-            password="TestPass123!"
+            email="vsouser@example.com", password="TestPass123!"
         )
         self.org1 = Organization.objects.create(
             name="Primary VSO",
@@ -149,7 +149,7 @@ class TestGetUserOrganization(TestCase):
         OrganizationMembership.objects.create(
             user=self.user,
             organization=self.org1,
-            role='admin',
+            role="admin",
             is_active=True,
         )
         result = get_user_organization(self.user)
@@ -160,13 +160,13 @@ class TestGetUserOrganization(TestCase):
         OrganizationMembership.objects.create(
             user=self.user,
             organization=self.org1,
-            role='admin',
+            role="admin",
             is_active=True,
         )
         OrganizationMembership.objects.create(
             user=self.user,
             organization=self.org2,
-            role='caseworker',
+            role="caseworker",
             is_active=True,
         )
         # No org_slug provided - should return None
@@ -178,13 +178,13 @@ class TestGetUserOrganization(TestCase):
         OrganizationMembership.objects.create(
             user=self.user,
             organization=self.org1,
-            role='admin',
+            role="admin",
             is_active=True,
         )
         OrganizationMembership.objects.create(
             user=self.user,
             organization=self.org2,
-            role='caseworker',
+            role="caseworker",
             is_active=True,
         )
         result = get_user_organization(self.user, org_slug="secondary-vso")
@@ -195,13 +195,13 @@ class TestGetUserOrganization(TestCase):
         OrganizationMembership.objects.create(
             user=self.user,
             organization=self.org1,
-            role='admin',
+            role="admin",
             is_active=True,
         )
         OrganizationMembership.objects.create(
             user=self.user,
             organization=self.org2,
-            role='caseworker',
+            role="caseworker",
             is_active=True,
         )
         result = get_user_organization(self.user, org_slug="non-existent-org")
@@ -213,7 +213,7 @@ class TestGetUserOrganization(TestCase):
         OrganizationMembership.objects.create(
             user=self.user,
             organization=self.org1,
-            role='admin',
+            role="admin",
             is_active=True,
         )
         # Try to access org2 via slug
@@ -226,8 +226,7 @@ class TestRequiresOrgSelection(TestCase):
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email="multiorg@example.com",
-            password="TestPass123!"
+            email="multiorg@example.com", password="TestPass123!"
         )
         self.org1 = Organization.objects.create(
             name="Org One",
@@ -250,7 +249,7 @@ class TestRequiresOrgSelection(TestCase):
         OrganizationMembership.objects.create(
             user=self.user,
             organization=self.org1,
-            role='admin',
+            role="admin",
             is_active=True,
         )
         result = requires_org_selection(self.user)
@@ -261,13 +260,13 @@ class TestRequiresOrgSelection(TestCase):
         OrganizationMembership.objects.create(
             user=self.user,
             organization=self.org1,
-            role='admin',
+            role="admin",
             is_active=True,
         )
         OrganizationMembership.objects.create(
             user=self.user,
             organization=self.org2,
-            role='caseworker',
+            role="caseworker",
             is_active=True,
         )
         result = requires_org_selection(self.user)
@@ -278,21 +277,21 @@ class TestRequiresOrgSelection(TestCase):
 # VIEW TESTS
 # =============================================================================
 
+
 @pytest.mark.django_db
 class TestSelectOrganizationView:
     """Tests for the organization selection view."""
 
     def test_redirects_unauthenticated_user(self, client):
         """Unauthenticated user is redirected to login."""
-        response = client.get(reverse('vso:select_organization'))
+        response = client.get(reverse("vso:select_organization"))
         assert response.status_code == 302
-        assert 'login' in response.url.lower() or 'accounts' in response.url.lower()
+        assert "login" in response.url.lower() or "accounts" in response.url.lower()
 
     def test_shows_org_selection_for_multi_org_user(self, client, db):
         """Multi-org user sees organization selection page."""
         user = User.objects.create_user(
-            email="multiselect@example.com",
-            password="TestPass123!"
+            email="multiselect@example.com", password="TestPass123!"
         )
         org1 = Organization.objects.create(
             name="Select Org 1",
@@ -307,18 +306,18 @@ class TestSelectOrganizationView:
         OrganizationMembership.objects.create(
             user=user,
             organization=org1,
-            role='admin',
+            role="admin",
             is_active=True,
         )
         OrganizationMembership.objects.create(
             user=user,
             organization=org2,
-            role='caseworker',
+            role="caseworker",
             is_active=True,
         )
 
         client.login(email="multiselect@example.com", password="TestPass123!")
-        response = client.get(reverse('vso:select_organization'))
+        response = client.get(reverse("vso:select_organization"))
 
         assert response.status_code == 200
         assert b"Select Org 1" in response.content
@@ -327,8 +326,7 @@ class TestSelectOrganizationView:
     def test_post_sets_session_and_redirects(self, client, db):
         """POST with organization sets session and redirects."""
         user = User.objects.create_user(
-            email="postselect@example.com",
-            password="TestPass123!"
+            email="postselect@example.com", password="TestPass123!"
         )
         org = Organization.objects.create(
             name="Post Org",
@@ -338,19 +336,18 @@ class TestSelectOrganizationView:
         OrganizationMembership.objects.create(
             user=user,
             organization=org,
-            role='admin',
+            role="admin",
             is_active=True,
         )
 
         client.login(email="postselect@example.com", password="TestPass123!")
         response = client.post(
-            reverse('vso:select_organization'),
-            {'organization': 'post-org'}
+            reverse("vso:select_organization"), {"organization": "post-org"}
         )
 
         assert response.status_code == 302
         # Session should have the selected org
-        assert client.session.get('selected_org_slug') == 'post-org'
+        assert client.session.get("selected_org_slug") == "post-org"
 
 
 @pytest.mark.django_db
@@ -360,8 +357,7 @@ class TestVSODashboardOrgScoping:
     def test_dashboard_redirects_multi_org_user_without_selection(self, client, db):
         """Multi-org user without selection is redirected to select org."""
         user = User.objects.create_user(
-            email="dashredirect@example.com",
-            password="TestPass123!"
+            email="dashredirect@example.com", password="TestPass123!"
         )
         org1 = Organization.objects.create(
             name="Dash Org 1",
@@ -376,28 +372,27 @@ class TestVSODashboardOrgScoping:
         OrganizationMembership.objects.create(
             user=user,
             organization=org1,
-            role='admin',
+            role="admin",
             is_active=True,
         )
         OrganizationMembership.objects.create(
             user=user,
             organization=org2,
-            role='caseworker',
+            role="caseworker",
             is_active=True,
         )
 
         client.login(email="dashredirect@example.com", password="TestPass123!")
-        response = client.get(reverse('vso:dashboard'))
+        response = client.get(reverse("vso:dashboard"))
 
         # Should redirect to org selection
         assert response.status_code == 302
-        assert 'select' in response.url.lower()
+        assert "select" in response.url.lower()
 
     def test_dashboard_accessible_for_single_org_user(self, client, db):
         """Single-org user can access dashboard directly."""
         user = User.objects.create_user(
-            email="singledash@example.com",
-            password="TestPass123!"
+            email="singledash@example.com", password="TestPass123!"
         )
         org = Organization.objects.create(
             name="Single Dash Org",
@@ -407,16 +402,16 @@ class TestVSODashboardOrgScoping:
         OrganizationMembership.objects.create(
             user=user,
             organization=org,
-            role='admin',
+            role="admin",
             is_active=True,
         )
 
         client.login(email="singledash@example.com", password="TestPass123!")
-        response = client.get(reverse('vso:dashboard'))
+        response = client.get(reverse("vso:dashboard"))
 
         # Should be accessible (200 or 302 to a valid page, not org selection)
         if response.status_code == 302:
-            assert 'select' not in response.url.lower()
+            assert "select" not in response.url.lower()
         else:
             assert response.status_code == 200
 
@@ -425,17 +420,16 @@ class TestVSODashboardOrgScoping:
 # CASE CONDITION MODEL TESTS
 # =============================================================================
 
+
 class TestCaseConditionModel(TestCase):
     """Tests for the CaseCondition model."""
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email="veteran@example.com",
-            password="TestPass123!"
+            email="veteran@example.com", password="TestPass123!"
         )
         self.vso_user = User.objects.create_user(
-            email="vso@example.com",
-            password="TestPass123!"
+            email="vso@example.com", password="TestPass123!"
         )
         self.org = Organization.objects.create(
             name="Test VSO",
@@ -445,10 +439,11 @@ class TestCaseConditionModel(TestCase):
         OrganizationMembership.objects.create(
             user=self.vso_user,
             organization=self.org,
-            role='caseworker',
+            role="caseworker",
             is_active=True,
         )
         from vso.models import VeteranCase, CaseCondition
+
         self.case = VeteranCase.objects.create(
             organization=self.org,
             veteran=self.user,
@@ -516,6 +511,7 @@ class TestCaseConditionModel(TestCase):
     def test_unique_together_constraint(self):
         """Cannot create duplicate condition names for same case."""
         from django.db import IntegrityError
+
         self.CaseCondition.objects.create(
             case=self.case,
             condition_name="PTSD",
@@ -531,13 +527,13 @@ class TestCaseConditionModel(TestCase):
 # GAP CHECKER SERVICE TESTS
 # =============================================================================
 
+
 class TestGapCheckerService(TestCase):
     """Tests for the GapCheckerService."""
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email="veteran2@example.com",
-            password="TestPass123!"
+            email="veteran2@example.com", password="TestPass123!"
         )
         self.org = Organization.objects.create(
             name="Gap Test VSO",
@@ -546,6 +542,7 @@ class TestGapCheckerService(TestCase):
         )
         from vso.models import VeteranCase, CaseCondition
         from vso.services import GapCheckerService
+
         self.case = VeteranCase.objects.create(
             organization=self.org,
             veteran=self.user,
@@ -558,7 +555,7 @@ class TestGapCheckerService(TestCase):
     def test_triage_label_needs_review_no_conditions(self):
         """Case with no conditions should return needs_review."""
         label = self.GapCheckerService.get_triage_label(self.case)
-        self.assertEqual(label, 'needs_review')
+        self.assertEqual(label, "needs_review")
 
     def test_triage_label_ready_to_file(self):
         """Case with complete evidence should return ready_to_file."""
@@ -571,7 +568,7 @@ class TestGapCheckerService(TestCase):
             has_nexus=True,
         )
         label = self.GapCheckerService.get_triage_label(self.case)
-        self.assertEqual(label, 'ready_to_file')
+        self.assertEqual(label, "ready_to_file")
 
     def test_triage_label_needs_nexus(self):
         """Case missing only nexus should return needs_nexus."""
@@ -584,7 +581,7 @@ class TestGapCheckerService(TestCase):
             has_nexus=False,
         )
         label = self.GapCheckerService.get_triage_label(self.case)
-        self.assertEqual(label, 'needs_nexus')
+        self.assertEqual(label, "needs_nexus")
 
     def test_triage_label_needs_evidence(self):
         """Case missing diagnosis or in-service should return needs_evidence."""
@@ -597,7 +594,7 @@ class TestGapCheckerService(TestCase):
             has_nexus=True,
         )
         label = self.GapCheckerService.get_triage_label(self.case)
-        self.assertEqual(label, 'needs_evidence')
+        self.assertEqual(label, "needs_evidence")
 
     def test_excludes_granted_conditions_from_triage(self):
         """Granted conditions should not affect triage calculation."""
@@ -611,12 +608,13 @@ class TestGapCheckerService(TestCase):
         )
         # With only granted condition, should return needs_review
         label = self.GapCheckerService.get_triage_label(self.case)
-        self.assertEqual(label, 'needs_review')
+        self.assertEqual(label, "needs_review")
 
 
 # =============================================================================
 # CASE ARCHIVE VIEW TESTS
 # =============================================================================
+
 
 @pytest.mark.django_db
 class TestCaseArchiveView:
@@ -625,8 +623,7 @@ class TestCaseArchiveView:
     def test_can_archive_closed_case(self, client, db):
         """Closed cases can be archived."""
         user = User.objects.create_user(
-            email="archivetester@example.com",
-            password="TestPass123!"
+            email="archivetester@example.com", password="TestPass123!"
         )
         org = Organization.objects.create(
             name="Archive Test Org",
@@ -636,10 +633,11 @@ class TestCaseArchiveView:
         OrganizationMembership.objects.create(
             user=user,
             organization=org,
-            role='admin',
+            role="admin",
             is_active=True,
         )
         from vso.models import VeteranCase
+
         case = VeteranCase.objects.create(
             organization=org,
             veteran=user,
@@ -648,7 +646,7 @@ class TestCaseArchiveView:
         )
 
         client.login(email="archivetester@example.com", password="TestPass123!")
-        response = client.post(reverse('vso:case_archive', args=[case.pk]))
+        response = client.post(reverse("vso:case_archive", args=[case.pk]))
 
         case.refresh_from_db()
         assert case.is_archived is True
@@ -658,8 +656,7 @@ class TestCaseArchiveView:
     def test_cannot_archive_open_case(self, client, db):
         """Open cases cannot be archived."""
         user = User.objects.create_user(
-            email="openarchivetester@example.com",
-            password="TestPass123!"
+            email="openarchivetester@example.com", password="TestPass123!"
         )
         org = Organization.objects.create(
             name="Open Archive Test Org",
@@ -669,10 +666,11 @@ class TestCaseArchiveView:
         OrganizationMembership.objects.create(
             user=user,
             organization=org,
-            role='admin',
+            role="admin",
             is_active=True,
         )
         from vso.models import VeteranCase
+
         case = VeteranCase.objects.create(
             organization=org,
             veteran=user,
@@ -681,7 +679,7 @@ class TestCaseArchiveView:
         )
 
         client.login(email="openarchivetester@example.com", password="TestPass123!")
-        response = client.post(reverse('vso:case_archive', args=[case.pk]))
+        response = client.post(reverse("vso:case_archive", args=[case.pk]))
 
         case.refresh_from_db()
         assert case.is_archived is False
@@ -691,13 +689,13 @@ class TestCaseArchiveView:
 # ACTIVITY TRACKING SIGNAL TESTS
 # =============================================================================
 
+
 class TestActivityTrackingSignals(TestCase):
     """Tests for activity tracking signals."""
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email="signaltest@example.com",
-            password="TestPass123!"
+            email="signaltest@example.com", password="TestPass123!"
         )
         self.org = Organization.objects.create(
             name="Signal Test VSO",
@@ -707,10 +705,11 @@ class TestActivityTrackingSignals(TestCase):
         OrganizationMembership.objects.create(
             user=self.user,
             organization=self.org,
-            role='caseworker',
+            role="caseworker",
             is_active=True,
         )
         from vso.models import VeteranCase
+
         self.case = VeteranCase.objects.create(
             organization=self.org,
             veteran=self.user,
@@ -721,7 +720,7 @@ class TestActivityTrackingSignals(TestCase):
     def test_note_creation_updates_activity(self):
         """Creating a note should update last_activity_at."""
         from vso.models import CaseNote
-        from django.utils import timezone
+
         initial_activity = self.case.last_activity_at
 
         CaseNote.objects.create(
@@ -740,6 +739,7 @@ class TestActivityTrackingSignals(TestCase):
     def test_condition_creation_updates_activity(self):
         """Creating a condition should update last_activity_at."""
         from vso.models import CaseCondition
+
         initial_activity = self.case.last_activity_at
 
         CaseCondition.objects.create(
@@ -757,6 +757,7 @@ class TestActivityTrackingSignals(TestCase):
 # CROSS-ORG SECURITY TESTS (IDOR Defense-in-Depth)
 # =============================================================================
 
+
 @pytest.mark.django_db
 class TestCrossOrgSecurity:
     """
@@ -773,7 +774,9 @@ class TestCrossOrgSecurity:
 
         # Org A
         self.org_a = Organization.objects.create(
-            name="Org Alpha", slug="org-alpha", org_type="vso",
+            name="Org Alpha",
+            slug="org-alpha",
+            org_type="vso",
         )
         self.user_a = User.objects.create_user(
             email="staff_a@example.com", password="TestPass123!"
@@ -782,18 +785,24 @@ class TestCrossOrgSecurity:
             email="vet_a@example.com", password="TestPass123!"
         )
         OrganizationMembership.objects.create(
-            user=self.user_a, organization=self.org_a,
-            role='admin', is_active=True,
+            user=self.user_a,
+            organization=self.org_a,
+            role="admin",
+            is_active=True,
         )
         self.case_a = VeteranCase.objects.create(
-            organization=self.org_a, veteran=self.veteran_a,
-            assigned_to=self.user_a, title="Org A Case",
+            organization=self.org_a,
+            veteran=self.veteran_a,
+            assigned_to=self.user_a,
+            title="Org A Case",
             status="intake",
         )
 
         # Org B
         self.org_b = Organization.objects.create(
-            name="Org Beta", slug="org-beta", org_type="vso",
+            name="Org Beta",
+            slug="org-beta",
+            org_type="vso",
         )
         self.user_b = User.objects.create_user(
             email="staff_b@example.com", password="TestPass123!"
@@ -802,63 +811,69 @@ class TestCrossOrgSecurity:
             email="vet_b@example.com", password="TestPass123!"
         )
         OrganizationMembership.objects.create(
-            user=self.user_b, organization=self.org_b,
-            role='admin', is_active=True,
+            user=self.user_b,
+            organization=self.org_b,
+            role="admin",
+            is_active=True,
         )
         self.case_b = VeteranCase.objects.create(
-            organization=self.org_b, veteran=self.veteran_b,
-            assigned_to=self.user_b, title="Org B Case",
+            organization=self.org_b,
+            veteran=self.veteran_b,
+            assigned_to=self.user_b,
+            title="Org B Case",
             status="intake",
         )
 
     def test_org_a_cannot_view_org_b_case_detail(self, client):
         """User in Org A gets 404 when trying to view Org B case."""
         client.login(email="staff_a@example.com", password="TestPass123!")
-        response = client.get(reverse('vso:case_detail', args=[self.case_b.pk]))
+        response = client.get(reverse("vso:case_detail", args=[self.case_b.pk]))
         # Should be 404 (org filter) or redirect, not 200
         assert response.status_code in (404, 302)
         if response.status_code == 302:
-            assert 'case_detail' not in response.url
+            assert "case_detail" not in response.url
 
     def test_org_b_cannot_view_org_a_case_detail(self, client):
         """User in Org B gets 404 when trying to view Org A case."""
         client.login(email="staff_b@example.com", password="TestPass123!")
-        response = client.get(reverse('vso:case_detail', args=[self.case_a.pk]))
+        response = client.get(reverse("vso:case_detail", args=[self.case_a.pk]))
         assert response.status_code in (404, 302)
         if response.status_code == 302:
-            assert 'case_detail' not in response.url
+            assert "case_detail" not in response.url
 
     def test_org_a_cannot_update_org_b_case_status(self, client):
         """User in Org A cannot update status of Org B case."""
         client.login(email="staff_a@example.com", password="TestPass123!")
         response = client.post(
-            reverse('vso:case_update_status', args=[self.case_b.pk]),
-            {'status': 'closed_won'},
+            reverse("vso:case_update_status", args=[self.case_b.pk]),
+            {"status": "closed_won"},
         )
         assert response.status_code in (404, 302)
-        from vso.models import VeteranCase
         self.case_b.refresh_from_db()
-        assert self.case_b.status == 'intake'  # Unchanged
+        assert self.case_b.status == "intake"  # Unchanged
 
     def test_org_a_cannot_add_note_to_org_b_case(self, client):
         """User in Org A cannot add notes to Org B case."""
         client.login(email="staff_a@example.com", password="TestPass123!")
         response = client.post(
-            reverse('vso:add_case_note', args=[self.case_b.pk]),
-            {'subject': 'Malicious Note', 'content': 'Cross-org injection'},
+            reverse("vso:add_case_note", args=[self.case_b.pk]),
+            {"subject": "Malicious Note", "content": "Cross-org injection"},
         )
         assert response.status_code in (404, 302)
         from vso.models import CaseNote
-        assert CaseNote.objects.filter(case=self.case_b, subject='Malicious Note').count() == 0
+
+        assert (
+            CaseNote.objects.filter(case=self.case_b, subject="Malicious Note").count()
+            == 0
+        )
 
     def test_org_a_cannot_archive_org_b_case(self, client):
         """User in Org A cannot archive Org B case."""
-        from vso.models import VeteranCase
-        self.case_b.status = 'closed_won'
+        self.case_b.status = "closed_won"
         self.case_b.save()
 
         client.login(email="staff_a@example.com", password="TestPass123!")
-        response = client.post(reverse('vso:case_archive', args=[self.case_b.pk]))
+        response = client.post(reverse("vso:case_archive", args=[self.case_b.pk]))
         assert response.status_code in (404, 302)
         self.case_b.refresh_from_db()
         assert self.case_b.is_archived is False
@@ -866,7 +881,7 @@ class TestCrossOrgSecurity:
     def test_case_list_only_shows_own_org_cases(self, client):
         """Case list only shows cases from the user's organization."""
         client.login(email="staff_a@example.com", password="TestPass123!")
-        response = client.get(reverse('vso:case_list'))
+        response = client.get(reverse("vso:case_list"))
 
         if response.status_code == 200:
             # Org B case title should NOT appear

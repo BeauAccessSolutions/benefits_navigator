@@ -1,17 +1,18 @@
 """
-AI Gateway - Centralized OpenAI API interface for Benefits Navigator.
+AI Gateway - Centralized Anthropic (Claude) API interface for Benefits Navigator.
 
-This module provides a single entry point for all OpenAI API calls with:
-- Timeout handling (60s default, configurable)
-- Retry with exponential backoff (3 retries by default)
-- Pydantic schema validation for structured outputs
+This module provides a single entry point for all Claude API calls with:
+- Timeout handling (120s default, configurable)
+- Retry with exponential backoff (3 retries by default; SDK retries disabled
+  so the gateway owns the retry policy)
+- Schema-enforced structured outputs via messages.parse() + Pydantic
 - Result types for error handling (no exceptions raised to callers)
 - Consolidated input sanitization
 - Centralized token/cost tracking
+- Prompt caching on system prompts (cache_control ephemeral)
 - PII-safe logging
 """
 
-import json
 import logging
 import re
 import time
@@ -22,21 +23,30 @@ from enum import Enum
 from typing import Callable, Generic, Optional, TypeVar
 
 from django.conf import settings
-from openai import APIError, APITimeoutError, OpenAI, RateLimitError
+from anthropic import (
+    Anthropic,
+    APIConnectionError,
+    APIError,
+    APIStatusError,
+    APITimeoutError,
+    RateLimitError,
+)
 from pydantic import BaseModel, ValidationError
 
 logger = logging.getLogger(__name__)
 
-T = TypeVar('T')
-U = TypeVar('U')
+T = TypeVar("T")
+U = TypeVar("U")
 
 
 # =============================================================================
 # ERROR TYPES
 # =============================================================================
 
+
 class ErrorCode(Enum):
     """Standard error codes for AI gateway operations."""
+
     TIMEOUT = "timeout"
     RATE_LIMITED = "rate_limited"
     API_ERROR = "api_error"
@@ -49,6 +59,7 @@ class ErrorCode(Enum):
 @dataclass
 class GatewayError:
     """Structured error from AI gateway operations."""
+
     code: ErrorCode
     message: str
     retryable: bool
@@ -57,17 +68,18 @@ class GatewayError:
 
     def to_dict(self) -> dict:
         return {
-            'code': self.code.value,
-            'message': self.message,
-            'retryable': self.retryable,
-            'details': self.details,
-            'timestamp': self.timestamp.isoformat(),
+            "code": self.code.value,
+            "message": self.message,
+            "retryable": self.retryable,
+            "details": self.details,
+            "timestamp": self.timestamp.isoformat(),
         }
 
 
 # =============================================================================
 # RESULT TYPE
 # =============================================================================
+
 
 @dataclass
 class Result(Generic[T]):
@@ -84,10 +96,11 @@ class Result(Generic[T]):
         else:
             handle_error(result.error)
     """
+
     _value: Optional[T] = None
     _error: Optional[GatewayError] = None
     tokens_used: int = 0
-    cost_estimate: Decimal = Decimal('0')
+    cost_estimate: Decimal = Decimal("0")
     duration_ms: int = 0
 
     @property
@@ -101,7 +114,9 @@ class Result(Generic[T]):
     @property
     def value(self) -> T:
         if self._error is not None:
-            raise ValueError(f"Cannot access value on failed result: {self._error.message}")
+            raise ValueError(
+                f"Cannot access value on failed result: {self._error.message}"
+            )
         return self._value
 
     @property
@@ -115,21 +130,23 @@ class Result(Generic[T]):
         cls,
         value: T,
         tokens: int = 0,
-        cost: Decimal = Decimal('0'),
-        duration_ms: int = 0
-    ) -> 'Result[T]':
-        return cls(_value=value, tokens_used=tokens, cost_estimate=cost, duration_ms=duration_ms)
+        cost: Decimal = Decimal("0"),
+        duration_ms: int = 0,
+    ) -> "Result[T]":
+        return cls(
+            _value=value,
+            tokens_used=tokens,
+            cost_estimate=cost,
+            duration_ms=duration_ms,
+        )
 
     @classmethod
     def failure(
-        cls,
-        error: GatewayError,
-        tokens: int = 0,
-        duration_ms: int = 0
-    ) -> 'Result[T]':
+        cls, error: GatewayError, tokens: int = 0, duration_ms: int = 0
+    ) -> "Result[T]":
         return cls(_error=error, tokens_used=tokens, duration_ms=duration_ms)
 
-    def map(self, fn: Callable[[T], U]) -> 'Result[U]':
+    def map(self, fn: Callable[[T], U]) -> "Result[U]":
         """Transform the value if successful, propagate error if not."""
         if self.is_success:
             try:
@@ -137,14 +154,14 @@ class Result(Generic[T]):
                     fn(self._value),
                     self.tokens_used,
                     self.cost_estimate,
-                    self.duration_ms
+                    self.duration_ms,
                 )
             except Exception as e:
-                return Result.failure(GatewayError(
-                    code=ErrorCode.UNKNOWN,
-                    message=str(e),
-                    retryable=False
-                ))
+                return Result.failure(
+                    GatewayError(
+                        code=ErrorCode.UNKNOWN, message=str(e), retryable=False
+                    )
+                )
         return Result.failure(self._error, self.tokens_used, self.duration_ms)
 
 
@@ -152,9 +169,11 @@ class Result(Generic[T]):
 # RESPONSE TYPES
 # =============================================================================
 
+
 @dataclass
 class CompletionResponse:
     """Raw completion response from OpenAI."""
+
     content: str
     tokens_used: int
     model: str
@@ -164,6 +183,7 @@ class CompletionResponse:
 @dataclass
 class StructuredResponse(Generic[T]):
     """Structured response validated against a Pydantic schema."""
+
     data: T
     tokens_used: int
     model: str
@@ -220,7 +240,7 @@ def sanitize_input(text: str) -> str:
                 re.escape(pattern),
                 f"[REDACTED: {pattern[:10]}...]",
                 text,
-                flags=re.IGNORECASE
+                flags=re.IGNORECASE,
             )
 
     return text
@@ -230,33 +250,40 @@ def sanitize_input(text: str) -> str:
 # GATEWAY CONFIGURATION
 # =============================================================================
 
+
 @dataclass
 class GatewayConfig:
     """Configuration for AI Gateway."""
-    model: str = "gpt-3.5-turbo"
-    max_tokens: int = 4000
+
+    model: str = "claude-opus-4-8"
+    max_tokens: int = 8192
+    # Retained for call-site compatibility; Claude 4.7+ models do not accept
+    # sampling parameters, so this value is never sent to the API.
     default_temperature: float = 0.3
-    timeout_seconds: int = 60
+    adaptive_thinking: bool = True
+    timeout_seconds: int = 120
     max_retries: int = 3
     retry_base_delay: float = 1.0
     retry_max_delay: float = 60.0
 
     @classmethod
-    def from_settings(cls) -> 'GatewayConfig':
+    def from_settings(cls) -> "GatewayConfig":
         """Create config from Django settings."""
         return cls(
-            model=getattr(settings, 'OPENAI_MODEL', 'gpt-3.5-turbo'),
-            max_tokens=getattr(settings, 'OPENAI_MAX_TOKENS', 4000),
-            timeout_seconds=getattr(settings, 'OPENAI_TIMEOUT_SECONDS', 60),
-            max_retries=getattr(settings, 'OPENAI_MAX_RETRIES', 3),
-            retry_base_delay=getattr(settings, 'OPENAI_RETRY_BASE_DELAY', 1.0),
-            retry_max_delay=getattr(settings, 'OPENAI_RETRY_MAX_DELAY', 60.0),
+            model=getattr(settings, "ANTHROPIC_MODEL", "claude-opus-4-8"),
+            max_tokens=getattr(settings, "ANTHROPIC_MAX_TOKENS", 8192),
+            adaptive_thinking=getattr(settings, "ANTHROPIC_ADAPTIVE_THINKING", True),
+            timeout_seconds=getattr(settings, "ANTHROPIC_TIMEOUT_SECONDS", 120),
+            max_retries=getattr(settings, "ANTHROPIC_MAX_RETRIES", 3),
+            retry_base_delay=getattr(settings, "ANTHROPIC_RETRY_BASE_DELAY", 1.0),
+            retry_max_delay=getattr(settings, "ANTHROPIC_RETRY_MAX_DELAY", 60.0),
         )
 
 
 # =============================================================================
 # AI GATEWAY
 # =============================================================================
+
 
 class AIGateway:
     """
@@ -290,17 +317,50 @@ class AIGateway:
 
     def __init__(self, config: Optional[GatewayConfig] = None):
         self.config = config or GatewayConfig.from_settings()
-        self._client: Optional[OpenAI] = None
+        self._client: Optional[Anthropic] = None
 
     @property
-    def client(self) -> OpenAI:
-        """Lazy initialization of OpenAI client."""
+    def client(self) -> Anthropic:
+        """Lazy initialization of the Anthropic client."""
         if self._client is None:
-            self._client = OpenAI(
-                api_key=settings.OPENAI_API_KEY,
+            self._client = Anthropic(
+                api_key=settings.ANTHROPIC_API_KEY,
                 timeout=self.config.timeout_seconds,
+                # The gateway implements its own retry/backoff policy below;
+                # disable SDK retries so attempts aren't multiplied.
+                max_retries=0,
             )
         return self._client
+
+    def _request_kwargs(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        model: str,
+        max_tokens: int,
+    ) -> dict:
+        """Build shared Messages API kwargs for complete()/complete_structured().
+
+        The system prompt is marked cacheable: agent system prompts are large
+        and identical across requests, so repeat calls read from the prompt
+        cache. Claude 4.7+ models take no sampling parameters; thinking is
+        adaptive (model decides per request) unless disabled in config.
+        """
+        kwargs = dict(
+            model=model,
+            max_tokens=max_tokens,
+            system=[
+                {
+                    "type": "text",
+                    "text": system_prompt,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
+            messages=[{"role": "user", "content": user_prompt}],
+        )
+        if self.config.adaptive_thinking:
+            kwargs["thinking"] = {"type": "adaptive"}
+        return kwargs
 
     def complete(
         self,
@@ -317,7 +377,8 @@ class AIGateway:
         Args:
             system_prompt: System message (instructions)
             user_prompt: User message (may contain document content)
-            temperature: Override default temperature
+            temperature: Ignored — Claude 4.7+ models take no sampling
+                parameters. Kept so existing call sites don't break.
             max_tokens: Override default max tokens
             model: Override default model
             sanitize: Whether to sanitize user_prompt (default True)
@@ -332,7 +393,6 @@ class AIGateway:
             user_prompt = sanitize_input(user_prompt)
 
         model = model or self.config.model
-        temperature = temperature if temperature is not None else self.config.default_temperature
         max_tokens = max_tokens or self.config.max_tokens
 
         last_error: Optional[Exception] = None
@@ -340,22 +400,22 @@ class AIGateway:
 
         for attempt in range(self.config.max_retries + 1):
             try:
-                response = self.client.chat.completions.create(
-                    model=model,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt}
-                    ],
-                    temperature=temperature,
-                    max_tokens=max_tokens,
+                response = self.client.messages.create(
+                    **self._request_kwargs(
+                        system_prompt, user_prompt, model, max_tokens
+                    )
                 )
 
-                content = response.choices[0].message.content or ""
-                tokens_used = response.usage.total_tokens if response.usage else 0
-                finish_reason = response.choices[0].finish_reason or "unknown"
+                content = "".join(
+                    block.text for block in response.content if block.type == "text"
+                )
+                input_tokens = response.usage.input_tokens if response.usage else 0
+                output_tokens = response.usage.output_tokens if response.usage else 0
+                tokens_used = input_tokens + output_tokens
+                finish_reason = response.stop_reason or "unknown"
 
                 duration_ms = int((time.time() - start_time) * 1000)
-                cost = self._estimate_cost(tokens_used, model)
+                cost = self._estimate_cost(input_tokens, output_tokens, model)
 
                 # Log success without PII
                 logger.info(
@@ -377,19 +437,33 @@ class AIGateway:
 
             except APITimeoutError as e:
                 last_error = e
-                logger.warning(f"AI timeout (attempt {attempt + 1}/{self.config.max_retries + 1})")
+                logger.warning(
+                    f"AI timeout (attempt {attempt + 1}/{self.config.max_retries + 1})"
+                )
                 if attempt < self.config.max_retries:
                     self._wait_with_backoff(attempt)
 
             except RateLimitError as e:
                 last_error = e
-                logger.warning(f"AI rate limited (attempt {attempt + 1}/{self.config.max_retries + 1})")
+                logger.warning(
+                    f"AI rate limited (attempt {attempt + 1}/{self.config.max_retries + 1})"
+                )
                 if attempt < self.config.max_retries:
                     self._wait_with_backoff(attempt, multiplier=2.0)
 
+            except APIConnectionError as e:
+                last_error = e
+                logger.warning(
+                    f"AI connection error (attempt {attempt + 1}/{self.config.max_retries + 1})"
+                )
+                if attempt < self.config.max_retries:
+                    self._wait_with_backoff(attempt)
+
             except APIError as e:
                 last_error = e
-                logger.error(f"AI API error (attempt {attempt + 1}/{self.config.max_retries + 1}): {e}")
+                logger.error(
+                    f"AI API error (attempt {attempt + 1}/{self.config.max_retries + 1}): {e}"
+                )
                 if attempt < self.config.max_retries and self._is_retryable(e):
                     self._wait_with_backoff(attempt)
                 else:
@@ -397,7 +471,9 @@ class AIGateway:
 
             except Exception as e:
                 last_error = e
-                logger.error(f"Unexpected AI error: {e}", exc_info=True)
+                # Type name only — stack traces could capture in-flight
+                # document text (PII)
+                logger.error(f"Unexpected AI error: {type(e).__name__}")
                 break
 
         # All retries exhausted or non-retryable error
@@ -418,101 +494,152 @@ class AIGateway:
         """
         Make a completion request and validate response against Pydantic schema.
 
+        Uses the Anthropic SDK's messages.parse(), which enforces the schema
+        at the API level (structured outputs) and validates the response
+        against the Pydantic model — no markdown/JSON extraction needed.
+
         Args:
             system_prompt: System message
             user_prompt: User message
             response_schema: Pydantic model class for validation
-            temperature: Override default temperature
+            temperature: Ignored — kept for call-site compatibility
             model: Override default model
             sanitize: Whether to sanitize user_prompt
 
         Returns:
             Result containing validated StructuredResponse or GatewayError
         """
-        # Get raw completion
-        result = self.complete(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            temperature=temperature,
-            model=model,
-            sanitize=sanitize,
-        )
+        start_time = time.time()
 
-        if result.is_failure:
-            return Result.failure(result.error, result.tokens_used, result.duration_ms)
+        if sanitize:
+            user_prompt = sanitize_input(user_prompt)
 
-        # Parse and validate JSON
-        raw_content = result.value.content
-        json_data = self._extract_json(raw_content)
+        model = model or self.config.model
+        max_tokens = self.config.max_tokens
 
-        if json_data is None:
-            return Result.failure(
-                GatewayError(
-                    code=ErrorCode.PARSE_ERROR,
-                    message="Failed to extract JSON from response",
-                    retryable=True,
-                    details={'raw_content_preview': raw_content[:500]},
-                ),
-                tokens=result.tokens_used,
-                duration_ms=result.duration_ms,
-            )
+        last_error: Optional[Exception] = None
+        tokens_used = 0
 
-        try:
-            validated = response_schema.model_validate(json_data)
-            return Result.success(
-                StructuredResponse(
-                    data=validated,
-                    tokens_used=result.tokens_used,
-                    model=result.value.model,
-                    raw_content=raw_content,
-                ),
-                tokens=result.tokens_used,
-                cost=result.cost_estimate,
-                duration_ms=result.duration_ms,
-            )
-        except ValidationError as e:
-            return Result.failure(
-                GatewayError(
-                    code=ErrorCode.VALIDATION_ERROR,
-                    message=f"Response validation failed: {e}",
-                    retryable=False,
-                    details={'validation_errors': e.errors()},
-                ),
-                tokens=result.tokens_used,
-                duration_ms=result.duration_ms,
-            )
+        for attempt in range(self.config.max_retries + 1):
+            try:
+                response = self.client.messages.parse(
+                    output_format=response_schema,
+                    **self._request_kwargs(
+                        system_prompt, user_prompt, model, max_tokens
+                    ),
+                )
 
-    def _extract_json(self, content: str) -> Optional[dict]:
-        """Extract JSON from response, handling markdown code blocks."""
-        # Try to find JSON in code blocks
-        if "```json" in content:
-            start = content.find("```json") + 7
-            end = content.find("```", start)
-            content = content[start:end].strip()
-        elif "```" in content:
-            start = content.find("```") + 3
-            end = content.find("```", start)
-            content = content[start:end].strip()
+                input_tokens = response.usage.input_tokens if response.usage else 0
+                output_tokens = response.usage.output_tokens if response.usage else 0
+                tokens_used = input_tokens + output_tokens
+                duration_ms = int((time.time() - start_time) * 1000)
 
-        try:
-            return json.loads(content)
-        except json.JSONDecodeError:
-            logger.warning("Failed to parse JSON from AI response")
-            return None
+                validated = response.parsed_output
+                if validated is None:
+                    # Refusal or max_tokens truncation — schema not satisfiable
+                    return Result.failure(
+                        GatewayError(
+                            code=ErrorCode.PARSE_ERROR,
+                            message=(
+                                f"No structured output returned "
+                                f"(stop_reason={response.stop_reason})"
+                            ),
+                            retryable=response.stop_reason == "max_tokens",
+                        ),
+                        tokens=tokens_used,
+                        duration_ms=duration_ms,
+                    )
+
+                raw_content = "".join(
+                    block.text for block in response.content if block.type == "text"
+                )
+
+                logger.info(
+                    f"AI structured completion successful: model={model} "
+                    f"tokens={tokens_used} duration_ms={duration_ms}"
+                )
+
+                return Result.success(
+                    StructuredResponse(
+                        data=validated,
+                        tokens_used=tokens_used,
+                        model=model,
+                        raw_content=raw_content,
+                    ),
+                    tokens=tokens_used,
+                    cost=self._estimate_cost(input_tokens, output_tokens, model),
+                    duration_ms=duration_ms,
+                )
+
+            except ValidationError as e:
+                return Result.failure(
+                    GatewayError(
+                        code=ErrorCode.VALIDATION_ERROR,
+                        message=f"Response validation failed: {e}",
+                        retryable=False,
+                        details={"validation_errors": e.errors()},
+                    ),
+                    tokens=tokens_used,
+                    duration_ms=int((time.time() - start_time) * 1000),
+                )
+
+            except APITimeoutError as e:
+                last_error = e
+                logger.warning(
+                    f"AI timeout (attempt {attempt + 1}/{self.config.max_retries + 1})"
+                )
+                if attempt < self.config.max_retries:
+                    self._wait_with_backoff(attempt)
+
+            except RateLimitError as e:
+                last_error = e
+                logger.warning(
+                    f"AI rate limited (attempt {attempt + 1}/{self.config.max_retries + 1})"
+                )
+                if attempt < self.config.max_retries:
+                    self._wait_with_backoff(attempt, multiplier=2.0)
+
+            except APIConnectionError as e:
+                last_error = e
+                logger.warning(
+                    f"AI connection error (attempt {attempt + 1}/{self.config.max_retries + 1})"
+                )
+                if attempt < self.config.max_retries:
+                    self._wait_with_backoff(attempt)
+
+            except APIError as e:
+                last_error = e
+                logger.error(
+                    f"AI API error (attempt {attempt + 1}/{self.config.max_retries + 1}): {e}"
+                )
+                if attempt < self.config.max_retries and self._is_retryable(e):
+                    self._wait_with_backoff(attempt)
+                else:
+                    break
+
+            except Exception as e:
+                last_error = e
+                logger.error(f"Unexpected AI error: {type(e).__name__}")
+                break
+
+        duration_ms = int((time.time() - start_time) * 1000)
+        error = self._create_error_from_exception(last_error)
+        return Result.failure(error, tokens=tokens_used, duration_ms=duration_ms)
 
     def _wait_with_backoff(self, attempt: int, multiplier: float = 1.0) -> None:
         """Wait with exponential backoff."""
         delay = min(
-            self.config.retry_base_delay * (2 ** attempt) * multiplier,
-            self.config.retry_max_delay
+            self.config.retry_base_delay * (2**attempt) * multiplier,
+            self.config.retry_max_delay,
         )
         logger.info(f"Waiting {delay:.1f}s before retry")
         time.sleep(delay)
 
     def _is_retryable(self, error: APIError) -> bool:
         """Determine if an API error is retryable."""
-        if hasattr(error, 'status_code'):
-            return error.status_code in {500, 502, 503, 504}
+        if isinstance(error, APIStatusError):
+            # 5xx server errors + 529 (Anthropic overloaded)
+            return error.status_code in {500, 502, 503, 504, 529}
         return False
 
     def _create_error_from_exception(self, exc: Exception) -> GatewayError:
@@ -529,6 +656,12 @@ class AIGateway:
                 message="Rate limit exceeded after retries",
                 retryable=True,
             )
+        elif isinstance(exc, APIConnectionError):
+            return GatewayError(
+                code=ErrorCode.API_ERROR,
+                message="Connection to AI service failed after retries",
+                retryable=True,
+            )
         elif isinstance(exc, APIError):
             return GatewayError(
                 code=ErrorCode.API_ERROR,
@@ -542,17 +675,36 @@ class AIGateway:
                 retryable=False,
             )
 
-    def _estimate_cost(self, tokens: int, model: str) -> Decimal:
-        """Estimate cost based on token usage."""
-        # Pricing per token (approximate)
+    def _estimate_cost(
+        self, input_tokens: int, output_tokens: int, model: str
+    ) -> Decimal:
+        """Estimate cost from input/output token usage.
+
+        Rates are (input, output) USD per token. Cached-read discounts are
+        not modeled — this slightly overestimates, which is the safe
+        direction for budget tracking.
+        """
         rates = {
-            'gpt-3.5-turbo': Decimal('0.000002'),  # $0.002 per 1K tokens
-            'gpt-4': Decimal('0.00003'),  # $0.03 per 1K tokens
-            'gpt-4o': Decimal('0.000015'),  # $0.015 per 1K tokens
-            'gpt-4o-mini': Decimal('0.00000015'),  # $0.00015 per 1K tokens
+            "claude-opus-4-8": (
+                Decimal("0.000005"),
+                Decimal("0.000025"),
+            ),  # $5 / $25 per MTok
+            "claude-sonnet-4-6": (
+                Decimal("0.000003"),
+                Decimal("0.000015"),
+            ),  # $3 / $15 per MTok
+            "claude-haiku-4-5": (
+                Decimal("0.000001"),
+                Decimal("0.000005"),
+            ),  # $1 / $5 per MTok
         }
-        rate = rates.get(model, Decimal('0.000002'))
-        return Decimal(str(tokens)) * rate
+        input_rate, output_rate = rates.get(
+            model, (Decimal("0.000005"), Decimal("0.000025"))
+        )
+        return (
+            Decimal(str(input_tokens)) * input_rate
+            + Decimal(str(output_tokens)) * output_rate
+        )
 
 
 # =============================================================================
@@ -578,19 +730,14 @@ def reset_gateway() -> None:
 
 
 def complete(
-    system_prompt: str,
-    user_prompt: str,
-    **kwargs
+    system_prompt: str, user_prompt: str, **kwargs
 ) -> Result[CompletionResponse]:
     """Convenience function for raw completion."""
     return get_gateway().complete(system_prompt, user_prompt, **kwargs)
 
 
 def complete_structured(
-    system_prompt: str,
-    user_prompt: str,
-    response_schema: type[BaseModel],
-    **kwargs
+    system_prompt: str, user_prompt: str, response_schema: type[BaseModel], **kwargs
 ) -> Result[StructuredResponse]:
     """Convenience function for structured completion."""
     return get_gateway().complete_structured(

@@ -1,0 +1,30 @@
+# Coverage configuration.
+# Excludes framework boilerplate and non-runtime code that has no
+# meaningful branch logic to test. Application modules are NOT excluded.
+[run]
+branch = False
+omit =
+    # Virtualenvs
+    .auditvenv/*
+    */venv/*
+    */.venv/*
+    # Django boilerplate / config (no branching logic to test)
+    manage.py
+    */wsgi.py
+    */asgi.py
+    */settings.py
+    */migrations/*
+    # One-off scraping / analysis scripts (not part of the app runtime)
+    agents/discover_article_ids.py
+    agents/discover_from_toc.py
+    agents/analyze_article_id_pattern.py
+    agents/knowva_scraper.py
+    check_m21_status.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    raise NotImplementedError
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:

@@ -15,8 +15,6 @@ Covers:
 
 import pytest
 from datetime import date, timedelta
-from decimal import Decimal
-from unittest.mock import patch, MagicMock
 
 from django.test import TestCase, Client
 from django.urls import reverse
@@ -30,6 +28,7 @@ User = get_user_model()
 # =============================================================================
 # APPEAL GUIDANCE MODEL TESTS
 # =============================================================================
+
 
 class TestAppealGuidanceModel(TestCase):
     """Tests for the AppealGuidance model."""
@@ -77,8 +76,8 @@ class TestAppealGuidanceModel(TestCase):
 
     def test_guidance_appeal_type_choices(self):
         """AppealGuidance accepts valid appeal type choices."""
-        valid_types = ['hlr', 'supplemental', 'board']
-        processing_days = {'hlr': 141, 'supplemental': 125, 'board': 365}
+        valid_types = ["hlr", "supplemental", "board"]
+        processing_days = {"hlr": 141, "supplemental": 125, "board": 365}
         for atype in valid_types:
             guidance = AppealGuidance.objects.create(
                 title=f"Guide for {atype}",
@@ -106,13 +105,25 @@ class TestAppealGuidanceModel(TestCase):
     def test_guidance_ordering(self):
         """AppealGuidance is ordered by order field."""
         g3 = AppealGuidance.objects.create(
-            title="G3", slug="g3", order=3, appeal_type="hlr", average_processing_days=141
+            title="G3",
+            slug="g3",
+            order=3,
+            appeal_type="hlr",
+            average_processing_days=141,
         )
         g1 = AppealGuidance.objects.create(
-            title="G1", slug="g1", order=1, appeal_type="supplemental", average_processing_days=125
+            title="G1",
+            slug="g1",
+            order=1,
+            appeal_type="supplemental",
+            average_processing_days=125,
         )
         g2 = AppealGuidance.objects.create(
-            title="G2", slug="g2", order=2, appeal_type="board", average_processing_days=365
+            title="G2",
+            slug="g2",
+            order=2,
+            appeal_type="board",
+            average_processing_days=365,
         )
 
         guides = list(AppealGuidance.objects.all())
@@ -125,13 +136,13 @@ class TestAppealGuidanceModel(TestCase):
 # APPEAL MODEL TESTS
 # =============================================================================
 
+
 class TestAppealModel(TestCase):
     """Tests for the Appeal model."""
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email="test@example.com",
-            password="TestPass123!"
+            email="test@example.com", password="TestPass123!"
         )
 
     def test_appeal_creation(self):
@@ -156,7 +167,13 @@ class TestAppealModel(TestCase):
 
     def test_appeal_type_choices(self):
         """Appeal accepts all valid type choices."""
-        valid_types = ['hlr', 'supplemental', 'board_direct', 'board_evidence', 'board_hearing']
+        valid_types = [
+            "hlr",
+            "supplemental",
+            "board_direct",
+            "board_evidence",
+            "board_hearing",
+        ]
         for atype in valid_types:
             appeal = Appeal.objects.create(
                 user=self.user,
@@ -166,8 +183,18 @@ class TestAppealModel(TestCase):
 
     def test_appeal_status_choices(self):
         """Appeal accepts all valid status choices."""
-        valid_statuses = ['deciding', 'gathering', 'preparing', 'ready', 'submitted',
-                         'acknowledged', 'in_review', 'decision_pending', 'decided', 'closed']
+        valid_statuses = [
+            "deciding",
+            "gathering",
+            "preparing",
+            "ready",
+            "submitted",
+            "acknowledged",
+            "in_review",
+            "decision_pending",
+            "decided",
+            "closed",
+        ]
         for status in valid_statuses:
             appeal = Appeal.objects.create(
                 user=self.user,
@@ -332,13 +359,13 @@ class TestAppealModel(TestCase):
 # APPEAL DOCUMENT MODEL TESTS
 # =============================================================================
 
+
 class TestAppealDocumentModel(TestCase):
     """Tests for the AppealDocument model."""
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email="test@example.com",
-            password="TestPass123!"
+            email="test@example.com", password="TestPass123!"
         )
         self.appeal = Appeal.objects.create(
             user=self.user,
@@ -365,9 +392,16 @@ class TestAppealDocumentModel(TestCase):
 
     def test_appeal_document_type_choices(self):
         """AppealDocument accepts valid type choices."""
-        valid_types = ['decision_letter', 'new_evidence', 'medical_record',
-                       'nexus_letter', 'buddy_statement', 'personal_statement',
-                       'form', 'other']
+        valid_types = [
+            "decision_letter",
+            "new_evidence",
+            "medical_record",
+            "nexus_letter",
+            "buddy_statement",
+            "personal_statement",
+            "form",
+            "other",
+        ]
         for dtype in valid_types:
             doc = AppealDocument.objects.create(
                 appeal=self.appeal,
@@ -381,13 +415,13 @@ class TestAppealDocumentModel(TestCase):
 # APPEAL NOTE MODEL TESTS
 # =============================================================================
 
+
 class TestAppealNoteModel(TestCase):
     """Tests for the AppealNote model."""
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email="test@example.com",
-            password="TestPass123!"
+            email="test@example.com", password="TestPass123!"
         )
         self.appeal = Appeal.objects.create(
             user=self.user,
@@ -415,7 +449,7 @@ class TestAppealNoteModel(TestCase):
 
     def test_appeal_note_type_choices(self):
         """AppealNote accepts valid type choices."""
-        valid_types = ['user', 'status', 'reminder', 'va_communication']
+        valid_types = ["user", "status", "reminder", "va_communication"]
         for ntype in valid_types:
             note = AppealNote.objects.create(
                 appeal=self.appeal,
@@ -438,19 +472,20 @@ class TestAppealNoteModel(TestCase):
 # PUBLIC GUIDANCE VIEW TESTS
 # =============================================================================
 
+
 @pytest.mark.django_db
 class TestPublicGuidanceViews:
     """Tests for public (no login required) guidance views."""
 
     def test_appeals_home_loads(self, client):
         """Appeals home page loads without login."""
-        response = client.get(reverse('appeals:home'))
+        response = client.get(reverse("appeals:home"))
         assert response.status_code == 200
 
     def test_guidance_detail_loads(self, client, appeal_guidance):
         """Guidance detail page loads without login."""
         response = client.get(
-            reverse('appeals:guidance_detail', kwargs={'slug': appeal_guidance.slug})
+            reverse("appeals:guidance_detail", kwargs={"slug": appeal_guidance.slug})
         )
         assert response.status_code == 200
 
@@ -464,13 +499,13 @@ class TestPublicGuidanceViews:
             is_published=False,
         )
         response = client.get(
-            reverse('appeals:guidance_detail', kwargs={'slug': 'unpublished'})
+            reverse("appeals:guidance_detail", kwargs={"slug": "unpublished"})
         )
         assert response.status_code == 404
 
     def test_decision_tree_loads(self, client):
         """Decision tree page loads without login."""
-        response = client.get(reverse('appeals:decision_tree'))
+        response = client.get(reverse("appeals:decision_tree"))
         assert response.status_code == 200
 
 
@@ -478,35 +513,41 @@ class TestPublicGuidanceViews:
 # APPEAL LIST VIEW TESTS
 # =============================================================================
 
+
 @pytest.mark.django_db
 class TestAppealListView:
     """Tests for the appeal list view."""
 
     def test_appeal_list_requires_login(self, client):
         """Appeal list requires authentication."""
-        response = client.get(reverse('appeals:appeal_list'))
+        response = client.get(reverse("appeals:appeal_list"))
         assert response.status_code == 302
 
     def test_appeal_list_loads(self, authenticated_client):
         """Appeal list loads for authenticated user."""
-        response = authenticated_client.get(reverse('appeals:appeal_list'))
+        response = authenticated_client.get(reverse("appeals:appeal_list"))
         assert response.status_code == 200
 
     def test_appeal_list_shows_user_appeals(self, authenticated_client, appeal):
         """Appeal list shows user's appeals."""
-        response = authenticated_client.get(reverse('appeals:appeal_list'))
+        response = authenticated_client.get(reverse("appeals:appeal_list"))
         assert response.status_code == 200
-        assert appeal in response.context['active_appeals'] or appeal in response.context['completed_appeals']
+        assert (
+            appeal in response.context["active_appeals"]
+            or appeal in response.context["completed_appeals"]
+        )
 
-    def test_appeal_list_hides_other_user_appeals(self, authenticated_client, other_user):
+    def test_appeal_list_hides_other_user_appeals(
+        self, authenticated_client, other_user
+    ):
         """Appeal list doesn't show other user's appeals."""
         other_appeal = Appeal.objects.create(
             user=other_user,
             appeal_type="hlr",
         )
-        response = authenticated_client.get(reverse('appeals:appeal_list'))
-        active = list(response.context['active_appeals'])
-        completed = list(response.context['completed_appeals'])
+        response = authenticated_client.get(reverse("appeals:appeal_list"))
+        active = list(response.context["active_appeals"])
+        completed = list(response.context["completed_appeals"])
         assert other_appeal not in active + completed
 
 
@@ -514,53 +555,59 @@ class TestAppealListView:
 # APPEAL WORKFLOW VIEW TESTS
 # =============================================================================
 
+
 @pytest.mark.django_db
 class TestAppealWorkflowViews:
     """Tests for appeal workflow views."""
 
     def test_start_appeal_requires_login(self, client):
         """Starting an appeal requires authentication."""
-        response = client.get(reverse('appeals:appeal_start'))
+        response = client.get(reverse("appeals:appeal_start"))
         assert response.status_code == 302
 
     def test_start_appeal_get_shows_form(self, authenticated_client):
         """GET request shows appeal start form."""
-        response = authenticated_client.get(reverse('appeals:appeal_start'))
+        response = authenticated_client.get(reverse("appeals:appeal_start"))
         assert response.status_code == 200
 
     def test_start_appeal_post_creates_appeal(self, authenticated_client, user):
         """POST request creates new appeal."""
-        response = authenticated_client.post(reverse('appeals:appeal_start'), {
-            'original_decision_date': date.today().isoformat(),
-            'conditions_appealed': 'PTSD, Tinnitus',
-            'denial_reasons': 'Insufficient nexus evidence',
-        })
+        response = authenticated_client.post(
+            reverse("appeals:appeal_start"),
+            {
+                "original_decision_date": date.today().isoformat(),
+                "conditions_appealed": "PTSD, Tinnitus",
+                "denial_reasons": "Insufficient nexus evidence",
+            },
+        )
         assert response.status_code == 302  # Redirect to decide step
         assert Appeal.objects.filter(user=user).exists()
 
     def test_appeal_detail_requires_login(self, client, appeal):
         """Appeal detail requires authentication."""
         response = client.get(
-            reverse('appeals:appeal_detail', kwargs={'pk': appeal.pk})
+            reverse("appeals:appeal_detail", kwargs={"pk": appeal.pk})
         )
         assert response.status_code == 302
 
     def test_appeal_detail_loads_for_owner(self, authenticated_client, appeal):
         """Appeal detail loads for appeal owner."""
         response = authenticated_client.get(
-            reverse('appeals:appeal_detail', kwargs={'pk': appeal.pk})
+            reverse("appeals:appeal_detail", kwargs={"pk": appeal.pk})
         )
         assert response.status_code == 200
-        assert response.context['appeal'] == appeal
+        assert response.context["appeal"] == appeal
 
-    def test_appeal_detail_denied_for_other_user(self, authenticated_client, other_user):
+    def test_appeal_detail_denied_for_other_user(
+        self, authenticated_client, other_user
+    ):
         """Appeal detail returns 404 for non-owner."""
         other_appeal = Appeal.objects.create(
             user=other_user,
             appeal_type="hlr",
         )
         response = authenticated_client.get(
-            reverse('appeals:appeal_detail', kwargs={'pk': other_appeal.pk})
+            reverse("appeals:appeal_detail", kwargs={"pk": other_appeal.pk})
         )
         assert response.status_code == 404
 
@@ -569,6 +616,7 @@ class TestAppealWorkflowViews:
 # APPEAL DECISION TREE TESTS
 # =============================================================================
 
+
 @pytest.mark.django_db
 class TestAppealDecisionTree:
     """Tests for the appeal decision tree workflow."""
@@ -576,32 +624,33 @@ class TestAppealDecisionTree:
     def test_decide_requires_login(self, client, appeal):
         """Decision step requires authentication."""
         response = client.get(
-            reverse('appeals:appeal_decide', kwargs={'pk': appeal.pk})
+            reverse("appeals:appeal_decide", kwargs={"pk": appeal.pk})
         )
         assert response.status_code == 302
 
     def test_decide_page_loads(self, authenticated_client, appeal):
         """Decision tree page loads."""
         response = authenticated_client.get(
-            reverse('appeals:appeal_decide', kwargs={'pk': appeal.pk})
+            reverse("appeals:appeal_decide", kwargs={"pk": appeal.pk})
         )
         assert response.status_code == 200
 
     def test_set_type_updates_appeal(self, authenticated_client, appeal):
         """Setting appeal type updates the appeal."""
         response = authenticated_client.post(
-            reverse('appeals:appeal_set_type', kwargs={'pk': appeal.pk}),
-            {'appeal_type': 'supplemental'}
+            reverse("appeals:appeal_set_type", kwargs={"pk": appeal.pk}),
+            {"appeal_type": "supplemental"},
         )
         assert response.status_code == 302
 
         appeal.refresh_from_db()
-        assert appeal.appeal_type == 'supplemental'
+        assert appeal.appeal_type == "supplemental"
 
 
 # =============================================================================
 # APPEAL UPDATE AND DECISION TESTS
 # =============================================================================
+
 
 @pytest.mark.django_db
 class TestAppealUpdateViews:
@@ -610,28 +659,28 @@ class TestAppealUpdateViews:
     def test_update_appeal_requires_login(self, client, appeal):
         """Update appeal requires authentication."""
         response = client.get(
-            reverse('appeals:appeal_update', kwargs={'pk': appeal.pk})
+            reverse("appeals:appeal_update", kwargs={"pk": appeal.pk})
         )
         assert response.status_code == 302
 
     def test_update_appeal_loads(self, authenticated_client, appeal):
         """Update appeal page loads."""
         response = authenticated_client.get(
-            reverse('appeals:appeal_update', kwargs={'pk': appeal.pk})
+            reverse("appeals:appeal_update", kwargs={"pk": appeal.pk})
         )
         assert response.status_code == 200
 
     def test_record_decision_requires_login(self, client, appeal):
         """Recording decision requires authentication."""
         response = client.get(
-            reverse('appeals:appeal_record_decision', kwargs={'pk': appeal.pk})
+            reverse("appeals:appeal_record_decision", kwargs={"pk": appeal.pk})
         )
         assert response.status_code == 302
 
     def test_record_decision_loads(self, authenticated_client, appeal):
         """Record decision page loads."""
         response = authenticated_client.get(
-            reverse('appeals:appeal_record_decision', kwargs={'pk': appeal.pk})
+            reverse("appeals:appeal_record_decision", kwargs={"pk": appeal.pk})
         )
         assert response.status_code == 200
 
@@ -640,6 +689,7 @@ class TestAppealUpdateViews:
 # HTMX ENDPOINT TESTS
 # =============================================================================
 
+
 @pytest.mark.django_db
 class TestAppealHTMXEndpoints:
     """Tests for HTMX endpoints."""
@@ -647,42 +697,43 @@ class TestAppealHTMXEndpoints:
     def test_toggle_step_requires_login(self, client, appeal):
         """Toggle step requires authentication."""
         response = client.post(
-            reverse('appeals:appeal_toggle_step', kwargs={'pk': appeal.pk}),
-            {'step_id': 'step_1'}
+            reverse("appeals:appeal_toggle_step", kwargs={"pk": appeal.pk}),
+            {"step_id": "step_1"},
         )
         assert response.status_code == 302
 
     def test_toggle_step_adds_step(self, authenticated_client, appeal):
         """Toggle step adds step to completed list."""
         response = authenticated_client.post(
-            reverse('appeals:appeal_toggle_step', kwargs={'pk': appeal.pk}),
-            {'step_id': 'step_1'},
-            HTTP_HX_REQUEST='true'
+            reverse("appeals:appeal_toggle_step", kwargs={"pk": appeal.pk}),
+            {"step_id": "step_1"},
+            HTTP_HX_REQUEST="true",
         )
         assert response.status_code == 200
 
         appeal.refresh_from_db()
-        assert 'step_1' in appeal.steps_completed
+        assert "step_1" in appeal.steps_completed
 
     def test_toggle_step_removes_step(self, authenticated_client, appeal):
         """Toggle step removes already completed step."""
-        appeal.steps_completed = ['step_1']
+        appeal.steps_completed = ["step_1"]
         appeal.save()
 
         response = authenticated_client.post(
-            reverse('appeals:appeal_toggle_step', kwargs={'pk': appeal.pk}),
-            {'step_id': 'step_1'},
-            HTTP_HX_REQUEST='true'
+            reverse("appeals:appeal_toggle_step", kwargs={"pk": appeal.pk}),
+            {"step_id": "step_1"},
+            HTTP_HX_REQUEST="true",
         )
         assert response.status_code == 200
 
         appeal.refresh_from_db()
-        assert 'step_1' not in appeal.steps_completed
+        assert "step_1" not in appeal.steps_completed
 
 
 # =============================================================================
 # APPEAL DOCUMENT VIEW TESTS
 # =============================================================================
+
 
 @pytest.mark.django_db
 class TestAppealDocumentViews:
@@ -691,7 +742,7 @@ class TestAppealDocumentViews:
     def test_add_document_requires_login(self, client, appeal):
         """Adding document requires authentication."""
         response = client.post(
-            reverse('appeals:appeal_add_document', kwargs={'pk': appeal.pk})
+            reverse("appeals:appeal_add_document", kwargs={"pk": appeal.pk})
         )
         assert response.status_code == 302
 
@@ -702,7 +753,10 @@ class TestAppealDocumentViews:
             title="Test Doc",
         )
         response = client.post(
-            reverse('appeals:appeal_delete_document', kwargs={'pk': appeal.pk, 'doc_pk': doc.pk})
+            reverse(
+                "appeals:appeal_delete_document",
+                kwargs={"pk": appeal.pk, "doc_pk": doc.pk},
+            )
         )
         assert response.status_code == 302
 
@@ -711,6 +765,7 @@ class TestAppealDocumentViews:
 # APPEAL NOTE VIEW TESTS
 # =============================================================================
 
+
 @pytest.mark.django_db
 class TestAppealNoteViews:
     """Tests for appeal note views."""
@@ -718,27 +773,30 @@ class TestAppealNoteViews:
     def test_add_note_requires_login(self, client, appeal):
         """Adding note requires authentication."""
         response = client.post(
-            reverse('appeals:appeal_add_note', kwargs={'pk': appeal.pk})
+            reverse("appeals:appeal_add_note", kwargs={"pk": appeal.pk})
         )
         assert response.status_code == 302
 
     def test_add_note_creates_note(self, authenticated_client, appeal):
         """Adding note creates new note."""
         response = authenticated_client.post(
-            reverse('appeals:appeal_add_note', kwargs={'pk': appeal.pk}),
+            reverse("appeals:appeal_add_note", kwargs={"pk": appeal.pk}),
             {
-                'content': 'Test note content',
-                'note_type': 'user',
-            }
+                "content": "Test note content",
+                "note_type": "user",
+            },
         )
         assert response.status_code == 302
 
-        assert AppealNote.objects.filter(appeal=appeal, content='Test note content').exists()
+        assert AppealNote.objects.filter(
+            appeal=appeal, content="Test note content"
+        ).exists()
 
 
 # =============================================================================
 # ACCESS CONTROL TESTS
 # =============================================================================
+
 
 @pytest.mark.django_db
 class TestAppealAccessControl:
@@ -751,7 +809,7 @@ class TestAppealAccessControl:
             appeal_type="hlr",
         )
         response = authenticated_client.get(
-            reverse('appeals:appeal_detail', kwargs={'pk': other_appeal.pk})
+            reverse("appeals:appeal_detail", kwargs={"pk": other_appeal.pk})
         )
         assert response.status_code == 404
 
@@ -762,20 +820,22 @@ class TestAppealAccessControl:
             appeal_type="hlr",
         )
         response = authenticated_client.post(
-            reverse('appeals:appeal_update', kwargs={'pk': other_appeal.pk}),
-            {'status': 'submitted'}
+            reverse("appeals:appeal_update", kwargs={"pk": other_appeal.pk}),
+            {"status": "submitted"},
         )
         assert response.status_code == 404
 
-    def test_user_cannot_toggle_other_appeal_steps(self, authenticated_client, other_user):
+    def test_user_cannot_toggle_other_appeal_steps(
+        self, authenticated_client, other_user
+    ):
         """Users cannot toggle steps on other user's appeals."""
         other_appeal = Appeal.objects.create(
             user=other_user,
             appeal_type="hlr",
         )
         response = authenticated_client.post(
-            reverse('appeals:appeal_toggle_step', kwargs={'pk': other_appeal.pk}),
-            {'step_id': 'step_1'}
+            reverse("appeals:appeal_toggle_step", kwargs={"pk": other_appeal.pk}),
+            {"step_id": "step_1"},
         )
         assert response.status_code == 404
 
@@ -784,13 +844,13 @@ class TestAppealAccessControl:
 # INTEGRATION TESTS
 # =============================================================================
 
+
 class TestAppealWorkflow(TestCase):
     """Integration tests for complete appeal workflows."""
 
     def setUp(self):
         self.user = User.objects.create_user(
-            email="test@example.com",
-            password="TestPass123!"
+            email="test@example.com", password="TestPass123!"
         )
         self.client = Client()
         self.client.login(email="test@example.com", password="TestPass123!")
@@ -923,7 +983,9 @@ class TestDecisionTreeToAppealFlow(TestCase):
         response = self.client.post(
             reverse("appeals:appeal_start"),
             {
-                "original_decision_date": (date.today() - timedelta(days=30)).isoformat(),
+                "original_decision_date": (
+                    date.today() - timedelta(days=30)
+                ).isoformat(),
                 "conditions_appealed": "PTSD - denied",
                 "denial_reasons": "VA said no nexus",
             },
@@ -954,7 +1016,9 @@ class TestDecisionTreeToAppealFlow(TestCase):
         response = self.client.post(
             reverse("appeals:appeal_start"),
             {
-                "original_decision_date": (date.today() - timedelta(days=30)).isoformat(),
+                "original_decision_date": (
+                    date.today() - timedelta(days=30)
+                ).isoformat(),
                 "conditions_appealed": "PTSD - denied",
                 "denial_reasons": "VA said no nexus",
             },

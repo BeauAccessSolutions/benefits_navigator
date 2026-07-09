@@ -5,14 +5,12 @@ Uses Strawberry GraphQL with Django integration
 
 import re
 import strawberry
-from strawberry import auto
 from strawberry.types import Info
 from strawberry.permission import BasePermission
 from typing import Optional, List
 from datetime import date, datetime
 
 from django.contrib.auth import get_user_model
-from django.conf import settings
 
 User = get_user_model()
 
@@ -28,17 +26,20 @@ MAX_AI_SUMMARY_LENGTH = 10000  # ~10KB
 # Patterns for PII redaction
 PII_PATTERNS = [
     # SSN patterns: 123-45-6789, 123 45 6789, 123456789
-    (r'\b\d{3}[-\s]?\d{2}[-\s]?\d{4}\b', '[REDACTED:SSN]'),
+    (r"\b\d{3}[-\s]?\d{2}[-\s]?\d{4}\b", "[REDACTED:SSN]"),
     # VA file number patterns (typically 8-9 digits, sometimes with C prefix)
-    (r'\b[Cc]?\d{8,9}\b', '[REDACTED:VA_FILE]'),
+    (r"\b[Cc]?\d{8,9}\b", "[REDACTED:VA_FILE]"),
     # VA file number with letters/dashes: C12 345 678
-    (r'\b[Cc]\s?\d{2}\s?\d{3}\s?\d{3}\b', '[REDACTED:VA_FILE]'),
+    (r"\b[Cc]\s?\d{2}\s?\d{3}\s?\d{3}\b", "[REDACTED:VA_FILE]"),
     # Credit card patterns (just in case)
-    (r'\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b', '[REDACTED:CC]'),
+    (r"\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b", "[REDACTED:CC]"),
     # Date of birth in common formats (when clearly labeled)
-    (r'(?i)(date\s*of\s*birth|dob|born)[\s:]*(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})', r'\1: [REDACTED:DOB]'),
+    (
+        r"(?i)(date\s*of\s*birth|dob|born)[\s:]*(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})",
+        r"\1: [REDACTED:DOB]",
+    ),
     # Phone numbers: (123) 456-7890, 123-456-7890, 123.456.7890
-    (r'\b\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b', '[REDACTED:PHONE]'),
+    (r"\b\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b", "[REDACTED:PHONE]"),
 ]
 
 # Compile patterns for performance
@@ -67,7 +68,10 @@ def truncate_text(text: str, max_length: int) -> str:
     if not text or len(text) <= max_length:
         return text
 
-    return text[:max_length] + f"\n\n[TRUNCATED: {len(text) - max_length} characters omitted]"
+    return (
+        text[:max_length]
+        + f"\n\n[TRUNCATED: {len(text) - max_length} characters omitted]"
+    )
 
 
 def sanitize_graphql_text(text: str, max_length: int) -> str:
@@ -88,8 +92,10 @@ def sanitize_graphql_text(text: str, max_length: int) -> str:
 # PERMISSIONS
 # =============================================================================
 
+
 class IsAuthenticated(BasePermission):
     """Require authenticated user for queries/mutations."""
+
     message = "User is not authenticated"
 
     def has_permission(self, source, info: Info, **kwargs) -> bool:
@@ -99,6 +105,7 @@ class IsAuthenticated(BasePermission):
 
 class IsOwner(BasePermission):
     """Require user owns the resource."""
+
     message = "You do not have permission to access this resource"
 
     def has_permission(self, source, info: Info, **kwargs) -> bool:
@@ -113,9 +120,11 @@ class IsOwner(BasePermission):
 # TYPES - User & Profile
 # =============================================================================
 
+
 @strawberry.type
 class UserProfileType:
     """User profile information."""
+
     branch_of_service: Optional[str]
     disability_rating: Optional[int]
     date_of_birth: Optional[date]
@@ -124,8 +133,13 @@ class UserProfileType:
     def age(self) -> Optional[int]:
         if self.date_of_birth:
             today = date.today()
-            return today.year - self.date_of_birth.year - (
-                (today.month, today.day) < (self.date_of_birth.month, self.date_of_birth.day)
+            return (
+                today.year
+                - self.date_of_birth.year
+                - (
+                    (today.month, today.day)
+                    < (self.date_of_birth.month, self.date_of_birth.day)
+                )
             )
         return None
 
@@ -133,6 +147,7 @@ class UserProfileType:
 @strawberry.type
 class SubscriptionType:
     """User subscription details."""
+
     plan_type: str
     status: str
     is_active: bool
@@ -143,6 +158,7 @@ class SubscriptionType:
 @strawberry.type
 class UserType:
     """Current user information."""
+
     id: strawberry.ID
     email: str
     first_name: str
@@ -161,9 +177,11 @@ class UserType:
 # TYPES - Documents & Claims
 # =============================================================================
 
+
 @strawberry.type
 class DocumentType:
     """Uploaded document with OCR and AI analysis."""
+
     id: strawberry.ID
     file_name: str
     file_size: int
@@ -183,16 +201,17 @@ class DocumentType:
 
     @strawberry.field
     def is_processing(self) -> bool:
-        return self.status in ['uploading', 'processing', 'analyzing']
+        return self.status in ["uploading", "processing", "analyzing"]
 
     @strawberry.field
     def is_complete(self) -> bool:
-        return self.status == 'completed'
+        return self.status == "completed"
 
 
 @strawberry.type
 class DocumentAnalysisType:
     """AI analysis results for a document."""
+
     document_id: strawberry.ID
     # ocr_text removed for PHI protection - raw text is no longer persisted
     ocr_status: str  # 'pending', 'completed', or 'failed'
@@ -203,6 +222,7 @@ class DocumentAnalysisType:
 @strawberry.type
 class ClaimType:
     """VA claim with associated documents."""
+
     id: strawberry.ID
     title: str
     description: str
@@ -225,9 +245,11 @@ class ClaimType:
 # TYPES - Journey
 # =============================================================================
 
+
 @strawberry.type
 class JourneyStageType:
     """Stage in the VA claims journey."""
+
     id: strawberry.ID
     code: str
     name: str
@@ -241,6 +263,7 @@ class JourneyStageType:
 @strawberry.type
 class JourneyEventType:
     """User event in their claims journey."""
+
     id: strawberry.ID
     title: str
     description: str
@@ -261,6 +284,7 @@ class JourneyEventType:
 @strawberry.type
 class DeadlineType:
     """Important deadline for claims/appeals."""
+
     id: strawberry.ID
     title: str
     description: str
@@ -283,19 +307,20 @@ class DeadlineType:
     def urgency_class(self) -> str:
         days = self.days_remaining
         if days is None:
-            return 'completed'
+            return "completed"
         if days < 0:
-            return 'overdue'
+            return "overdue"
         if days <= 7:
-            return 'urgent'
+            return "urgent"
         if days <= 30:
-            return 'soon'
-        return 'normal'
+            return "soon"
+        return "normal"
 
 
 @strawberry.type
 class MilestoneType:
     """Major milestone in user's journey."""
+
     id: strawberry.ID
     milestone_type: str
     title: str
@@ -307,9 +332,11 @@ class MilestoneType:
 # TYPES - Stats & Summary
 # =============================================================================
 
+
 @strawberry.type
 class DashboardStatsType:
     """Dashboard statistics for the user."""
+
     total_documents: int
     documents_this_month: int
     active_claims: int
@@ -322,6 +349,7 @@ class DashboardStatsType:
 @strawberry.type
 class UsageType:
     """User's current usage information."""
+
     documents_this_month: int
     documents_limit: Optional[int]
     storage_used_mb: float
@@ -332,6 +360,7 @@ class UsageType:
 # =============================================================================
 # QUERIES
 # =============================================================================
+
 
 @strawberry.type
 class Query:
@@ -352,7 +381,7 @@ class Query:
     def my_profile(self, info: Info) -> Optional[UserProfileType]:
         """Get current user's profile."""
         user = info.context.request.user
-        if hasattr(user, 'profile'):
+        if hasattr(user, "profile"):
             profile = user.profile
             return UserProfileType(
                 branch_of_service=profile.branch_of_service,
@@ -397,7 +426,7 @@ class Query:
         if document_type:
             queryset = queryset.filter(document_type=document_type)
 
-        docs = queryset[offset:offset + limit]
+        docs = queryset[offset : offset + limit]
         return [
             DocumentType(
                 id=strawberry.ID(str(d.id)),
@@ -442,7 +471,9 @@ class Query:
             return None
 
     @strawberry.field(permission_classes=[IsAuthenticated])
-    def document_analysis(self, info: Info, id: strawberry.ID) -> Optional[DocumentAnalysisType]:
+    def document_analysis(
+        self, info: Info, id: strawberry.ID
+    ) -> Optional[DocumentAnalysisType]:
         """
         Get OCR text and AI analysis for a document.
 
@@ -458,15 +489,16 @@ class Query:
 
             # Sanitize AI summary: redact PII and truncate
             ai_summary_str = json.dumps(d.ai_summary) if d.ai_summary else None
-            sanitized_summary = sanitize_graphql_text(
-                ai_summary_str,
-                MAX_AI_SUMMARY_LENGTH
-            ) if ai_summary_str else None
+            sanitized_summary = (
+                sanitize_graphql_text(ai_summary_str, MAX_AI_SUMMARY_LENGTH)
+                if ai_summary_str
+                else None
+            )
 
             # Return OCR metadata (not raw text) for PHI protection
             return DocumentAnalysisType(
                 document_id=strawberry.ID(str(d.id)),
-                ocr_status=d.ocr_status or 'pending',
+                ocr_status=d.ocr_status or "pending",
                 ocr_length=d.ocr_length or 0,
                 ai_summary=sanitized_summary,
             )
@@ -490,7 +522,7 @@ class Query:
         if status:
             queryset = queryset.filter(status=status)
 
-        claims = queryset[offset:offset + limit]
+        claims = queryset[offset : offset + limit]
         return [
             ClaimType(
                 id=strawberry.ID(str(c.id)),
@@ -545,7 +577,9 @@ class Query:
         from core.models import UserJourneyEvent
 
         user = info.context.request.user
-        events = UserJourneyEvent.objects.filter(user=user).select_related('stage')[:limit]
+        events = UserJourneyEvent.objects.filter(user=user).select_related("stage")[
+            :limit
+        ]
 
         return [
             JourneyEventType(
@@ -602,19 +636,18 @@ class Query:
         now = timezone.now()
         month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         docs_this_month = Document.objects.filter(
-            user=user,
-            created_at__gte=month_start
+            user=user, created_at__gte=month_start
         ).count()
 
         # Calculate uploads remaining for free tier
         uploads_remaining = None
         if not user.is_premium:
-            limit = getattr(settings, 'FREE_TIER_DOCUMENTS_PER_MONTH', 3)
+            limit = getattr(settings, "FREE_TIER_DOCUMENTS_PER_MONTH", 3)
             uploads_remaining = max(0, limit - docs_this_month)
 
         # Get current rating from profile
         current_rating = None
-        if hasattr(user, 'profile') and user.profile.disability_rating:
+        if hasattr(user, "profile") and user.profile.disability_rating:
             current_rating = user.profile.disability_rating
 
         return DashboardStatsType(
@@ -622,11 +655,10 @@ class Query:
             documents_this_month=docs_this_month,
             active_claims=Claim.objects.filter(
                 user=user,
-                status__in=['draft', 'gathering_evidence', 'submitted', 'pending']
+                status__in=["draft", "gathering_evidence", "submitted", "pending"],
             ).count(),
             pending_deadlines=Deadline.objects.filter(
-                user=user,
-                is_completed=False
+                user=user, is_completed=False
             ).count(),
             completed_milestones=JourneyMilestone.objects.filter(user=user).count(),
             current_rating=current_rating,
@@ -647,20 +679,28 @@ class Query:
         now = timezone.now()
         month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         docs_this_month = Document.objects.filter(
-            user=user,
-            created_at__gte=month_start
+            user=user, created_at__gte=month_start
         ).count()
 
         # Calculate storage used
-        storage_bytes = Document.objects.filter(user=user).aggregate(
-            total=Sum('file_size')
-        )['total'] or 0
+        storage_bytes = (
+            Document.objects.filter(user=user).aggregate(total=Sum("file_size"))[
+                "total"
+            ]
+            or 0
+        )
         storage_mb = storage_bytes / (1024 * 1024)
 
         # Get limits based on tier
         is_premium = user.is_premium
-        docs_limit = None if is_premium else getattr(settings, 'FREE_TIER_DOCUMENTS_PER_MONTH', 3)
-        storage_limit = None if is_premium else getattr(settings, 'FREE_TIER_MAX_STORAGE_MB', 100)
+        docs_limit = (
+            None
+            if is_premium
+            else getattr(settings, "FREE_TIER_DOCUMENTS_PER_MONTH", 3)
+        )
+        storage_limit = (
+            None if is_premium else getattr(settings, "FREE_TIER_MAX_STORAGE_MB", 100)
+        )
 
         return UsageType(
             documents_this_month=docs_this_month,
@@ -695,10 +735,13 @@ class Query:
 # MUTATIONS
 # =============================================================================
 
+
 @strawberry.type
 class Mutation:
     @strawberry.mutation(permission_classes=[IsAuthenticated])
-    def complete_deadline(self, info: Info, id: strawberry.ID) -> Optional[DeadlineType]:
+    def complete_deadline(
+        self, info: Info, id: strawberry.ID
+    ) -> Optional[DeadlineType]:
         """Mark a deadline as completed."""
         from core.models import Deadline
 
@@ -726,7 +769,7 @@ class Mutation:
     ) -> Optional[UserProfileType]:
         """Update user profile."""
         user = info.context.request.user
-        if not hasattr(user, 'profile'):
+        if not hasattr(user, "profile"):
             return None
 
         profile = user.profile

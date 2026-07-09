@@ -27,35 +27,36 @@ from typing import List, Set
 
 # Directory names to exclude (checked against Path.parts)
 EXCLUDED_DIRS: Set[str] = {
-    'venv',
-    '.venv',
-    '__pycache__',
-    'migrations',
-    'tests',
-    '.git',
-    'node_modules',
-    'static',
-    'media',
-    'staticfiles',
-    '.tox',
-    '.pytest_cache',
-    '.mypy_cache',
-    'htmlcov',
-    'dist',
-    'build',
-    'eggs',
-    '*.egg-info',
+    "venv",
+    ".venv",
+    "__pycache__",
+    "migrations",
+    "tests",
+    ".git",
+    "node_modules",
+    "static",
+    "media",
+    "staticfiles",
+    ".tox",
+    ".pytest_cache",
+    ".mypy_cache",
+    "htmlcov",
+    "dist",
+    "build",
+    "eggs",
+    "*.egg-info",
 }
 
 # Files to always exclude
 EXCLUDED_FILES: Set[str] = {
-    'check_security_invariants.py',  # This script
+    "check_security_invariants.py",  # This script
 }
 
 
 @dataclass
 class Violation:
     """A security invariant violation."""
+
     check: str
     file: str
     line: int
@@ -79,7 +80,9 @@ class SecurityChecker:
         if self.verbose:
             print(f"  {message}")
 
-    def add_violation(self, check: str, file: str, line: int, message: str, severity: str = "error"):
+    def add_violation(
+        self, check: str, file: str, line: int, message: str, severity: str = "error"
+    ):
         """Record a violation."""
         self.violations.append(Violation(check, file, line, message, severity))
 
@@ -96,7 +99,7 @@ class SecurityChecker:
                 return True
             # Handle glob patterns like *.egg-info
             for pattern in EXCLUDED_DIRS:
-                if '*' in pattern and part.endswith(pattern.replace('*', '')):
+                if "*" in pattern and part.endswith(pattern.replace("*", "")):
                     return True
 
         # Check if filename is explicitly excluded
@@ -154,11 +157,11 @@ class SecurityChecker:
         # Patterns that indicate Django field definitions
         prohibited_patterns = [
             # Django model field definitions with field name as attribute
-            (r'^\s*ocr_text\s*=\s*models\.', 'ocr_text field definition'),
-            (r'^\s*raw_text\s*=\s*models\.', 'raw_text field definition'),
+            (r"^\s*ocr_text\s*=\s*models\.", "ocr_text field definition"),
+            (r"^\s*raw_text\s*=\s*models\.", "raw_text field definition"),
             # Also check for db_column or related field names
-            (r'db_column\s*=\s*["\']ocr_text["\']', 'ocr_text db_column'),
-            (r'db_column\s*=\s*["\']raw_text["\']', 'raw_text db_column'),
+            (r'db_column\s*=\s*["\']ocr_text["\']', "ocr_text db_column"),
+            (r'db_column\s*=\s*["\']raw_text["\']', "raw_text db_column"),
         ]
 
         # Only check model files
@@ -173,13 +176,13 @@ class SecurityChecker:
 
             self.log(f"Scanning {model_file.relative_to(self.root_dir)}")
 
-            with open(model_file, 'r') as f:
+            with open(model_file, "r") as f:
                 lines = f.readlines()
 
             for line_num, line in enumerate(lines, 1):
                 # Skip comments
                 stripped = line.strip()
-                if stripped.startswith('#'):
+                if stripped.startswith("#"):
                     continue
 
                 for pattern, desc in prohibited_patterns:
@@ -189,7 +192,7 @@ class SecurityChecker:
                             str(model_file.relative_to(self.root_dir)),
                             line_num,
                             f"Prohibited PHI field detected: {desc}. "
-                            f"Raw OCR/document text must not be stored in DB."
+                            f"Raw OCR/document text must not be stored in DB.",
                         )
 
     # =========================================================================
@@ -210,24 +213,24 @@ class SecurityChecker:
 
         settings_files = []
         for pattern in settings_patterns:
-            if '*' in str(pattern):
+            if "*" in str(pattern):
                 settings_files.extend(pattern.parent.glob(pattern.name))
             elif pattern.exists():
                 settings_files.append(pattern)
 
         # Robust regex: whitespace-insensitive
-        pii_pattern = re.compile(r'send_default_pii\s*=\s*True', re.IGNORECASE)
+        pii_pattern = re.compile(r"send_default_pii\s*=\s*True", re.IGNORECASE)
 
         for settings_file in settings_files:
             self.log(f"Scanning {settings_file.relative_to(self.root_dir)}")
 
-            with open(settings_file, 'r') as f:
+            with open(settings_file, "r") as f:
                 lines = f.readlines()
 
             for line_num, line in enumerate(lines, 1):
                 stripped = line.strip()
                 # Skip comments
-                if stripped.startswith('#'):
+                if stripped.startswith("#"):
                     continue
 
                 if pii_pattern.search(line):
@@ -236,7 +239,7 @@ class SecurityChecker:
                         str(settings_file.relative_to(self.root_dir)),
                         line_num,
                         "Sentry configured with send_default_pii=True. "
-                        "This must be False to prevent PII leakage."
+                        "This must be False to prevent PII leakage.",
                     )
 
     # =========================================================================
@@ -253,29 +256,20 @@ class SecurityChecker:
         # Match: print(...request.body/POST/data...)
         pitfall_patterns = [
             (
-                r'(?:logger|logging)\s*\.\s*(?:debug|info|warning|error|critical|exception)\s*\([^)]*request\.body',
-                'Logging request.body may contain PII'
+                r"(?:logger|logging)\s*\.\s*(?:debug|info|warning|error|critical|exception)\s*\([^)]*request\.body",
+                "Logging request.body may contain PII",
             ),
             (
-                r'(?:logger|logging)\s*\.\s*(?:debug|info|warning|error|critical|exception)\s*\([^)]*request\.POST',
-                'Logging request.POST may contain PII'
+                r"(?:logger|logging)\s*\.\s*(?:debug|info|warning|error|critical|exception)\s*\([^)]*request\.POST",
+                "Logging request.POST may contain PII",
             ),
             (
-                r'(?:logger|logging)\s*\.\s*(?:debug|info|warning|error|critical|exception)\s*\([^)]*request\.data',
-                'Logging request.data may contain PII'
+                r"(?:logger|logging)\s*\.\s*(?:debug|info|warning|error|critical|exception)\s*\([^)]*request\.data",
+                "Logging request.data may contain PII",
             ),
-            (
-                r'print\s*\([^)]*request\.body',
-                'Printing request.body may contain PII'
-            ),
-            (
-                r'print\s*\([^)]*request\.POST',
-                'Printing request.POST may contain PII'
-            ),
-            (
-                r'print\s*\([^)]*request\.data',
-                'Printing request.data may contain PII'
-            ),
+            (r"print\s*\([^)]*request\.body", "Printing request.body may contain PII"),
+            (r"print\s*\([^)]*request\.POST", "Printing request.POST may contain PII"),
+            (r"print\s*\([^)]*request\.data", "Printing request.data may contain PII"),
         ]
 
         python_files = self.get_python_files()
@@ -284,14 +278,14 @@ class SecurityChecker:
             self.log(f"Scanning {py_file.relative_to(self.root_dir)}")
 
             try:
-                with open(py_file, 'r') as f:
+                with open(py_file, "r") as f:
                     lines = f.readlines()
             except Exception:
                 continue
 
             for line_num, line in enumerate(lines, 1):
                 stripped = line.strip()
-                if stripped.startswith('#'):
+                if stripped.startswith("#"):
                     continue
 
                 for pattern, message in pitfall_patterns:
@@ -301,7 +295,7 @@ class SecurityChecker:
                             str(py_file.relative_to(self.root_dir)),
                             line_num,
                             message,
-                            severity="warning"
+                            severity="warning",
                         )
 
     # =========================================================================
@@ -316,40 +310,40 @@ class SecurityChecker:
         # These patterns look for actual data access, not just the string mention
         phi_access_patterns = [
             # Attribute access: .ocr_text, .raw_text, .ssn, etc.
-            r'\.ocr_text\b',
-            r'\.raw_text\b',
-            r'\.document_text\b',
-            r'\.ssn\b',
-            r'\.social_security\b',
-            r'\.va_file_number\b',
-            r'\.file_number\b',
+            r"\.ocr_text\b",
+            r"\.raw_text\b",
+            r"\.document_text\b",
+            r"\.ssn\b",
+            r"\.social_security\b",
+            r"\.va_file_number\b",
+            r"\.file_number\b",
             # Dict key access: ["ssn"], ['ssn'], .get("ssn"), .get('ssn')
             r'\[\s*["\'](?:ssn|social_security|va_file_number|file_number|ocr_text|raw_text)["\']',
             r'\.get\s*\(\s*["\'](?:ssn|social_security|va_file_number|file_number|ocr_text|raw_text)["\']',
         ]
 
         # Build combined pattern for PHI access
-        phi_pattern = re.compile('|'.join(phi_access_patterns), re.IGNORECASE)
+        phi_pattern = re.compile("|".join(phi_access_patterns), re.IGNORECASE)
 
         # Logging call pattern
         logging_call = re.compile(
-            r'(?:logger|logging)\s*\.\s*(?:debug|info|warning|error|critical|exception)\s*\(',
-            re.IGNORECASE
+            r"(?:logger|logging)\s*\.\s*(?:debug|info|warning|error|critical|exception)\s*\(",
+            re.IGNORECASE,
         )
 
         python_files = self.get_python_files()
 
         for py_file in python_files:
             try:
-                with open(py_file, 'r') as f:
+                with open(py_file, "r") as f:
                     content = f.read()
-                    lines = content.split('\n')
+                    lines = content.split("\n")
             except Exception:
                 continue
 
             for line_num, line in enumerate(lines, 1):
                 stripped = line.strip()
-                if stripped.startswith('#'):
+                if stripped.startswith("#"):
                     continue
 
                 # Check if line contains both a logging call and PHI access
@@ -359,14 +353,14 @@ class SecurityChecker:
                         str(py_file.relative_to(self.root_dir)),
                         line_num,
                         "Logging statement may include PHI field access. "
-                        "Remove sensitive data from log output."
+                        "Remove sensitive data from log output.",
                     )
 
 
 def main():
     parser = argparse.ArgumentParser(description="Check security invariants")
-    parser.add_argument('--verbose', '-v', action='store_true', help="Verbose output")
-    parser.add_argument('--root', type=str, default='.', help="Project root directory")
+    parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
+    parser.add_argument("--root", type=str, default=".", help="Project root directory")
     args = parser.parse_args()
 
     root_dir = Path(args.root).resolve()

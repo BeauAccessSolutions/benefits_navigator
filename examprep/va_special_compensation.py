@@ -17,6 +17,7 @@ from enum import Enum
 
 class SMCLevel(Enum):
     """SMC compensation levels from lowest to highest"""
+
     K = "k"  # Loss of use, anatomical loss
     L = "l"  # Aid and attendance or housebound
     M = "m"  # Multiple 100% disabilities
@@ -30,6 +31,7 @@ class SMCLevel(Enum):
 @dataclass
 class SMCCondition:
     """A condition that may qualify for SMC"""
+
     name: str
     rating: int
     loss_of_use: bool = False
@@ -42,6 +44,7 @@ class SMCCondition:
 @dataclass
 class SMCEligibilityResult:
     """Result of SMC eligibility check"""
+
     eligible: bool
     levels: List[SMCLevel] = field(default_factory=list)
     eligible_conditions: List[Dict[str, Any]] = field(default_factory=list)
@@ -53,6 +56,7 @@ class SMCEligibilityResult:
 @dataclass
 class TDIUEligibilityResult:
     """Result of TDIU eligibility check"""
+
     schedular_eligible: bool
     extraschedular_possible: bool
     meets_single_disability: bool
@@ -176,18 +180,19 @@ def check_smc_eligibility(conditions: List[SMCCondition]) -> SMCEligibilityResul
         result.eligible = True
         result.levels.append(SMCLevel.S)
         result.estimated_monthly_addition = max(
-            result.estimated_monthly_addition,
-            SMC_RATES_2026[SMCLevel.S]
+            result.estimated_monthly_addition, SMC_RATES_2026[SMCLevel.S]
         )
         result.explanations.append(
             f"Eligible for SMC(s) - Housebound: You have one disability rated 100% "
             f"plus additional disabilities combining to {combined_other}% (meets 60% threshold)"
         )
-        result.eligible_conditions.append({
-            "level": "SMC(s)",
-            "reason": f"100% disability plus {combined_other}% additional disabilities",
-            "conditions": [c.name for c in conditions_100]
-        })
+        result.eligible_conditions.append(
+            {
+                "level": "SMC(s)",
+                "reason": f"100% disability plus {combined_other}% additional disabilities",
+                "conditions": [c.name for c in conditions_100],
+            }
+        )
 
     # Check SMC(l) - Aid and attendance or housebound
     if requires_aid or is_housebound_any:
@@ -196,24 +201,20 @@ def check_smc_eligibility(conditions: List[SMCCondition]) -> SMCEligibilityResul
         if SMCLevel.S in result.levels:
             # SMC(l) rate is higher than SMC(s)
             result.estimated_monthly_addition = max(
-                result.estimated_monthly_addition,
-                SMC_RATES_2026[SMCLevel.L]
+                result.estimated_monthly_addition, SMC_RATES_2026[SMCLevel.L]
             )
         else:
             result.estimated_monthly_addition += SMC_RATES_2026[SMCLevel.L]
 
         reason = "aid and attendance" if requires_aid else "housebound status"
-        result.explanations.append(
-            f"Eligible for SMC(l) based on need for {reason}"
-        )
+        result.explanations.append(f"Eligible for SMC(l) based on need for {reason}")
 
     # Check SMC(m) and higher - Multiple 100% disabilities
     if len(conditions_100) >= 2:
         result.eligible = True
         result.levels.append(SMCLevel.M)
         result.estimated_monthly_addition = max(
-            result.estimated_monthly_addition,
-            SMC_RATES_2026[SMCLevel.M]
+            result.estimated_monthly_addition, SMC_RATES_2026[SMCLevel.M]
         )
         result.explanations.append(
             f"Potentially eligible for SMC(m) or higher with {len(conditions_100)} "
@@ -226,8 +227,7 @@ def check_smc_eligibility(conditions: List[SMCCondition]) -> SMCEligibilityResul
         result.eligible = True
         result.levels.append(SMCLevel.O)
         result.estimated_monthly_addition = max(
-            result.estimated_monthly_addition,
-            SMC_RATES_2026[SMCLevel.O]
+            result.estimated_monthly_addition, SMC_RATES_2026[SMCLevel.O]
         )
         result.explanations.append(
             f"Potentially eligible for SMC(o) based on: {paired_losses}"
@@ -247,7 +247,7 @@ def check_smc_eligibility(conditions: List[SMCCondition]) -> SMCEligibilityResul
         )
 
         # Check if they might qualify for higher level
-        if SMCLevel.K in result.levels and not SMCLevel.L in result.levels:
+        if SMCLevel.K in result.levels and SMCLevel.L not in result.levels:
             result.recommendations.append(
                 "If your conditions require regular aid and attendance or make you "
                 "substantially confined to your home, you may qualify for higher SMC levels."
@@ -275,13 +275,21 @@ def check_smc_k(conditions: List[SMCCondition]) -> List[Dict[str, Any]]:
         body_part = condition.body_part.lower()
 
         # Check if body part qualifies
-        if any(part in body_part for part in ["hand", "foot", "eye", "creative", "buttock"]):
-            qualifying.append({
-                "condition": condition.name,
-                "body_part": condition.body_part,
-                "type": "anatomical_loss" if condition.anatomical_loss else "loss_of_use",
-                "level": "SMC(k)"
-            })
+        if any(
+            part in body_part for part in ["hand", "foot", "eye", "creative", "buttock"]
+        ):
+            qualifying.append(
+                {
+                    "condition": condition.name,
+                    "body_part": condition.body_part,
+                    "type": (
+                        "anatomical_loss"
+                        if condition.anatomical_loss
+                        else "loss_of_use"
+                    ),
+                    "level": "SMC(k)",
+                }
+            )
 
     return qualifying
 
@@ -341,8 +349,7 @@ def calculate_combined_for_smc(ratings: List[int]) -> int:
 
 
 def check_tdiu_eligibility(
-    ratings: List[Dict[str, Any]],
-    combined_rating: int
+    ratings: List[Dict[str, Any]], combined_rating: int
 ) -> TDIUEligibilityResult:
     """
     Check eligibility for Total Disability Individual Unemployability (TDIU).
@@ -371,7 +378,7 @@ def check_tdiu_eligibility(
         meets_single_disability=False,
         meets_combined_criteria=False,
         highest_single_rating=0,
-        combined_rating=combined_rating
+        combined_rating=combined_rating,
     )
 
     if not ratings:
@@ -379,11 +386,11 @@ def check_tdiu_eligibility(
         return result
 
     # Get individual ratings
-    individual_ratings = [r.get('percentage', 0) for r in ratings]
+    individual_ratings = [r.get("percentage", 0) for r in ratings]
     result.highest_single_rating = max(individual_ratings) if individual_ratings else 0
 
     # Check single disability criteria (60%+)
-    high_ratings = [r for r in ratings if r.get('percentage', 0) >= 60]
+    high_ratings = [r for r in ratings if r.get("percentage", 0) >= 60]
     if high_ratings:
         result.meets_single_disability = True
         result.schedular_eligible = True
@@ -395,7 +402,7 @@ def check_tdiu_eligibility(
 
     # Check combined criteria (70%+ combined with at least one 40%+)
     if combined_rating >= 70:
-        ratings_40_plus = [r for r in ratings if r.get('percentage', 0) >= 40]
+        ratings_40_plus = [r for r in ratings if r.get("percentage", 0) >= 40]
         if ratings_40_plus:
             result.meets_combined_criteria = True
             result.schedular_eligible = True
@@ -410,9 +417,9 @@ def check_tdiu_eligibility(
     if not result.schedular_eligible and combined_rating >= 40:
         result.extraschedular_possible = True
         result.explanations.append(
-            f"Does not meet schedular TDIU criteria, but extraschedular TDIU may be "
-            f"possible if your service-connected disabilities prevent you from working. "
-            f"This requires additional documentation and VA review."
+            "Does not meet schedular TDIU criteria, but extraschedular TDIU may be "
+            "possible if your service-connected disabilities prevent you from working. "
+            "This requires additional documentation and VA review."
         )
 
     # Add recommendations
@@ -424,7 +431,7 @@ def check_tdiu_eligibility(
             "Gather evidence showing how your service-connected disabilities prevent "
             "you from maintaining substantially gainful employment.",
             "Consider obtaining a vocational assessment or employability evaluation.",
-            "A Veterans Service Organization (VSO) can help you prepare a strong TDIU claim."
+            "A Veterans Service Organization (VSO) can help you prepare a strong TDIU claim.",
         ]
     elif result.extraschedular_possible:
         result.recommendations = [
@@ -434,14 +441,14 @@ def check_tdiu_eligibility(
             "Strong medical evidence and potentially a vocational expert opinion "
             "will be critical.",
             "Consider consulting with a VA-accredited attorney or claims agent who "
-            "has experience with extraschedular TDIU claims."
+            "has experience with extraschedular TDIU claims.",
         ]
     else:
         result.recommendations = [
             "Based on current ratings, you don't appear to meet TDIU criteria.",
             "If your conditions have worsened, consider filing for increased ratings.",
             "If you have unclaimed conditions, filing new claims could increase your combined rating.",
-            "A VSO can help evaluate whether you have any basis for a TDIU claim."
+            "A VSO can help evaluate whether you have any basis for a TDIU claim.",
         ]
 
     return result
@@ -461,7 +468,7 @@ def get_smc_level_description(level: SMCLevel) -> Dict[str, str]:
                 "or complete organic aphonia (loss of voice). Can be awarded multiple times "
                 "for different qualifying conditions."
             ),
-            "rate": f"${SMC_RATES_2026[SMCLevel.K]:.2f}/month (per instance)"
+            "rate": f"${SMC_RATES_2026[SMCLevel.K]:.2f}/month (per instance)",
         },
         SMCLevel.L: {
             "name": "SMC(l)",
@@ -470,7 +477,7 @@ def get_smc_level_description(level: SMCLevel) -> Dict[str, str]:
                 "Awarded when the veteran is so helpless as to need regular aid and attendance "
                 "of another person, OR is permanently housebound due to service-connected disability."
             ),
-            "rate": f"${SMC_RATES_2026[SMCLevel.L]:.2f}/month"
+            "rate": f"${SMC_RATES_2026[SMCLevel.L]:.2f}/month",
         },
         SMCLevel.M: {
             "name": "SMC(m)",
@@ -479,7 +486,7 @@ def get_smc_level_description(level: SMCLevel) -> Dict[str, str]:
                 "Awarded when the veteran has multiple service-connected disabilities, each rated "
                 "at 100%, that result in a need for aid and attendance or create a housebound status."
             ),
-            "rate": f"${SMC_RATES_2026[SMCLevel.M]:.2f}/month"
+            "rate": f"${SMC_RATES_2026[SMCLevel.M]:.2f}/month",
         },
         SMCLevel.N: {
             "name": "SMC(n)",
@@ -487,7 +494,7 @@ def get_smc_level_description(level: SMCLevel) -> Dict[str, str]:
             "description": (
                 "Awarded for more severe combinations of 100% rated disabilities beyond SMC(m) criteria."
             ),
-            "rate": f"${SMC_RATES_2026[SMCLevel.N]:.2f}/month"
+            "rate": f"${SMC_RATES_2026[SMCLevel.N]:.2f}/month",
         },
         SMCLevel.O: {
             "name": "SMC(o)",
@@ -496,7 +503,7 @@ def get_smc_level_description(level: SMCLevel) -> Dict[str, str]:
                 "Awarded for anatomical loss or loss of use of both hands, both feet, "
                 "both arms, both legs, or one hand and one foot."
             ),
-            "rate": f"${SMC_RATES_2026[SMCLevel.O]:.2f}/month"
+            "rate": f"${SMC_RATES_2026[SMCLevel.O]:.2f}/month",
         },
         SMCLevel.R1: {
             "name": "SMC(r1)",
@@ -505,7 +512,7 @@ def get_smc_level_description(level: SMCLevel) -> Dict[str, str]:
                 "Awarded for veterans requiring a higher level of care than SMC(l), "
                 "including those with severe disabilities requiring more intensive care."
             ),
-            "rate": f"${SMC_RATES_2026[SMCLevel.R1]:.2f}/month"
+            "rate": f"${SMC_RATES_2026[SMCLevel.R1]:.2f}/month",
         },
         SMCLevel.R2: {
             "name": "SMC(r2)",
@@ -514,7 +521,7 @@ def get_smc_level_description(level: SMCLevel) -> Dict[str, str]:
                 "The highest level of SMC, awarded for the most severe disabilities "
                 "requiring the highest level of care and assistance."
             ),
-            "rate": f"${SMC_RATES_2026[SMCLevel.R2]:.2f}/month"
+            "rate": f"${SMC_RATES_2026[SMCLevel.R2]:.2f}/month",
         },
         SMCLevel.S: {
             "name": "SMC(s)",
@@ -524,7 +531,7 @@ def get_smc_level_description(level: SMCLevel) -> Dict[str, str]:
                 "additional service-connected disabilities independently ratable at 60% or more. "
                 "The veteran must be substantially confined to their home."
             ),
-            "rate": f"${SMC_RATES_2026[SMCLevel.S]:.2f}/month"
+            "rate": f"${SMC_RATES_2026[SMCLevel.S]:.2f}/month",
         },
     }
     return descriptions.get(level, {})

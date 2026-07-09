@@ -2,10 +2,9 @@
 OCR Service - Extract text from documents using Tesseract
 """
 
-import os
 import logging
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict
 
 import pytesseract
 from PIL import Image
@@ -24,7 +23,7 @@ class OCRService:
 
     def __init__(self):
         # Configure Tesseract command path if specified in settings
-        if hasattr(settings, 'TESSERACT_CMD'):
+        if hasattr(settings, "TESSERACT_CMD"):
             pytesseract.pytesseract.tesseract_cmd = settings.TESSERACT_CMD
 
     def extract_text(self, file_path: str) -> Dict:
@@ -48,9 +47,9 @@ class OCRService:
         # Determine file type and process accordingly
         file_ext = file_path.suffix.lower()
 
-        if file_ext == '.pdf':
+        if file_ext == ".pdf":
             return self._extract_from_pdf(file_path)
-        elif file_ext in ['.jpg', '.jpeg', '.png', '.tiff', '.tif']:
+        elif file_ext in [".jpg", ".jpeg", ".png", ".tiff", ".tif"]:
             return self._extract_from_image(file_path)
         else:
             raise ValueError(f"Unsupported file type: {file_ext}")
@@ -64,20 +63,24 @@ class OCRService:
 
             # Run Tesseract OCR
             # Using --psm 1 for automatic page segmentation with OSD
-            custom_config = r'--psm 1'
-            data = pytesseract.image_to_data(image, config=custom_config, output_type=pytesseract.Output.DICT)
+            custom_config = r"--psm 1"
+            data = pytesseract.image_to_data(
+                image, config=custom_config, output_type=pytesseract.Output.DICT
+            )
             text = pytesseract.image_to_string(image, config=custom_config)
 
             # Calculate average confidence
-            confidences = [int(conf) for conf in data['conf'] if conf != '-1']
+            confidences = [int(conf) for conf in data["conf"] if conf != "-1"]
             avg_confidence = sum(confidences) / len(confidences) if confidences else 0
 
-            logger.info(f"Extracted {len(text)} characters from image with {avg_confidence:.1f}% confidence")
+            logger.info(
+                f"Extracted {len(text)} characters from image with {avg_confidence:.1f}% confidence"
+            )
 
             return {
-                'text': text.strip(),
-                'confidence': round(avg_confidence, 2),
-                'page_count': 1,
+                "text": text.strip(),
+                "confidence": round(avg_confidence, 2),
+                "page_count": 1,
             }
 
         except Exception as e:
@@ -113,33 +116,45 @@ class OCRService:
                     logger.debug(f"Page {page_num + 1}: Using OCR")
 
                     # Render page to image
-                    pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))  # 2x zoom for better OCR
+                    pix = page.get_pixmap(
+                        matrix=fitz.Matrix(2, 2)
+                    )  # 2x zoom for better OCR
                     img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
 
                     # Run OCR
-                    custom_config = r'--psm 1'
-                    data = pytesseract.image_to_data(img, config=custom_config, output_type=pytesseract.Output.DICT)
+                    custom_config = r"--psm 1"
+                    data = pytesseract.image_to_data(
+                        img, config=custom_config, output_type=pytesseract.Output.DICT
+                    )
                     page_text = pytesseract.image_to_string(img, config=custom_config)
 
                     all_text.append(page_text.strip())
 
                     # Calculate page confidence
-                    page_confidences = [int(conf) for conf in data['conf'] if conf != '-1']
-                    page_avg_conf = sum(page_confidences) / len(page_confidences) if page_confidences else 0
+                    page_confidences = [
+                        int(conf) for conf in data["conf"] if conf != "-1"
+                    ]
+                    page_avg_conf = (
+                        sum(page_confidences) / len(page_confidences)
+                        if page_confidences
+                        else 0
+                    )
                     confidences.append(page_avg_conf)
 
             pdf_document.close()
 
             # Combine all pages
-            full_text = '\n\n'.join([text for text in all_text if text])
+            full_text = "\n\n".join([text for text in all_text if text])
             avg_confidence = sum(confidences) / len(confidences) if confidences else 0
 
-            logger.info(f"Extracted {len(full_text)} characters from {page_count}-page PDF with {avg_confidence:.1f}% confidence")
+            logger.info(
+                f"Extracted {len(full_text)} characters from {page_count}-page PDF with {avg_confidence:.1f}% confidence"
+            )
 
             return {
-                'text': full_text,
-                'confidence': round(avg_confidence, 2),
-                'page_count': page_count,
+                "text": full_text,
+                "confidence": round(avg_confidence, 2),
+                "page_count": page_count,
             }
 
         except Exception as e:

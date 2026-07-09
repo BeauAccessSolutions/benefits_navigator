@@ -40,9 +40,9 @@ class JWTAuthGraphQLView(BaseGraphQLView):
         Looks for Authorization: Bearer <token> header and validates
         the token using simplejwt.
         """
-        auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+        auth_header = request.META.get("HTTP_AUTHORIZATION", "")
 
-        if not auth_header.startswith('Bearer '):
+        if not auth_header.startswith("Bearer "):
             return
 
         try:

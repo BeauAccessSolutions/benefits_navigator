@@ -8,103 +8,378 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('accounts', '0003_add_notification_preferences'),
+        ("accounts", "0003_add_notification_preferences"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='Organization',
+            name="Organization",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('name', models.CharField(max_length=200, verbose_name='Organization name')),
-                ('slug', models.SlugField(max_length=100, unique=True, verbose_name='URL slug')),
-                ('org_type', models.CharField(choices=[('vso', 'Veteran Service Organization'), ('law_firm', 'Law Firm'), ('nonprofit', 'Nonprofit Organization'), ('government', 'Government Agency'), ('other', 'Other')], default='vso', max_length=20, verbose_name='Organization type')),
-                ('description', models.TextField(blank=True, verbose_name='Description')),
-                ('contact_email', models.EmailField(blank=True, max_length=254, verbose_name='Contact email')),
-                ('contact_phone', models.CharField(blank=True, max_length=20, verbose_name='Contact phone')),
-                ('website', models.URLField(blank=True, verbose_name='Website')),
-                ('stripe_customer_id', models.CharField(blank=True, max_length=255, verbose_name='Stripe customer ID')),
-                ('stripe_subscription_id', models.CharField(blank=True, max_length=255, verbose_name='Stripe subscription ID')),
-                ('plan', models.CharField(choices=[('starter', 'Starter'), ('pro', 'Professional'), ('enterprise', 'Enterprise')], default='starter', max_length=20, verbose_name='Plan')),
-                ('seats', models.IntegerField(default=5, verbose_name='Number of seats')),
-                ('seats_used', models.IntegerField(default=0, verbose_name='Seats used')),
-                ('settings', models.JSONField(blank=True, default=dict, help_text='Settings like require_mfa, allowed_domains, retention_days', verbose_name='Organization settings')),
-                ('is_active', models.BooleanField(default=True, verbose_name='Active')),
-                ('verified_at', models.DateTimeField(blank=True, null=True, verbose_name='Verified at')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "name",
+                    models.CharField(max_length=200, verbose_name="Organization name"),
+                ),
+                (
+                    "slug",
+                    models.SlugField(
+                        max_length=100, unique=True, verbose_name="URL slug"
+                    ),
+                ),
+                (
+                    "org_type",
+                    models.CharField(
+                        choices=[
+                            ("vso", "Veteran Service Organization"),
+                            ("law_firm", "Law Firm"),
+                            ("nonprofit", "Nonprofit Organization"),
+                            ("government", "Government Agency"),
+                            ("other", "Other"),
+                        ],
+                        default="vso",
+                        max_length=20,
+                        verbose_name="Organization type",
+                    ),
+                ),
+                (
+                    "description",
+                    models.TextField(blank=True, verbose_name="Description"),
+                ),
+                (
+                    "contact_email",
+                    models.EmailField(
+                        blank=True, max_length=254, verbose_name="Contact email"
+                    ),
+                ),
+                (
+                    "contact_phone",
+                    models.CharField(
+                        blank=True, max_length=20, verbose_name="Contact phone"
+                    ),
+                ),
+                ("website", models.URLField(blank=True, verbose_name="Website")),
+                (
+                    "stripe_customer_id",
+                    models.CharField(
+                        blank=True, max_length=255, verbose_name="Stripe customer ID"
+                    ),
+                ),
+                (
+                    "stripe_subscription_id",
+                    models.CharField(
+                        blank=True,
+                        max_length=255,
+                        verbose_name="Stripe subscription ID",
+                    ),
+                ),
+                (
+                    "plan",
+                    models.CharField(
+                        choices=[
+                            ("starter", "Starter"),
+                            ("pro", "Professional"),
+                            ("enterprise", "Enterprise"),
+                        ],
+                        default="starter",
+                        max_length=20,
+                        verbose_name="Plan",
+                    ),
+                ),
+                (
+                    "seats",
+                    models.IntegerField(default=5, verbose_name="Number of seats"),
+                ),
+                (
+                    "seats_used",
+                    models.IntegerField(default=0, verbose_name="Seats used"),
+                ),
+                (
+                    "settings",
+                    models.JSONField(
+                        blank=True,
+                        default=dict,
+                        help_text="Settings like require_mfa, allowed_domains, retention_days",
+                        verbose_name="Organization settings",
+                    ),
+                ),
+                ("is_active", models.BooleanField(default=True, verbose_name="Active")),
+                (
+                    "verified_at",
+                    models.DateTimeField(
+                        blank=True, null=True, verbose_name="Verified at"
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Organization',
-                'verbose_name_plural': 'Organizations',
-                'ordering': ['name'],
+                "verbose_name": "Organization",
+                "verbose_name_plural": "Organizations",
+                "ordering": ["name"],
             },
         ),
         migrations.CreateModel(
-            name='OrganizationInvitation',
+            name="OrganizationInvitation",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('email', models.EmailField(max_length=254, verbose_name='Invitee email')),
-                ('role', models.CharField(choices=[('admin', 'Administrator'), ('caseworker', 'Caseworker'), ('veteran', 'Veteran')], default='veteran', max_length=20, verbose_name='Role')),
-                ('token', models.CharField(max_length=64, unique=True, verbose_name='Invitation token')),
-                ('expires_at', models.DateTimeField(verbose_name='Expires at')),
-                ('accepted_at', models.DateTimeField(blank=True, null=True, verbose_name='Accepted at')),
-                ('accepted_by', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='accepted_invitations', to=settings.AUTH_USER_MODEL)),
-                ('invited_by', models.ForeignKey(null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='org_invitations_sent', to=settings.AUTH_USER_MODEL)),
-                ('organization', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='invitations', to='accounts.organization')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "email",
+                    models.EmailField(max_length=254, verbose_name="Invitee email"),
+                ),
+                (
+                    "role",
+                    models.CharField(
+                        choices=[
+                            ("admin", "Administrator"),
+                            ("caseworker", "Caseworker"),
+                            ("veteran", "Veteran"),
+                        ],
+                        default="veteran",
+                        max_length=20,
+                        verbose_name="Role",
+                    ),
+                ),
+                (
+                    "token",
+                    models.CharField(
+                        max_length=64, unique=True, verbose_name="Invitation token"
+                    ),
+                ),
+                ("expires_at", models.DateTimeField(verbose_name="Expires at")),
+                (
+                    "accepted_at",
+                    models.DateTimeField(
+                        blank=True, null=True, verbose_name="Accepted at"
+                    ),
+                ),
+                (
+                    "accepted_by",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="accepted_invitations",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
+                (
+                    "invited_by",
+                    models.ForeignKey(
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="org_invitations_sent",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
+                (
+                    "organization",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="invitations",
+                        to="accounts.organization",
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Organization Invitation',
-                'verbose_name_plural': 'Organization Invitations',
-                'ordering': ['-created_at'],
+                "verbose_name": "Organization Invitation",
+                "verbose_name_plural": "Organization Invitations",
+                "ordering": ["-created_at"],
             },
         ),
         migrations.CreateModel(
-            name='UsageTracking',
+            name="UsageTracking",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('documents_uploaded_this_month', models.IntegerField(default=0, verbose_name='Documents uploaded this month')),
-                ('month_reset_date', models.DateField(auto_now_add=True, help_text='First day of the current tracking month', verbose_name='Month reset date')),
-                ('total_storage_bytes', models.BigIntegerField(default=0, verbose_name='Total storage used (bytes)')),
-                ('denial_decodes_this_month', models.IntegerField(default=0, verbose_name='Denial decodes this month')),
-                ('ai_analyses_this_month', models.IntegerField(default=0, verbose_name='AI analyses this month')),
-                ('tokens_used_this_month', models.IntegerField(default=0, verbose_name='AI tokens used this month')),
-                ('total_documents_uploaded', models.IntegerField(default=0, verbose_name='Total documents uploaded (lifetime)')),
-                ('total_denial_decodes', models.IntegerField(default=0, verbose_name='Total denial decodes (lifetime)')),
-                ('total_ai_analyses', models.IntegerField(default=0, verbose_name='Total AI analyses (lifetime)')),
-                ('total_tokens_used', models.IntegerField(default=0, verbose_name='Total AI tokens used (lifetime)')),
-                ('user', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='usage', to=settings.AUTH_USER_MODEL)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "documents_uploaded_this_month",
+                    models.IntegerField(
+                        default=0, verbose_name="Documents uploaded this month"
+                    ),
+                ),
+                (
+                    "month_reset_date",
+                    models.DateField(
+                        auto_now_add=True,
+                        help_text="First day of the current tracking month",
+                        verbose_name="Month reset date",
+                    ),
+                ),
+                (
+                    "total_storage_bytes",
+                    models.BigIntegerField(
+                        default=0, verbose_name="Total storage used (bytes)"
+                    ),
+                ),
+                (
+                    "denial_decodes_this_month",
+                    models.IntegerField(
+                        default=0, verbose_name="Denial decodes this month"
+                    ),
+                ),
+                (
+                    "ai_analyses_this_month",
+                    models.IntegerField(
+                        default=0, verbose_name="AI analyses this month"
+                    ),
+                ),
+                (
+                    "tokens_used_this_month",
+                    models.IntegerField(
+                        default=0, verbose_name="AI tokens used this month"
+                    ),
+                ),
+                (
+                    "total_documents_uploaded",
+                    models.IntegerField(
+                        default=0, verbose_name="Total documents uploaded (lifetime)"
+                    ),
+                ),
+                (
+                    "total_denial_decodes",
+                    models.IntegerField(
+                        default=0, verbose_name="Total denial decodes (lifetime)"
+                    ),
+                ),
+                (
+                    "total_ai_analyses",
+                    models.IntegerField(
+                        default=0, verbose_name="Total AI analyses (lifetime)"
+                    ),
+                ),
+                (
+                    "total_tokens_used",
+                    models.IntegerField(
+                        default=0, verbose_name="Total AI tokens used (lifetime)"
+                    ),
+                ),
+                (
+                    "user",
+                    models.OneToOneField(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="usage",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Usage Tracking',
-                'verbose_name_plural': 'Usage Tracking',
+                "verbose_name": "Usage Tracking",
+                "verbose_name_plural": "Usage Tracking",
             },
         ),
         migrations.CreateModel(
-            name='OrganizationMembership',
+            name="OrganizationMembership",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('role', models.CharField(choices=[('admin', 'Administrator'), ('caseworker', 'Caseworker'), ('veteran', 'Veteran')], default='veteran', max_length=20, verbose_name='Role')),
-                ('invited_at', models.DateTimeField(auto_now_add=True, verbose_name='Invited at')),
-                ('accepted_at', models.DateTimeField(blank=True, null=True, verbose_name='Accepted at')),
-                ('is_active', models.BooleanField(default=True, verbose_name='Active')),
-                ('deactivated_at', models.DateTimeField(blank=True, null=True, verbose_name='Deactivated at')),
-                ('deactivated_by', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='deactivations_made', to=settings.AUTH_USER_MODEL)),
-                ('invited_by', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='invitations_sent', to=settings.AUTH_USER_MODEL)),
-                ('organization', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='memberships', to='accounts.organization')),
-                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='memberships', to=settings.AUTH_USER_MODEL)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "role",
+                    models.CharField(
+                        choices=[
+                            ("admin", "Administrator"),
+                            ("caseworker", "Caseworker"),
+                            ("veteran", "Veteran"),
+                        ],
+                        default="veteran",
+                        max_length=20,
+                        verbose_name="Role",
+                    ),
+                ),
+                (
+                    "invited_at",
+                    models.DateTimeField(auto_now_add=True, verbose_name="Invited at"),
+                ),
+                (
+                    "accepted_at",
+                    models.DateTimeField(
+                        blank=True, null=True, verbose_name="Accepted at"
+                    ),
+                ),
+                ("is_active", models.BooleanField(default=True, verbose_name="Active")),
+                (
+                    "deactivated_at",
+                    models.DateTimeField(
+                        blank=True, null=True, verbose_name="Deactivated at"
+                    ),
+                ),
+                (
+                    "deactivated_by",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="deactivations_made",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
+                (
+                    "invited_by",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="invitations_sent",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
+                (
+                    "organization",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="memberships",
+                        to="accounts.organization",
+                    ),
+                ),
+                (
+                    "user",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="memberships",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Organization Membership',
-                'verbose_name_plural': 'Organization Memberships',
-                'ordering': ['organization', 'role', 'user__email'],
-                'unique_together': {('user', 'organization')},
+                "verbose_name": "Organization Membership",
+                "verbose_name_plural": "Organization Memberships",
+                "ordering": ["organization", "role", "user__email"],
+                "unique_together": {("user", "organization")},
             },
         ),
     ]

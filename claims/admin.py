@@ -11,11 +11,28 @@ from .models import Document, Claim
 @admin.register(Document)
 class DocumentAdmin(PIIRedactedAdminMixin, admin.ModelAdmin):
     """Admin for Document model"""
-    list_display = ['file_name', 'user', 'document_type', 'status', 'file_size_mb', 'page_count', 'created_at']
-    list_filter = ['status', 'document_type', 'created_at']
-    search_fields = ['file_name', 'user__email']
-    raw_id_fields = ['user', 'claim']
-    readonly_fields = ['created_at', 'updated_at', 'processed_at', 'file_size', 'ocr_status', 'ocr_length', 'ocr_confidence']
+
+    list_display = [
+        "file_name",
+        "user",
+        "document_type",
+        "status",
+        "file_size_mb",
+        "page_count",
+        "created_at",
+    ]
+    list_filter = ["status", "document_type", "created_at"]
+    search_fields = ["file_name", "user__email"]
+    raw_id_fields = ["user", "claim"]
+    readonly_fields = [
+        "created_at",
+        "updated_at",
+        "processed_at",
+        "file_size",
+        "ocr_status",
+        "ocr_length",
+        "ocr_confidence",
+    ]
 
     fieldsets = (
         ('Basic Information', {
@@ -47,8 +64,16 @@ class DocumentAdmin(PIIRedactedAdminMixin, admin.ModelAdmin):
 @admin.register(Claim)
 class ClaimAdmin(admin.ModelAdmin):
     """Admin for Claim model"""
-    list_display = ['title', 'user', 'claim_type', 'status', 'submission_date', 'document_count']
-    list_filter = ['claim_type', 'status', 'created_at']
-    search_fields = ['title', 'user__email', 'description']
-    raw_id_fields = ['user']
-    readonly_fields = ['created_at', 'updated_at']
+
+    list_display = [
+        "title",
+        "user",
+        "claim_type",
+        "status",
+        "submission_date",
+        "document_count",
+    ]
+    list_filter = ["claim_type", "status", "created_at"]
+    search_fields = ["title", "user__email", "description"]
+    raw_id_fields = ["user"]
+    readonly_fields = ["created_at", "updated_at"]

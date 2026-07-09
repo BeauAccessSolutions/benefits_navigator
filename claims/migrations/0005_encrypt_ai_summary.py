@@ -14,11 +14,12 @@ def encrypt_existing_ai_summaries(apps, schema_editor):
     """Encrypt existing plaintext ai_summary values."""
     from core.encryption import FieldEncryption
 
-    Document = apps.get_model('claims', 'Document')
+    Document = apps.get_model("claims", "Document")
     db_alias = schema_editor.connection.alias
 
     # Read raw values directly to avoid model-level decryption
     from django.db import connections
+
     connection = connections[db_alias]
 
     with connection.cursor() as cursor:
@@ -33,7 +34,7 @@ def encrypt_existing_ai_summaries(apps, schema_editor):
             continue
 
         # Skip if already encrypted (encrypted values are long base64 strings)
-        if isinstance(value, str) and len(value) > 100 and value.startswith('Z0FB'):
+        if isinstance(value, str) and len(value) > 100 and value.startswith("Z0FB"):
             continue
 
         # Value could be a JSON string or a Python-repr string from JSONField
@@ -47,7 +48,7 @@ def encrypt_existing_ai_summaries(apps, schema_editor):
         with connection.cursor() as cursor:
             cursor.execute(
                 "UPDATE claims_document SET ai_summary = %s WHERE id = %s",
-                [encrypted, pk]
+                [encrypted, pk],
             )
 
 
@@ -56,6 +57,7 @@ def decrypt_ai_summaries(apps, schema_editor):
     from core.encryption import FieldEncryption
 
     from django.db import connections
+
     db_alias = schema_editor.connection.alias
     connection = connections[db_alias]
 
@@ -75,27 +77,27 @@ def decrypt_ai_summaries(apps, schema_editor):
             with connection.cursor() as cursor:
                 cursor.execute(
                     "UPDATE claims_document SET ai_summary = %s WHERE id = %s",
-                    [decrypted, pk]
+                    [decrypted, pk],
                 )
 
 
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('claims', '0004_add_condition_tags'),
+        ("claims", "0004_add_condition_tags"),
     ]
 
     operations = [
         # Step 1: Change column type from JSON to Text
         # (EncryptedJSONField extends TextField, not JSONField)
         migrations.AlterField(
-            model_name='document',
-            name='ai_summary',
+            model_name="document",
+            name="ai_summary",
             field=models.TextField(
                 blank=True,
-                help_text='Structured analysis results from OpenAI (encrypted)',
+                help_text="Structured analysis results from OpenAI (encrypted)",
                 null=True,
-                verbose_name='AI analysis summary',
+                verbose_name="AI analysis summary",
             ),
         ),
         # Step 2: Encrypt existing plaintext data

@@ -51,6 +51,7 @@ celerybeat.pid
 
 # Testing
 .coverage
+coverage.xml
 .pytest_cache/
 htmlcov/
 tests/agents/reports/

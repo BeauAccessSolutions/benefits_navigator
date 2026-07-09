@@ -27,16 +27,16 @@ def load_benchmark_results(filepath: Path) -> dict:
         return None
 
     try:
-        with open(filepath, 'r') as f:
+        with open(filepath, "r") as f:
             data = json.load(f)
 
         # Handle pytest-benchmark format
-        if 'benchmarks' in data:
-            return {b['name']: b for b in data['benchmarks']}
+        if "benchmarks" in data:
+            return {b["name"]: b for b in data["benchmarks"]}
 
         # Handle our simple format
-        if 'tests' in data:
-            return data['tests']
+        if "tests" in data:
+            return data["tests"]
 
         return data
     except (json.JSONDecodeError, KeyError) as e:
@@ -61,8 +61,8 @@ def compare_results(baseline: dict, current: dict, threshold_percent: float) -> 
 
         # Extract timing - handle both formats
         if isinstance(current_data, dict):
-            current_time = current_data.get('mean', current_data.get('time', 0))
-            baseline_time = baseline_data.get('mean', baseline_data.get('time', 0))
+            current_time = current_data.get("mean", current_data.get("time", 0))
+            baseline_time = baseline_data.get("mean", baseline_data.get("time", 0))
         else:
             current_time = current_data
             baseline_time = baseline_data
@@ -80,10 +80,18 @@ def compare_results(baseline: dict, current: dict, threshold_percent: float) -> 
 
 def main():
     parser = argparse.ArgumentParser(description="Compare benchmark results")
-    parser.add_argument('--baseline', type=str, required=True, help="Baseline results JSON")
-    parser.add_argument('--current', type=str, required=True, help="Current results JSON")
-    parser.add_argument('--threshold', type=float, default=20.0,
-                        help="Regression threshold percentage (default: 20)")
+    parser.add_argument(
+        "--baseline", type=str, required=True, help="Baseline results JSON"
+    )
+    parser.add_argument(
+        "--current", type=str, required=True, help="Current results JSON"
+    )
+    parser.add_argument(
+        "--threshold",
+        type=float,
+        default=20.0,
+        help="Regression threshold percentage (default: 20)",
+    )
     args = parser.parse_args()
 
     baseline_path = Path(args.baseline)
@@ -110,7 +118,9 @@ def main():
     regressions = compare_results(baseline, current, args.threshold)
 
     if regressions:
-        print(f"REGRESSION DETECTED: {len(regressions)} test(s) regressed by >{args.threshold}%")
+        print(
+            f"REGRESSION DETECTED: {len(regressions)} test(s) regressed by >{args.threshold}%"
+        )
         print()
         for test_name, baseline_time, current_time, percent_change in regressions:
             print(f"  {test_name}:")
