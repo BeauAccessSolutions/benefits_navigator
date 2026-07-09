@@ -11,7 +11,7 @@ import pytest
 from django.test import Client
 from django.urls import reverse
 
-from accounts.models import Organization, UserProfile
+from accounts.models import Organization
 from claims.models import Document
 from core.models import AuditLog
 from vso.models import VeteranCase

@@ -19,10 +19,9 @@ from accounts.models import OrganizationMembership, OrganizationInvitation
 from core.models import AuditLog
 from .models import (
     VeteranCase, CaseNote, SharedDocument,
-    SharedAnalysis, CaseChecklist, ChecklistItem, CaseCondition
+    SharedAnalysis, CaseCondition
 )
 from .permissions import (
-    Roles, has_role, is_vso_staff as check_vso_staff,
     get_user_organization_membership, vso_staff_required,
     member_is_org_admin, scope_cases_for_member
 )
