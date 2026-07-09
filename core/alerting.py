@@ -321,7 +321,7 @@ def check_download_anomalies(hours: int = 1) -> List[Dict]:
         AuditLog.objects.filter(
             action="document_download", timestamp__gte=since, user__isnull=False
         )
-        .values("user_id", "user__email")
+        .values("user_id")
         .annotate(download_count=Count("id"))
         .order_by("-download_count")
     )
@@ -333,14 +333,14 @@ def check_download_anomalies(hours: int = 1) -> List[Dict]:
                 "type": "high_download_volume",
                 "severity": AlertSeverity.CRITICAL,
                 "user_id": entry["user_id"],
-                "user_email": entry["user__email"],
                 "download_count": count,
                 "period_hours": hours,
             }
             anomalies.append(anomaly)
             send_alert(
                 title="Anomalous Download Activity",
-                message=f"User {entry['user__email']} downloaded {count} documents in {hours} hour(s)",
+                # User ID only — no PII in email/Slack alert channels
+                message=f"User id={entry['user_id']} downloaded {count} documents in {hours} hour(s)",
                 severity=AlertSeverity.CRITICAL,
                 details=anomaly,
             )
@@ -349,14 +349,13 @@ def check_download_anomalies(hours: int = 1) -> List[Dict]:
                 "type": "elevated_download_volume",
                 "severity": AlertSeverity.WARNING,
                 "user_id": entry["user_id"],
-                "user_email": entry["user__email"],
                 "download_count": count,
                 "period_hours": hours,
             }
             anomalies.append(anomaly)
             send_alert(
                 title="Elevated Download Activity",
-                message=f"User {entry['user__email']} downloaded {count} documents in {hours} hour(s)",
+                message=f"User id={entry['user_id']} downloaded {count} documents in {hours} hour(s)",
                 severity=AlertSeverity.WARNING,
                 details=anomaly,
             )

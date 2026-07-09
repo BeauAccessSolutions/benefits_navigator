@@ -109,11 +109,11 @@ class Document(TimeStampedModel, SoftDeleteModel):
     ai_tokens_used = models.IntegerField("Tokens used", default=0)
 
     # Condition tags (for organizing documents by claimed condition)
-    condition_tags = models.JSONField(
+    condition_tags = EncryptedJSONField(
         "Condition tags",
         default=list,
         blank=True,
-        help_text="List of condition names this document relates to",
+        help_text="List of condition names this document relates to (encrypted at rest)",
     )
 
     # Processing metadata

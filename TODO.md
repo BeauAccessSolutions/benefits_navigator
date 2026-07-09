@@ -10,22 +10,22 @@
 Tier 1 scans + 7-specialist review. Overall **3.4/5** (up from 2.9/5 on 2026-04-10). Verdict: SHIP WITH CAVEATS — **do not deploy until P0 below is fixed**. Full findings, evidence, and delta: `audits/2026-06-09/comprehensive-audit.md`.
 
 ### P0 — NEW (Deploy-blocking)
-- [ ] **Add `django.contrib.postgres` to INSTALLED_APPS** — `benefits_navigator/settings.py:86`. `documentation` models use SearchVectorField/GinIndex; `manage.py check`/`migrate` fail with postgres.E005 ×3, so the DO pre-deploy migrate job will fail. One-line fix; then add `python manage.py check --deploy` to CI.
+- [x] **Add `django.contrib.postgres` to INSTALLED_APPS** — fixed 2026-06-09; CI now runs `check --deploy --fail-level ERROR`.
 
 ### P1 — NEW (Fix within 1–2 weeks)
-- [ ] **Rate-limit signed-URL endpoints** — `claims/views.py:547,629` have no throttle (unauthenticated token-validated views). Add `@ratelimit(key='ip', rate='30/m')`.
-- [ ] **Encrypt `phone_number`** — `accounts/models.py:48` is plaintext PII. Migrate to `EncryptedCharField`.
+- [x] **Rate-limit signed-URL endpoints** — 30/m per IP added 2026-06-09.
+- [x] **Encrypt `phone_number`** — EncryptedCharField + data migration 2026-06-09. Also encrypted: VeteranCase description/conditions/closure_notes/c_and_p_exam_notes, Document.condition_tags (privacy hardening Phase 0).
 - [ ] **Bump lxml to >=6.1.0** — 5.1.0 has PYSEC-2026-87; parses scraped M21 HTML.
 - [ ] **Disclaimers on remaining AI pages** — statement_generator, condition_discovery, evidence_gap_result templates (decision analyzer pattern exists).
 - [ ] **WCAG: 5 aria-required + 10+ aria-live gaps** — contact.html:47,60,89,102, decision_analyzer.html:38; HTMX targets in search/journey/appeals/claims partials.
 - [ ] **N+1 in VSO views** — `vso/views.py:365-370` (triage per case), `:430-445` (CSV export), `:1407-1468` (reports). select_related/prefetch/annotate.
 - [ ] **transaction.atomic on accept_invitation** — `vso/views.py:1245-1280` (3 writes, no boundary).
-- [ ] **Security tests: signed-URL expiry/tampering + encryption round-trip + GraphQL PII redaction** — currently zero coverage on these paths.
+- [x] **Security tests: signed-URL expiry/tampering + encryption round-trip + GraphQL PII redaction** — `tests/test_security_controls.py` (18 tests) 2026-06-09.
 
 ### P2 — NEW (Fix before scaling)
 - [ ] M21 scraper tasks lack acks_late/retry config — `agents/tasks.py:23,86,186,197,222`
 - [ ] `core/health.py:77` except/pass hides Redis failure (queue alerts can't fire when Redis is down)
-- [ ] Download-anomaly alerts include user email — `core/alerting.py:348` (use user ID)
+- [x] Download-anomaly alerts include user email — fixed 2026-06-09 (user ID only)
 - [ ] No per-user token-spend cap — `accounts/models.py:895` counts analyses, not tokens
 - [ ] `exc_info=True` may leak PII into logs — `agents/ai_gateway.py:400`
 - [ ] Silent except/pass handlers — `core/views.py:711,719`, `api/views.py:65,165,177,230`, `claims/forms.py:83` (audit-log write failures swallowed)

@@ -165,6 +165,43 @@
 
         <!-- Condition Tags Section -->
         {% include 'claims/partials/document_tags.html' %}
+
+        <!-- Sharing Section: who has access to this document -->
+        {% if active_shares %}
+        <section aria-labelledby="sharing-heading" class="bg-white shadow rounded-lg p-6 mt-6">
+            <h2 id="sharing-heading" class="text-lg font-medium text-gray-900 mb-2">Shared With</h2>
+            <p class="text-sm text-gray-500 mb-4">
+                You control who can see this document. Revoking access takes effect immediately.
+                <a href="{% url 'core:data_activity' %}" class="text-blue-600 hover:text-blue-800 underline">
+                    See who's viewed your records</a>.
+            </p>
+            <ul class="divide-y divide-gray-200">
+                {% for share in active_shares %}
+                <li class="py-3 flex items-center justify-between gap-4">
+                    <div>
+                        <p class="text-sm font-medium text-gray-900">{{ share.case.organization.name }}</p>
+                        <p class="text-sm text-gray-500">
+                            Shared {{ share.shared_at|date:"F j, Y" }}
+                            {% if share.include_ai_analysis %}
+                                &middot; includes AI analysis
+                            {% endif %}
+                        </p>
+                    </div>
+                    <form method="post"
+                          action="{% url 'claims:document_unshare' pk=document.pk share_pk=share.pk %}"
+                          onsubmit="return confirm('Revoke access for {{ share.case.organization.name|escapejs }}? They will immediately lose access to this document.');">
+                        {% csrf_token %}
+                        <button type="submit"
+                                class="inline-flex items-center px-3 py-1.5 border border-red-300 text-sm font-medium rounded-md text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                                aria-label="Revoke access for {{ share.case.organization.name }}">
+                            Revoke access
+                        </button>
+                    </form>
+                </li>
+                {% endfor %}
+            </ul>
+        </section>
+        {% endif %}
     </div>
 
     <!-- Action buttons -->

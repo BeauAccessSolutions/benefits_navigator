@@ -621,6 +621,21 @@ RATELIMIT_ENABLE = env.bool("RATELIMIT_ENABLE", default=not DEBUG)
 RATELIMIT_USE_CACHE = "default"
 
 # ==============================================================================
+# VSO STAFF MFA
+# ==============================================================================
+# When VSO_MFA_REQUIRED is True, VSO staff without a confirmed 2FA device are
+# blocked from /vso/ pages after the grace period (measured from when their
+# staff membership was created) and redirected to 2FA setup.
+
+VSO_MFA_REQUIRED = env.bool("VSO_MFA_REQUIRED", default=False)
+VSO_MFA_GRACE_PERIOD_DAYS = env.int("VSO_MFA_GRACE_PERIOD_DAYS", default=7)
+
+# When True, /admin requires a verified TOTP device (django-otp OTPAdminSite).
+# Enable in production once superusers have enrolled devices; bootstrapping a
+# device requires this to be off (or use `manage.py addstatictoken`).
+ADMIN_OTP_REQUIRED = env.bool("ADMIN_OTP_REQUIRED", default=False)
+
+# ==============================================================================
 # FEATURE FLAGS
 # ==============================================================================
 # Controls progressive rollout of features for dual-path development

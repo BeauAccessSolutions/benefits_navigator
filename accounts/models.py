@@ -46,7 +46,7 @@ class User(AbstractUser):
     """
 
     email = models.EmailField("Email address", unique=True)
-    phone_number = models.CharField("Phone number", max_length=20, blank=True)
+    phone_number = EncryptedCharField("Phone number", max_length=255, blank=True)
     is_verified = models.BooleanField("Email verified", default=False)
     stripe_customer_id = models.CharField(
         "Stripe customer ID", max_length=255, blank=True
@@ -443,6 +443,16 @@ class Organization(TimeStampedModel):
     )
     seats = models.IntegerField("Number of seats", default=5)
     seats_used = models.IntegerField("Seats used", default=0)
+
+    # Privacy: least-privilege mode for caseworkers
+    restrict_caseworker_visibility = models.BooleanField(
+        "Restrict caseworker visibility",
+        default=False,
+        help_text=(
+            "When enabled, caseworkers see only cases assigned to them "
+            "(or unassigned); org admins see all cases."
+        ),
+    )
 
     # Settings (JSON for flexibility)
     settings = models.JSONField(

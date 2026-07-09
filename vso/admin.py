@@ -1,5 +1,7 @@
 from django.contrib import admin
 from django.utils.html import format_html
+
+from core.admin import PIIRedactedAdminMixin
 from .models import (
     VeteranCase,
     CaseNote,
@@ -69,7 +71,8 @@ class ChecklistItemInline(admin.TabularInline):
 
 
 @admin.register(VeteranCase)
-class VeteranCaseAdmin(admin.ModelAdmin):
+class VeteranCaseAdmin(PIIRedactedAdminMixin, admin.ModelAdmin):
+    audit_resource_type = "VeteranCase"
     list_display = (
         "title",
         "veteran_email",
@@ -81,12 +84,12 @@ class VeteranCaseAdmin(admin.ModelAdmin):
         "created_at",
     )
     list_filter = ("status", "priority", "organization", "created_at")
+    # description is encrypted PHI — not searchable, not shown in admin
     search_fields = (
         "title",
         "veteran__email",
         "veteran__first_name",
         "veteran__last_name",
-        "description",
     )
     readonly_fields = ("created_at", "updated_at", "closed_at", "closed_by")
     date_hierarchy = "created_at"
@@ -94,10 +97,13 @@ class VeteranCaseAdmin(admin.ModelAdmin):
     fieldsets = (
         (
             "Case Information",
-            {"fields": ("title", "description", "status", "priority")},
+            {
+                # description removed for PHI protection
+                "fields": ("title", "status", "priority")
+            },
         ),
         ("Relationships", {"fields": ("organization", "veteran", "assigned_to")}),
-        ("Conditions", {"fields": ("conditions",), "classes": ("collapse",)}),
+        # conditions removed for PHI protection (encrypted medical data)
         (
             "Key Dates",
             {
@@ -131,7 +137,8 @@ class VeteranCaseAdmin(admin.ModelAdmin):
         (
             "Closure",
             {
-                "fields": ("closed_at", "closed_by", "closure_notes"),
+                # closure_notes removed for PHI protection
+                "fields": ("closed_at", "closed_by"),
                 "classes": ("collapse",),
             },
         ),
