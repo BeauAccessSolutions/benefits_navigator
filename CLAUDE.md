@@ -506,3 +506,43 @@ See `TODO.md` for full prioritized list. **All P0 code fixes completed 2026-02-1
 - **Branch strategy**: Feature branches off `main`; PR for significant changes
 - **Before pushing**: Run `pytest` — all tests must pass, no security regressions
 - **Secrets**: See "Remaining Security TODOs" — never commit API keys, encryption keys, or DSNs
+
+
+---
+
+## Platform context — shared accessibility-app platform
+
+This repo is part of a portfolio of accessibility/disability-focused apps converging on a
+**shared platform**: a standalone, self-hosted **Keycloak** identity service plus a shared
+**Expo (React Native + RN Web)** design system, so the apps share sign-in and UI **without
+coupling their backends** (each keeps its own stack and repo).
+
+**Canonical guide — read before any cross-app identity / SSO / shared-UI work:**
+<https://github.com/Beaudoin0zach/Beau-Access-Solutions/blob/main/PLATFORM.md>
+(decision records under `docs/adr/` in that repo). Canonical home is the **Beau Access
+Solutions** governance repo (`Beaudoin0zach/Beau-Access-Solutions`).
+
+**This app's role: candidate platform member.** It handles sensitive veteran data plus AI, so if it
+joins it follows the same **resource-server + layered-session** pattern as CIT (validate a Keycloak
+token, exchange for its own revocable Django session; step-up for sensitive actions). The
+privacy / real-deletion / no-third-party-tracking invariants are load-bearing here. Backend stays in
+its own repo behind a review gate.
+
+**Platform invariants** (adopt where this app participates; house style regardless):
+1. **Layered sessions** — the IdP proves identity (short-lived OIDC token); each sensitive app
+   exchanges it for its *own* revocable, rate-limited session and requires step-up for sensitive
+   actions. An identity token is never itself a data-access credential.
+2. **No platform tracking on sensitive pages** — shared UI is telemetry-free; analytics is separate
+   and opt-in; each app owns its own CSP.
+3. **Decoupled deletion/export** — identity stores identity only; each app owns its data lifecycle;
+   deletion and export stay independently complete and callable.
+4. **Contribution boundary** — sensitive backends stay in their own repos behind a review gate;
+   shared UI/auth/config stay open to contributors.
+5. **i18n ownership** — shared UI carries no hardcoded strings; each app owns its string catalogs
+   and its human-review gate for translated languages.
+
+Status (2026-07-07): planning/foundation. CIT = app #1, KindredAccess = app #2, identity = Keycloak (decided).
+
+---
+<!-- Shared cross-project lessons. Edit the canonical file, not here. Add via /lesson -->
+@~/.claude/shared/LESSONS.md
