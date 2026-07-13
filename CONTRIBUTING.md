@@ -9,6 +9,7 @@ Thank you for your interest in contributing to VA Benefits Navigator! This proje
 - [Development Setup](#development-setup)
 - [How to Contribute](#how-to-contribute)
 - [Pull Request Process](#pull-request-process)
+- [Review & Security Gates](#review--security-gates)
 - [Style Guidelines](#style-guidelines)
 - [Testing](#testing)
 - [Documentation](#documentation)
@@ -127,6 +128,59 @@ Include:
 - How to test the changes
 - Screenshots for UI changes
 
+The repository ships a PR template (`.github/PULL_REQUEST_TEMPLATE.md`) that
+includes the security checklist described below — fill it in rather than
+deleting it.
+
+## Review & Security Gates
+
+This app handles veterans' PHI/PII, so review depth scales with what a change
+touches. Two layers enforce this:
+
+### Code owners (automated reviewer routing)
+
+`.github/CODEOWNERS` auto-requests a maintainer's review whenever a PR edits a
+security-sensitive surface — encryption, the AI gateway, auth/billing, Celery
+tasks handling user data, migrations, settings, or CI. This is the equivalent
+of a "review trigger": you don't have to remember to flag these files, the
+change itself does. (For owner review to *block* merge, "Require review from
+Code Owners" must be enabled in branch protection on `main`.)
+
+### When a security review is required
+
+A normal code review is enough for most PRs. A **`/security-review`** (not just
+a code review) is additionally required — and is a hard merge gate — when a PR
+touches any of:
+
+- PII/PHI fields or `core/encryption.py`
+- Authentication, sessions, subscriptions, or Stripe/billing
+- The AI gateway, prompts, or model-output handling
+- Celery tasks that process user data
+- Database migrations, or the config/secrets surface (`settings.py`, `.do/`, CI)
+
+### Severity & merge blocking
+
+Review findings are triaged by severity, and severity gates the merge:
+
+| Severity | Meaning | Gate |
+|----------|---------|------|
+| **P0** | Security/data-loss/regulatory risk, or breaks a `CLAUDE.md` non-negotiable | **Blocks merge** |
+| **P1** | Significant correctness or maintainability issue | Fix before merge, or file a tracked follow-up with owner sign-off |
+| **P2** | Minor / stylistic | Non-blocking |
+
+For broad or high-risk changes, run the multi-agent cloud review with
+`/code-review ultra` before requesting human review.
+
+### Re-trigger policy
+
+Re-run the relevant review when any of these happen, even if the code didn't
+change much:
+- A dependency bump touching crypto, auth, parsing (e.g. `lxml`), or the AI SDK
+- A change to a shared security primitive (`encryption.py`, `ai_gateway.py`,
+  `middleware.py`) — re-validate every consumer, not just the edited file
+- VA regulatory data updates (rates, deadlines) — verify against CFR
+- Any change to PII handling, logging, or what gets persisted
+
 ## Style Guidelines
 
 ### Python
@@ -173,7 +227,7 @@ docker compose exec web pytest --cov=. --cov-report=html
 - Test file naming: `test_*.py`
 - Use pytest fixtures
 - Test both success and failure cases
-- Mock external services (OpenAI, Stripe)
+- Mock external services (Anthropic, Stripe)
 
 ## Documentation
 
