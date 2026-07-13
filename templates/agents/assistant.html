@@ -1,0 +1,333 @@
+{% extends 'base.html' %}
+
+{% block title %}Assistant - {{ SITE_NAME }}{% endblock %}
+
+{% block extra_css %}
+<style>
+  /* Decorative streaming motion is GATED on reduced-motion (docs/ux §3.4, §6.3). */
+  @media (prefers-reduced-motion: no-preference) {
+    .assistant-caret { animation: bn-blink 1s step-end infinite; }
+    .thinking-dots::after { animation: bn-dots 1.2s steps(4, end) infinite; content: ''; }
+    .assistant-answer.is-streaming .assistant-caret { display: inline-block; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .assistant-caret { display: none !important; }
+    .thinking-dots::after { content: '…'; }   /* static */
+  }
+  .assistant-caret {
+    display: none; width: 2px; height: 1.1em; margin-left: 2px;
+    background: currentColor; vertical-align: text-bottom;
+  }
+  @keyframes bn-blink { 50% { opacity: 0; } }
+  @keyframes bn-dots {
+    0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; }
+  }
+  .assistant-answer { white-space: pre-wrap; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto flex flex-col" style="min-height: 60vh;">
+
+  {# ---- Live-region spine (docs/ux §6.1): one polite, one assertive ---- #}
+  <div id="assistant-status" role="status" aria-live="polite" aria-atomic="true" class="sr-only"></div>
+  <div id="assistant-error-live" role="alert" aria-live="assertive" class="sr-only"></div>
+
+  {# ---- Thread (empty state on first run) ---- #}
+  <div id="assistant-thread" class="flex-grow space-y-4 mb-6">
+    <section id="assistant-empty" aria-labelledby="assistant-empty-heading" class="text-center py-8">
+      <h1 id="assistant-empty-heading" class="text-2xl font-bold text-gray-900">{{ empty.heading }}</h1>
+      <p class="text-gray-600 mt-2">{{ empty.subheading }}</p>
+
+      <ul class="mt-6 grid gap-3 sm:grid-cols-2 text-left" role="list">
+        {% for chip in empty.chips %}
+        <li>
+          <button type="button"
+                  class="chip w-full min-h-[44px] rounded-xl border border-gray-200 bg-white px-4 py-3
+                         text-gray-800 hover:bg-gray-50 focus:outline-none focus-visible:ring-2
+                         focus-visible:ring-blue-500"
+                  data-chip-prompt="{{ chip.text }}">
+            {{ chip.text }}
+          </button>
+        </li>
+        {% endfor %}
+      </ul>
+
+      <p class="text-sm text-gray-500 mt-6">{{ empty.expectation }}</p>
+    </section>
+  </div>
+
+  {# ---- Composer (docs/ux §2) ---- #}
+  <form id="composer-form" class="sticky bottom-0 bg-gray-50 pt-2">
+    {% csrf_token %}
+    <div class="flex items-end gap-2 rounded-2xl border border-gray-300 bg-white p-2 shadow-sm
+                focus-within:ring-2 focus-within:ring-blue-500">
+      <label for="composer-input" class="sr-only">Ask the assistant a question</label>
+      <textarea id="composer-input" name="prompt" rows="1"
+                class="flex-grow resize-none border-0 focus:ring-0 text-base leading-6 max-h-40"
+                style="font-size:16px;" placeholder="Ask about your VA benefits…"
+                inputmode="text" autocomplete="off"></textarea>
+
+      {# Send: disabled until non-whitespace content (not color-only; aria-disabled + disabled attr) #}
+      <button id="send-btn" type="submit" disabled aria-disabled="true"
+              class="shrink-0 min-h-[44px] min-w-[44px] rounded-xl bg-blue-600 px-4 text-white font-medium
+                     disabled:opacity-40 disabled:cursor-not-allowed
+                     hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2
+                     focus-visible:ring-blue-500">
+        Send
+      </button>
+
+      {# Stop generating: visible text, keyboard-focusable, only shown while streaming #}
+      <button id="stop-btn" type="button" hidden
+              class="shrink-0 min-h-[44px] rounded-xl border border-gray-300 px-4 font-medium text-gray-800
+                     hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
+        Stop generating
+      </button>
+    </div>
+    <p class="text-xs text-gray-500 text-center mt-2">{{ disclaimer }}</p>
+  </form>
+</div>
+
+{# Copy deck for JS (status + error strings). No PHI here. #}
+{{ status|json_script:"assistant-status-copy" }}
+{{ errors|json_script:"assistant-errors-copy" }}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  "use strict";
+
+  const STATUS = JSON.parse(document.getElementById("assistant-status-copy").textContent);
+  const ERRORS = JSON.parse(document.getElementById("assistant-errors-copy").textContent);
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  const form = document.getElementById("composer-form");
+  const input = document.getElementById("composer-input");
+  const sendBtn = document.getElementById("send-btn");
+  const stopBtn = document.getElementById("stop-btn");
+  const thread = document.getElementById("assistant-thread");
+  const emptyState = document.getElementById("assistant-empty");
+  const statusLive = document.getElementById("assistant-status");
+  const errorLive = document.getElementById("assistant-error-live");
+  const csrf = form.querySelector("[name=csrfmiddlewaretoken]").value;
+  const streamUrl = "{% url 'agents:assistant_stream' %}";
+
+  let controller = null;      // AbortController for the in-flight stream
+  let lastPrompt = "";        // preserved for retry / failure restore
+  let answerEl = null;        // current assistant answer container
+  let buffer = "";            // accumulated partial (survives 'stopped')
+
+  function announce(region, msg) { region.textContent = ""; region.textContent = msg; }
+
+  function setComposerBusy(busy) {
+    sendBtn.hidden = busy;
+    stopBtn.hidden = !busy;
+    input.disabled = busy;
+    if (busy) { stopBtn.focus(); }
+  }
+
+  function updateSendEnabled() {
+    const has = input.value.trim().length > 0;
+    sendBtn.disabled = !has;
+    sendBtn.setAttribute("aria-disabled", String(!has));
+  }
+
+  function autogrow() {
+    input.style.height = "auto";
+    input.style.height = Math.min(input.scrollHeight, 160) + "px";
+  }
+
+  function addUserBubble(text) {
+    if (emptyState) { emptyState.remove(); }
+    const el = document.createElement("div");
+    el.className = "ml-auto max-w-[85%] rounded-2xl bg-blue-600 text-white px-4 py-2";
+    el.textContent = text;
+    thread.appendChild(el);
+  }
+
+  function addAssistantContainer() {
+    const wrap = document.createElement("div");
+    wrap.className = "mr-auto max-w-[90%] rounded-2xl bg-white border border-gray-200 px-4 py-3";
+    wrap.innerHTML =
+      '<div class="assistant-answer text-gray-900" tabindex="-1" aria-label="Assistant response" aria-busy="true">' +
+      '<span class="thinking-dots text-gray-500">Thinking</span>' +
+      '<span class="assistant-caret" aria-hidden="true"></span></div>';
+    thread.appendChild(wrap);
+    answerEl = wrap.querySelector(".assistant-answer");
+    return answerEl;
+  }
+
+  function firstToken() {
+    // Clear the "Thinking" placeholder on first delta, keep the caret.
+    const dots = answerEl.querySelector(".thinking-dots");
+    if (dots) { dots.remove(); }
+    answerEl.classList.add("is-streaming");
+  }
+
+  function appendDelta(t) {
+    const caret = answerEl.querySelector(".assistant-caret");
+    const node = document.createTextNode(t);
+    answerEl.insertBefore(node, caret);
+    answerEl.scrollIntoView({ block: "nearest" });
+  }
+
+  function finishStreaming(kind) {
+    // kind: 'done' | 'stopped'
+    answerEl.classList.remove("is-streaming");
+    answerEl.setAttribute("aria-busy", "false");
+    const caret = answerEl.querySelector(".assistant-caret");
+    if (caret) { caret.remove(); }
+    setComposerBusy(false);
+
+    if (kind === "stopped") {
+      const label = document.createElement("div");
+      label.className = "mt-2 text-sm text-gray-500";
+      label.textContent = "Stopped.";
+      answerEl.after(label);
+      announce(statusLive, STATUS.stopped);
+    } else {
+      announce(statusLive, STATUS.complete);
+    }
+    answerEl.focus();  // land the reader at the start of the completed answer
+    input.value = "";
+    autogrow();
+    updateSendEnabled();
+  }
+
+  function showError(code) {
+    const info = ERRORS[code] || ERRORS.generic;
+    setComposerBusy(false);
+    if (answerEl) {
+      const caret = answerEl.querySelector(".assistant-caret");
+      if (caret) { caret.remove(); }
+      // Replace any half-rendered ghost text with the calm error card.
+      const wrap = answerEl.closest("div");
+      wrap.className = "mr-auto max-w-[90%] rounded-2xl bg-amber-50 border border-amber-300 px-4 py-3";
+      wrap.innerHTML = "";
+      const msg = document.createElement("p");
+      msg.className = "text-amber-900";
+      msg.textContent = info.message;
+      const action = document.createElement("button");
+      action.type = "button";
+      action.className =
+        "mt-3 min-h-[44px] rounded-xl bg-amber-600 px-4 text-white font-medium " +
+        "focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-amber-500";
+      action.textContent = info.action;
+      action.addEventListener("click", () => submit(lastPrompt, { retry: true }));
+      wrap.append(msg, action);
+      wrap.setAttribute("tabindex", "-1");
+      answerEl = null;
+      action.focus();  // focus the recovery control, never the removed Stop button
+    }
+    // The prompt is sacred: restore it so the veteran never retypes (docs/ux §4.2).
+    input.value = lastPrompt;
+    autogrow();
+    updateSendEnabled();
+    announce(errorLive, info.message);
+  }
+
+  async function submit(text, opts) {
+    opts = opts || {};
+    lastPrompt = text;
+    if (!opts.retry) { addUserBubble(text); }
+    buffer = "";
+    addAssistantContainer();
+    announce(statusLive, STATUS.thinking);
+    input.value = "";
+    autogrow();
+    updateSendEnabled();
+    setComposerBusy(true);
+
+    controller = new AbortController();
+    try {
+      const body = new URLSearchParams();
+      body.set("prompt", text);
+      const resp = await fetch(streamUrl, {
+        method: "POST",
+        headers: { "X-CSRFToken": csrf, "Content-Type": "application/x-www-form-urlencoded" },
+        body: body.toString(),
+        signal: controller.signal,
+      });
+      if (!resp.ok || !resp.body) { showError("generic"); return; }
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let sse = "";
+      let started = false;
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) { break; }
+        sse += decoder.decode(value, { stream: true });
+        const frames = sse.split("\n\n");
+        sse = frames.pop();  // keep incomplete trailing frame
+        for (const frame of frames) {
+          const evLine = frame.match(/^event: (.+)$/m);
+          const dataLine = frame.match(/^data: (.+)$/m);
+          if (!evLine) { continue; }
+          const ev = evLine[1];
+          const data = dataLine ? JSON.parse(dataLine[1]) : {};
+          if (ev === "open") {
+            // ready to stream
+          } else if (ev === "delta") {
+            if (!started) { firstToken(); started = true; }
+            buffer += data.t;
+            appendDelta(data.t);
+          } else if (ev === "done") {
+            finishStreaming("done");
+            return;
+          } else if (ev === "error") {
+            showError(data.code);
+            return;
+          }
+        }
+      }
+      // Stream closed without an explicit done → treat as interrupted.
+      if (answerEl) { showError("stream_interrupted"); }
+    } catch (err) {
+      if (err && err.name === "AbortError") { return; }  // handled by stop()
+      showError("stream_interrupted");
+    }
+  }
+
+  function stop() {
+    if (controller) { controller.abort(); }
+    if (answerEl) { finishStreaming("stopped"); }  // keep the partial
+  }
+
+  // ---- wiring ----
+  input.addEventListener("input", () => { updateSendEnabled(); autogrow(); });
+
+  // Desktop: Enter sends, Shift+Enter newline. Mobile keeps Return as newline
+  // (coarse pointer / no hover ⇒ send button is the only send affordance).
+  const isTouch = window.matchMedia("(pointer: coarse)").matches;
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey && !isTouch) {
+      e.preventDefault();
+      if (input.value.trim()) { form.requestSubmit(); }
+    }
+    if (e.key === "Escape" && !stopBtn.hidden) { stop(); }
+  });
+
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const text = input.value.trim();
+    if (!text) { return; }
+    submit(text, {});
+  });
+
+  stopBtn.addEventListener("click", stop);
+
+  document.querySelectorAll(".chip").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      input.value = btn.dataset.chipPrompt;
+      updateSendEnabled();
+      autogrow();
+      form.requestSubmit();  // chip = fill + send, visible in the user bubble
+    });
+  });
+
+  updateSendEnabled();
+})();
+</script>
+{% endblock %}

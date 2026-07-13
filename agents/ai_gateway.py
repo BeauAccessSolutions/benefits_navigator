@@ -56,6 +56,20 @@ class ErrorCode(Enum):
     UNKNOWN = "unknown"
 
 
+class GatewayStreamError(Exception):
+    """Raised by ``AIGateway.stream()`` with a stable, client-safe ``public_code``.
+
+    The code (e.g. ``"timeout"``, ``"rate_limited"``, ``"stream_interrupted"``,
+    ``"generic"``) maps to calm error copy in ``agents.assistant_copy.ERRORS``.
+    The original provider exception is chained (``__cause__``) for Sentry but is
+    never sent to the client. See docs/ux/assistant-interactions.md §4.2.
+    """
+
+    def __init__(self, public_code: str):
+        self.public_code = public_code
+        super().__init__(public_code)
+
+
 @dataclass
 class GatewayError:
     """Structured error from AI gateway operations."""
@@ -361,6 +375,54 @@ class AIGateway:
         if self.config.adaptive_thinking:
             kwargs["thinking"] = {"type": "adaptive"}
         return kwargs
+
+    def stream(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        *,
+        model: Optional[str] = None,
+        max_tokens: Optional[int] = None,
+        sanitize: bool = True,
+    ):
+        """Yield text deltas for a streamed chat turn.
+
+        Unlike ``complete()``/``complete_structured()``, this is a generator that
+        yields plain text chunks as they arrive, for token-by-token UI streaming.
+        It is intentionally NOT wrapped in ``Result`` — the SSE view owns the
+        transport-level error envelope. Failures raise ``GatewayStreamError`` with
+        a stable ``public_code`` (mapped, never the raw provider message).
+
+        PHI: this method never logs ``user_prompt`` or the yielded deltas.
+        See docs/security-invariants.md §3 and docs/ux/assistant-interactions.md §5.
+        """
+        if sanitize:
+            user_prompt = sanitize_input(user_prompt)
+        model = model or self.config.model
+        max_tokens = max_tokens or self.config.max_tokens
+        try:
+            with self.client.messages.stream(
+                model=model,
+                max_tokens=max_tokens,
+                system=[
+                    {
+                        "type": "text",
+                        "text": system_prompt,
+                        "cache_control": {"type": "ephemeral"},
+                    }
+                ],
+                messages=[{"role": "user", "content": user_prompt}],
+            ) as stream:
+                for text in stream.text_stream:
+                    yield text
+        except APITimeoutError as e:
+            raise GatewayStreamError("timeout") from e
+        except RateLimitError as e:
+            raise GatewayStreamError("rate_limited") from e
+        except (APIConnectionError, APIStatusError, APIError) as e:
+            raise GatewayStreamError("stream_interrupted") from e
+        except Exception as e:  # noqa: BLE001 — last-resort, mapped to a safe code
+            raise GatewayStreamError("generic") from e
 
     def complete(
         self,
@@ -743,3 +805,8 @@ def complete_structured(
     return get_gateway().complete_structured(
         system_prompt, user_prompt, response_schema, **kwargs
     )
+
+
+def stream(system_prompt: str, user_prompt: str, **kwargs):
+    """Convenience generator for a streamed chat turn (yields text deltas)."""
+    return get_gateway().stream(system_prompt, user_prompt, **kwargs)

@@ -836,3 +836,105 @@ def condition_discovery(request):
         context["selected_factors"] = selected_factors
 
     return render(request, "agents/condition_discovery.html", context)
+
+
+# =============================================================================
+# STREAMING ASSISTANT (docs/ux/assistant-interactions.md)
+# =============================================================================
+
+import json  # noqa: E402
+import time  # noqa: E402
+
+from django.conf import settings  # noqa: E402
+from django.http import StreamingHttpResponse  # noqa: E402
+
+from . import assistant_copy as copy  # noqa: E402
+from .ai_gateway import GatewayStreamError, get_gateway  # noqa: E402
+
+
+def _sse(event: str, data: dict) -> str:
+    """Format one Server-Sent Event frame."""
+    return f"event: {event}\ndata: {json.dumps(data)}\n\n"
+
+
+def _demo_deltas(text: str):
+    """Stream a canned response word-by-word (local play, no API key/tokens)."""
+    for token in text.split(" "):
+        yield token + " "
+        time.sleep(0.02)
+
+
+def _has_live_key() -> bool:
+    key = getattr(settings, "ANTHROPIC_API_KEY", "") or ""
+    return bool(key) and key != "your-anthropic-api-key-here"
+
+
+@login_required
+def assistant(request):
+    """Render the streaming assistant page (first-run empty state + composer)."""
+    return render(
+        request,
+        "agents/assistant.html",
+        {
+            "empty": copy.EMPTY,
+            "status": copy.STATUS,
+            "errors": copy.ERRORS,
+            "disclaimer": copy.DISCLAIMER,
+        },
+    )
+
+
+@login_required
+@require_POST
+def assistant_stream(request):
+    """SSE endpoint that streams one assistant turn.
+
+    Emits: ``open`` → ``delta``* → ``done``  (or ``error`` with a public_code).
+    PHI: the prompt and deltas are never logged; only turn metadata is.
+    See docs/ux/assistant-interactions.md §3, §5.
+    """
+    prompt = (request.POST.get("prompt") or "").strip()
+    if not prompt:
+        # Should be prevented client-side (Send disabled until non-empty), but
+        # never trust the client. No content is logged.
+        return StreamingHttpResponse(
+            iter([_sse("error", {"code": "generic"})]),
+            content_type="text/event-stream",
+        )
+
+    # ADR-002 dual-check, Layer 1: consent must be present before we open a stream.
+    # Reuses the app's canonical consent helper (checks profile.ai_processing_consent).
+    consented = check_ai_consent(request.user)
+
+    def event_stream():
+        # Structured, PHI-free log — turn metadata only (no prompt text).
+        logger.info(
+            "assistant_stream start user=%s len=%s demo=%s",
+            request.user.id,
+            len(prompt),
+            not _has_live_key(),
+        )
+        if not consented:
+            yield _sse("error", {"code": "consent_required"})
+            return
+        try:
+            yield _sse("open", {})
+            if _has_live_key():
+                deltas = get_gateway().stream(copy.SYSTEM_PROMPT, prompt)
+            else:
+                deltas = _demo_deltas(copy.DEMO_RESPONSE)
+            for delta in deltas:
+                yield _sse("delta", {"t": delta})
+            yield _sse("done", {})
+        except GatewayStreamError as e:
+            # Only the mapped public_code crosses the wire — never the raw cause.
+            logger.warning("assistant_stream error user=%s code=%s", request.user.id, e.public_code)
+            yield _sse("error", {"code": e.public_code})
+        except Exception:  # noqa: BLE001
+            logger.exception("assistant_stream unexpected user=%s", request.user.id)
+            yield _sse("error", {"code": "generic"})
+
+    resp = StreamingHttpResponse(event_stream(), content_type="text/event-stream")
+    resp["Cache-Control"] = "no-cache"
+    resp["X-Accel-Buffering"] = "no"  # disable proxy buffering so tokens flush live
+    return resp
