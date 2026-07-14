@@ -118,8 +118,17 @@ class BaseAgent:
 
         try:
             return json.loads(response)
-        except json.JSONDecodeError:
-            logger.error(f"Failed to parse JSON: {response[:500]}")
+        except json.JSONDecodeError as e:
+            # Never log response content: AI output can contain document
+            # excerpts, medical conditions, claim details, or identifiers.
+            # Log only non-sensitive shape/diagnostics.
+            logger.error(
+                "Failed to parse JSON from model response "
+                "(length=%d, error=%s at pos=%d)",
+                len(response),
+                e.msg,
+                e.pos,
+            )
             return {}
 
     def estimate_cost(self, tokens: int) -> Decimal:
