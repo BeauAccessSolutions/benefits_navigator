@@ -631,11 +631,17 @@ def _parse_date(date_str):
         return None
 
 
-@shared_task
+@shared_task(acks_late=True)
 def cleanup_old_documents():
     """
     Periodic task to clean up old soft-deleted documents
     Can be scheduled via Celery Beat
+
+    Uses acks_late so a worker crash mid-purge redelivers the task rather
+    than acking it early and leaving user data retained until the next run
+    (project rule: user-data tasks must use late acknowledgement). The body
+    is idempotent under redelivery: it re-queries soft-deleted docs past the
+    threshold and tolerates already-missing files.
     """
     from datetime import timedelta
 
