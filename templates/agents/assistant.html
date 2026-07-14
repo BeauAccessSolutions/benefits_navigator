@@ -226,8 +226,8 @@
       const action = document.createElement("button");
       action.type = "button";
       action.className =
-        "mt-3 min-h-[44px] rounded-xl bg-amber-600 px-4 text-white font-medium " +
-        "focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-amber-500";
+        "mt-3 min-h-[44px] rounded-xl bg-amber-700 px-4 text-white font-medium " +
+        "hover:bg-amber-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-amber-600";
       action.textContent = info.action;
       action.addEventListener("click", () => submit(lastPrompt, { retry: true }));
       wrap.append(msg, action);
