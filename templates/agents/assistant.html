@@ -73,6 +73,27 @@
   {# ---- Composer (docs/ux §2) ---- #}
   <form id="composer-form" class="sticky bottom-0 bg-gray-50 pt-2">
     {% csrf_token %}
+
+    {# Connectivity banner (docs/ux §2, §6.1): persistent, non-modal, calm — an
+       honest status, not an error. Its text is set from STATUS.offline in JS and
+       the edge announcement is routed through #assistant-status above, so this
+       banner carries no aria-live of its own (that would double-announce). #}
+    <div id="assistant-offline-banner" hidden
+         class="mb-2 flex items-center gap-2 rounded-xl border border-gray-300 bg-gray-100 px-4 py-2
+                text-sm text-gray-800">
+      <svg aria-hidden="true" class="shrink-0 h-4 w-4" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M1 1l22 22"/>
+        <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/>
+        <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/>
+        <path d="M10.71 5.05A16 16 0 0 1 22.58 9"/>
+        <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/>
+        <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+        <line x1="12" y1="20" x2="12.01" y2="20"/>
+      </svg>
+      <span id="assistant-offline-text"></span>
+    </div>
+
     <div class="flex items-end gap-2 rounded-2xl border border-gray-300 bg-white p-2 shadow-sm
                 focus-within:ring-2 focus-within:ring-blue-500">
       <label for="composer-input" class="sr-only">Ask the assistant a question</label>
@@ -123,6 +144,8 @@
   const emptyState = document.getElementById("assistant-empty");
   const statusLive = document.getElementById("assistant-status");
   const errorLive = document.getElementById("assistant-error-live");
+  const offlineBanner = document.getElementById("assistant-offline-banner");
+  const offlineText = document.getElementById("assistant-offline-text");
   const csrf = form.querySelector("[name=csrfmiddlewaretoken]").value;
   const streamUrl = "{% url 'agents:assistant_stream' %}";
   const stopUrl = "{% url 'agents:assistant_stop' %}";
@@ -132,6 +155,7 @@
   let answerEl = null;        // current assistant answer container
   let buffer = "";            // accumulated partial (survives 'stopped')
   let currentTurnId = null;   // id from the 'open' event; used to stop server-side
+  let offline = false;        // connectivity edge state; gates Send + debounces announce
 
   function announce(region, msg) { region.textContent = ""; region.textContent = msg; }
 
@@ -143,9 +167,12 @@
   }
 
   function updateSendEnabled() {
-    const has = input.value.trim().length > 0;
-    sendBtn.disabled = !has;
-    sendBtn.setAttribute("aria-disabled", String(!has));
+    // Send needs non-whitespace content AND a live connection. While offline the
+    // composed prompt is held (never cleared) but Send stays disabled — the
+    // veteran taps it once we're back online (docs/ux §2).
+    const enabled = input.value.trim().length > 0 && !offline;
+    sendBtn.disabled = !enabled;
+    sendBtn.setAttribute("aria-disabled", String(!enabled));
   }
 
   function autogrow() {
@@ -361,6 +388,32 @@
       form.requestSubmit();  // chip = fill + send, visible in the user bubble
     });
   });
+
+  // ---- connectivity (docs/ux §2, §6.1) ----
+  // Offline: a persistent, non-modal banner + Send disabled + a single polite
+  // announcement; the composed prompt is held, never cleared. Online (the edge):
+  // banner cleared, Send re-enabled, "back online" announced — but we DO NOT
+  // auto-fire the held turn (spec §2: re-enable and let the veteran tap Send;
+  // a silent auto-send after they've looked away is a consent-of-attention
+  // surprise, and a streamed answer nobody is watching is wasted PHI processing).
+  offlineText.textContent = STATUS.offline;
+
+  function setConnectivity(nowOffline, announceEdge) {
+    if (nowOffline === offline) { return; }  // debounce: act only on a real edge
+    offline = nowOffline;
+    offlineBanner.hidden = !offline;
+    updateSendEnabled();                     // gate/ungate Send; prompt untouched
+    if (announceEdge) {
+      announce(statusLive, offline ? STATUS.offline : STATUS.online);
+    }
+  }
+
+  window.addEventListener("offline", () => setConnectivity(true, true));
+  window.addEventListener("online", () => setConnectivity(false, true));
+
+  // Reflect connectivity already lost before load — show the banner and gate
+  // Send, but don't announce (page load is not a transition edge).
+  if (!navigator.onLine) { setConnectivity(true, false); }
 
   updateSendEnabled();
 })();
