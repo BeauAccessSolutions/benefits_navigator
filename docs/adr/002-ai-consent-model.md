@@ -22,14 +22,23 @@ AI consent is checked at **two independent layers**:
 ### Layer 1: View / Form (entry point)
 
 Before a document upload or AI analysis request is accepted, the view checks
-`user.profile.ai_consent`. If not granted, the user is redirected to the consent
-flow before the task is enqueued.
+consent via `check_ai_consent(user)` (defined in `agents/views.py`), which reads
+`user.profile.ai_processing_consent`. If not granted, the user is redirected to
+the consent flow before the task is enqueued.
 
 ```python
 # Example in views.py
-if not request.user.profile.ai_consent:
+from agents.views import check_ai_consent
+
+if not check_ai_consent(request.user):
     return redirect('consent_required')
 ```
+
+> **Enforcement note:** Always gate on the shared helpers — `check_ai_consent()`
+> at the view layer, `require_ai_consent()` at the task layer — never a re-derived
+> attribute lookup (e.g. `getattr(profile, "ai_consent", False)`). The model field
+> is `ai_processing_consent`; a hand-rolled check against the wrong name silently
+> fails open for every user.
 
 ### Layer 2: Celery task (execution point)
 
@@ -112,6 +121,7 @@ and would clutter the task queue with tasks that immediately fail. Rejected.
 ## Related
 
 - `claims/tasks.py` — `require_ai_consent()`, `verify_ai_consent()`
-- `accounts/models.py` — `UserProfile.ai_consent` field
+- `agents/views.py` — `check_ai_consent()` (Layer-1 helper)
+- `accounts/models.py` — `UserProfile.ai_processing_consent` field
 - `docs/PHI_DATA_FLOW.md` — full PHI boundary map
 - `docs/security-invariants.md` — other security enforcement patterns

@@ -837,3 +837,85 @@ class M21ScrapeJob(TimeStampedModel):
         if self.total_sections == 0:
             return 0
         return int((self.sections_completed / self.total_sections) * 100)
+
+
+# =============================================================================
+# STREAMING ASSISTANT — persisted conversation (docs/ux/assistant-interactions.md)
+# =============================================================================
+
+
+class AssistantThread(TimeStampedModel):
+    """A persisted conversation with the streaming assistant, scoped to one user.
+
+    PHI posture (docs/PHI_DATA_FLOW.md, docs/security-invariants.md): the whole
+    transcript is treated as PHI. It inherits user-scoped access controls (the
+    ``user`` FK; all queries filter by ``user=request.user``) and is deleted with
+    the account (``on_delete=CASCADE``). Turn *content* is never logged. Note the
+    assistant answer is model output (allowed to persist) — this is NOT raw OCR
+    source text, which remains ephemeral and unpersisted.
+    """
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="assistant_threads",
+    )
+
+    class Meta:
+        verbose_name = "Assistant Thread"
+        verbose_name_plural = "Assistant Threads"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["user", "created_at"]),
+        ]
+
+    def __str__(self):
+        return f"Assistant Thread {self.pk} - {self.user.email}"
+
+
+class AssistantTurn(TimeStampedModel):
+    """One turn in an :class:`AssistantThread` — a user prompt or an assistant answer.
+
+    ``content`` holds either the veteran's typed prompt (``role="user"``) or the
+    model's answer (``role="assistant"``). It is treated as PHI: user-scoped,
+    account-deletable, never logged. ``stopped`` marks an assistant answer that was
+    cut short by the veteran (the partial is kept on purpose — docs/ux §3.3).
+    """
+
+    ROLE_CHOICES = [
+        ("user", "User"),
+        ("assistant", "Assistant"),
+    ]
+
+    thread = models.ForeignKey(
+        AssistantThread,
+        on_delete=models.CASCADE,
+        related_name="turns",
+    )
+    # Denormalized owner FK so ownership can be enforced (and the row deleted with
+    # the account) without a join through the thread.
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="assistant_turns",
+    )
+    role = models.CharField(max_length=16, choices=ROLE_CHOICES)
+    # PHI — see class docstring. Plain TextField, consistent with the app's other
+    # veteran-authored/model-output text (e.g. PersonalStatement); protected by
+    # user-scoping + at-rest storage encryption + account-deletion, not field-level
+    # encryption.
+    content = models.TextField(blank=True)
+    # True when an assistant answer was interrupted by Stop (partial kept).
+    stopped = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = "Assistant Turn"
+        verbose_name_plural = "Assistant Turns"
+        ordering = ["created_at", "id"]
+        indexes = [
+            models.Index(fields=["thread", "created_at"]),
+            models.Index(fields=["user", "created_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.get_role_display()} turn {self.pk} (thread {self.thread_id})"

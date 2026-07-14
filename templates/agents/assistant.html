@@ -33,8 +33,20 @@
   <div id="assistant-status" role="status" aria-live="polite" aria-atomic="true" class="sr-only"></div>
   <div id="assistant-error-live" role="alert" aria-live="assertive" class="sr-only"></div>
 
-  {# ---- Thread (empty state on first run) ---- #}
+  {# ---- Thread: persisted turns survive reload; empty state only at zero turns ---- #}
   <div id="assistant-thread" class="flex-grow space-y-4 mb-6">
+    {% if turns %}
+      {% for turn in turns %}
+        {% if turn.role == "user" %}
+        <div class="ml-auto max-w-[85%] rounded-2xl bg-blue-600 text-white px-4 py-2">{{ turn.content }}</div>
+        {% else %}
+        <div class="mr-auto max-w-[90%] rounded-2xl bg-white border border-gray-200 px-4 py-3">
+          <div class="assistant-answer text-gray-900" tabindex="-1" aria-label="Assistant response">{{ turn.content }}</div>
+          {% if turn.stopped %}<div class="mt-2 text-sm text-gray-500">Stopped.</div>{% endif %}
+        </div>
+        {% endif %}
+      {% endfor %}
+    {% else %}
     <section id="assistant-empty" aria-labelledby="assistant-empty-heading" class="text-center py-8">
       <h1 id="assistant-empty-heading" class="text-2xl font-bold text-gray-900">{{ empty.heading }}</h1>
       <p class="text-gray-600 mt-2">{{ empty.subheading }}</p>
@@ -55,6 +67,7 @@
 
       <p class="text-sm text-gray-500 mt-6">{{ empty.expectation }}</p>
     </section>
+    {% endif %}
   </div>
 
   {# ---- Composer (docs/ux §2) ---- #}
@@ -112,11 +125,13 @@
   const errorLive = document.getElementById("assistant-error-live");
   const csrf = form.querySelector("[name=csrfmiddlewaretoken]").value;
   const streamUrl = "{% url 'agents:assistant_stream' %}";
+  const stopUrl = "{% url 'agents:assistant_stop' %}";
 
   let controller = null;      // AbortController for the in-flight stream
   let lastPrompt = "";        // preserved for retry / failure restore
   let answerEl = null;        // current assistant answer container
   let buffer = "";            // accumulated partial (survives 'stopped')
+  let currentTurnId = null;   // id from the 'open' event; used to stop server-side
 
   function announce(region, msg) { region.textContent = ""; region.textContent = msg; }
 
@@ -230,6 +245,7 @@
   async function submit(text, opts) {
     opts = opts || {};
     lastPrompt = text;
+    currentTurnId = null;
     if (!opts.retry) { addUserBubble(text); }
     buffer = "";
     addAssistantContainer();
@@ -268,13 +284,19 @@
           const ev = evLine[1];
           const data = dataLine ? JSON.parse(dataLine[1]) : {};
           if (ev === "open") {
-            // ready to stream
+            currentTurnId = data.turn_id;  // enables server-side stop
           } else if (ev === "delta") {
             if (!started) { firstToken(); started = true; }
             buffer += data.t;
             appendDelta(data.t);
           } else if (ev === "done") {
             finishStreaming("done");
+            return;
+          } else if (ev === "stopped") {
+            // Server acknowledged a stop (partial persisted). Usually the client
+            // has already aborted and transitioned; this covers the race where
+            // the server frame arrives first.
+            if (answerEl) { finishStreaming("stopped"); }
             return;
           } else if (ev === "error") {
             showError(data.code);
@@ -291,6 +313,19 @@
   }
 
   function stop() {
+    // Tell the server to close the Anthropic stream (stops token spend) and
+    // persist the partial. Fire-and-forget: the UI transitions immediately and
+    // must not wait on the network. keepalive lets it complete after we abort.
+    if (currentTurnId != null) {
+      const body = new URLSearchParams();
+      body.set("turn_id", currentTurnId);
+      fetch(stopUrl, {
+        method: "POST",
+        headers: { "X-CSRFToken": csrf, "Content-Type": "application/x-www-form-urlencoded" },
+        body: body.toString(),
+        keepalive: true,
+      }).catch(() => {});  // best-effort; client-side stop still happens below
+    }
     if (controller) { controller.abort(); }
     if (answerEl) { finishStreaming("stopped"); }  // keep the partial
   }

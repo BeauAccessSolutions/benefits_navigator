@@ -125,6 +125,7 @@ class SecurityChecker:
         self.check_sentry_pii_config()
         self.check_logging_pitfalls()
         self.check_phi_in_logging()
+        self.check_streaming_prompt_logging()
 
         print()
         errors = [v for v in self.violations if v.severity == "error"]
@@ -152,7 +153,7 @@ class SecurityChecker:
 
     def check_prohibited_phi_fields(self):
         """Ensure prohibited PHI fields don't exist in model definitions."""
-        print("[1/4] Checking for prohibited PHI fields in models...")
+        print("[1/5] Checking for prohibited PHI fields in models...")
 
         # Patterns that indicate Django field definitions
         prohibited_patterns = [
@@ -201,7 +202,7 @@ class SecurityChecker:
 
     def check_sentry_pii_config(self):
         """Ensure Sentry is not configured to send default PII."""
-        print("[2/4] Checking Sentry PII configuration...")
+        print("[2/5] Checking Sentry PII configuration...")
 
         # Check all settings files
         settings_patterns = [
@@ -248,7 +249,7 @@ class SecurityChecker:
 
     def check_logging_pitfalls(self):
         """Check for common logging patterns that might leak sensitive data."""
-        print("[3/4] Checking for logging pitfalls...")
+        print("[3/5] Checking for logging pitfalls...")
 
         # Patterns that might log request bodies or sensitive data
         # Match: logger.info/debug/warning/error/critical(...request.body/POST/data...)
@@ -304,7 +305,7 @@ class SecurityChecker:
 
     def check_phi_in_logging(self):
         """Check for logging statements that might include PHI fields."""
-        print("[4/4] Checking for PHI in logging statements...")
+        print("[4/5] Checking for PHI in logging statements...")
 
         # Higher-signal patterns: attribute access or dict key access of PHI fields
         # These patterns look for actual data access, not just the string mention
@@ -355,6 +356,98 @@ class SecurityChecker:
                         "Logging statement may include PHI field access. "
                         "Remove sensitive data from log output.",
                     )
+
+    # =========================================================================
+    # Check 5: Streaming assistant — no prompt/delta content in logs
+    # =========================================================================
+
+    def check_streaming_prompt_logging(self):
+        """Flag logging of the streaming assistant's prompt/delta CONTENT.
+
+        The streaming assistant treats the whole transcript as PHI
+        (docs/ux/assistant-interactions.md §5, docs/security-invariants.md §3):
+        the SSE view and gateway ``stream()`` may log turn metadata (turn/user id,
+        length, public_code) but never the prompt text or a token delta.
+
+        Metadata derived from those variables is explicitly allowed, so a bare
+        reference to a sensitive variable inside a logging call is a violation
+        while wrapping it in ``len(...)`` is not. Only the two streaming files
+        are scanned, since that is where these variable names carry PHI.
+        """
+        print("[5/5] Checking for prompt/delta logging in streaming assistant...")
+
+        # Files where these variable names hold PHI (prompt text / token deltas).
+        target_files = [
+            self.root_dir / "agents" / "views.py",
+            self.root_dir / "agents" / "ai_gateway.py",
+        ]
+
+        # Variables that carry prompt text or streamed answer deltas.
+        sensitive_vars = ["prompt", "user_prompt", "delta", "deltas", "answer"]
+
+        logging_call = re.compile(
+            r"(?:logger|logging)\s*\.\s*"
+            r"(?:debug|info|warning|error|critical|exception)\s*\(",
+            re.IGNORECASE,
+        )
+        # Metadata-only accessors that are SAFE even though they name the variable
+        # (e.g. len(prompt), len(user_prompt) — a length, not the content).
+        safe_wrapped = re.compile(
+            r"len\s*\(\s*(?:" + "|".join(sensitive_vars) + r")\s*\)"
+        )
+        bare_var = re.compile(r"\b(?:" + "|".join(sensitive_vars) + r")\b")
+
+        for target in target_files:
+            if not target.exists():
+                continue
+
+            self.log(f"Scanning {target.relative_to(self.root_dir)}")
+
+            with open(target, "r") as f:
+                lines = f.readlines()
+
+            in_call = False
+            call_start_line = 0
+            depth = 0
+            buffer = ""
+
+            for line_num, line in enumerate(lines, 1):
+                stripped = line.strip()
+                if not in_call:
+                    if stripped.startswith("#"):
+                        continue
+                    match = logging_call.search(line)
+                    if not match:
+                        continue
+                    in_call = True
+                    call_start_line = line_num
+                    buffer = ""
+                    fragment = line[match.end() - 1 :]  # from the opening "("
+                else:
+                    fragment = line
+
+                # Accumulate until the logging call's parentheses balance, so
+                # multi-line logger.*(...) statements are inspected as a whole.
+                buffer += fragment
+                depth += fragment.count("(") - fragment.count(")")
+                if depth > 0:
+                    continue
+
+                # Full logging statement captured in `buffer`; evaluate it.
+                without_len = safe_wrapped.sub("", buffer)
+                if bare_var.search(without_len):
+                    self.add_violation(
+                        "STREAMING_PHI_LOGGING",
+                        str(target.relative_to(self.root_dir)),
+                        call_start_line,
+                        "Logging statement references streaming prompt/delta "
+                        "content (PHI). Log only metadata (turn/user id, length, "
+                        "public_code) — never the prompt text or a token delta.",
+                    )
+
+                in_call = False
+                depth = 0
+                buffer = ""
 
 
 def main():

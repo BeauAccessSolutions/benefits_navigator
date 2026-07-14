@@ -846,10 +846,24 @@ import json  # noqa: E402
 import time  # noqa: E402
 
 from django.conf import settings  # noqa: E402
-from django.http import StreamingHttpResponse  # noqa: E402
+from django.core.cache import cache  # noqa: E402
+from django.http import HttpResponse, StreamingHttpResponse  # noqa: E402
 
 from . import assistant_copy as copy  # noqa: E402
 from .ai_gateway import GatewayStreamError, get_gateway  # noqa: E402
+from .models import AssistantThread, AssistantTurn  # noqa: E402
+
+# Server-side stop: the /stop endpoint sets this cache flag; the running stream
+# checks it each delta and closes the Anthropic stream (stops token spend). The
+# key is the *user turn id*, so ownership is verified via the DB row before the
+# flag is ever set. In prod the shared Redis cache carries this across worker
+# processes; dev's threaded runserver shares LocMemCache within one process.
+_STOP_KEY = "assistant_stop:{turn_id}"
+_STOP_TTL_SECONDS = 300  # a stream can't outlive this; avoids leaking stale flags
+
+
+def _stop_key(turn_id: int) -> str:
+    return _STOP_KEY.format(turn_id=turn_id)
 
 
 def _sse(event: str, data: dict) -> str:
@@ -871,7 +885,19 @@ def _has_live_key() -> bool:
 
 @login_required
 def assistant(request):
-    """Render the streaming assistant page (first-run empty state + composer)."""
+    """Render the streaming assistant page.
+
+    Renders the veteran's persisted thread so the conversation survives reload;
+    the first-run empty state shows only when the thread has zero turns
+    (docs/ux/assistant-interactions.md §1). The transcript is PHI — it is fetched
+    scoped to ``request.user`` and never logged.
+    """
+    thread = (
+        AssistantThread.objects.filter(user=request.user)
+        .order_by("-created_at")
+        .first()
+    )
+    turns = list(thread.turns.all()) if thread else []
     return render(
         request,
         "agents/assistant.html",
@@ -880,6 +906,7 @@ def assistant(request):
             "status": copy.STATUS,
             "errors": copy.ERRORS,
             "disclaimer": copy.DISCLAIMER,
+            "turns": turns,
         },
     )
 
@@ -889,9 +916,11 @@ def assistant(request):
 def assistant_stream(request):
     """SSE endpoint that streams one assistant turn.
 
-    Emits: ``open`` → ``delta``* → ``done``  (or ``error`` with a public_code).
-    PHI: the prompt and deltas are never logged; only turn metadata is.
-    See docs/ux/assistant-interactions.md §3, §5.
+    Emits: ``open`` (with ``turn_id``) → ``delta``* → ``done``/``stopped`` (or
+    ``error`` with a public_code). The user prompt is persisted immediately; the
+    assistant answer is persisted on ``done`` (full) or ``stopped`` (partial kept),
+    so the thread survives reload. PHI: neither the prompt nor the deltas are ever
+    logged — only turn metadata. See docs/ux/assistant-interactions.md §3, §5.
     """
     prompt = (request.POST.get("prompt") or "").strip()
     if not prompt:
@@ -905,36 +934,101 @@ def assistant_stream(request):
     # ADR-002 dual-check, Layer 1: consent must be present before we open a stream.
     # Reuses the app's canonical consent helper (checks profile.ai_processing_consent).
     consented = check_ai_consent(request.user)
+    user = request.user
 
     def event_stream():
         # Structured, PHI-free log — turn metadata only (no prompt text).
         logger.info(
             "assistant_stream start user=%s len=%s demo=%s",
-            request.user.id,
+            user.id,
             len(prompt),
             not _has_live_key(),
         )
         if not consented:
+            # No consent → no external call and nothing persisted (the prompt is
+            # PHI we have no reason to store on a rejected turn).
             yield _sse("error", {"code": "consent_required"})
             return
+
+        # Persist the user turn up front so it survives reload even if the answer
+        # fails. get_or_create keeps one rolling thread per user for now.
+        thread, _ = AssistantThread.objects.get_or_create(user=user)
+        user_turn = AssistantTurn.objects.create(
+            thread=thread, user=user, role="user", content=prompt
+        )
+        stop_key = _stop_key(user_turn.pk)
+
+        buf = []
+        stopped = False
+        deltas = None
         try:
-            yield _sse("open", {})
+            yield _sse("open", {"turn_id": user_turn.pk})
             if _has_live_key():
                 deltas = get_gateway().stream(copy.SYSTEM_PROMPT, prompt)
             else:
                 deltas = _demo_deltas(copy.DEMO_RESPONSE)
             for delta in deltas:
+                if cache.get(stop_key):
+                    stopped = True
+                    break
+                buf.append(delta)
                 yield _sse("delta", {"t": delta})
+
+            if stopped:
+                # Promptly close the provider stream so we stop spending tokens.
+                deltas.close()
+                AssistantTurn.objects.create(
+                    thread=thread,
+                    user=user,
+                    role="assistant",
+                    content="".join(buf),
+                    stopped=True,
+                )
+                yield _sse("stopped", {})
+                return
+
+            AssistantTurn.objects.create(
+                thread=thread,
+                user=user,
+                role="assistant",
+                content="".join(buf),
+            )
             yield _sse("done", {})
         except GatewayStreamError as e:
             # Only the mapped public_code crosses the wire — never the raw cause.
-            logger.warning("assistant_stream error user=%s code=%s", request.user.id, e.public_code)
+            # No assistant turn is persisted on failure; the user turn (prompt)
+            # remains so the veteran never retypes.
+            logger.warning(
+                "assistant_stream error user=%s code=%s", user.id, e.public_code
+            )
             yield _sse("error", {"code": e.public_code})
         except Exception:  # noqa: BLE001
-            logger.exception("assistant_stream unexpected user=%s", request.user.id)
+            logger.exception("assistant_stream unexpected user=%s", user.id)
             yield _sse("error", {"code": "generic"})
+        finally:
+            if deltas is not None:
+                deltas.close()  # idempotent; ensures the provider stream is closed
+            cache.delete(stop_key)
 
     resp = StreamingHttpResponse(event_stream(), content_type="text/event-stream")
     resp["Cache-Control"] = "no-cache"
     resp["X-Accel-Buffering"] = "no"  # disable proxy buffering so tokens flush live
     return resp
+
+
+@login_required
+@require_POST
+def assistant_stop(request):
+    """Signal a running stream to stop (server-side abort, stops token spend).
+
+    The client posts the ``turn_id`` from the ``open`` event. We verify the turn
+    belongs to the requesting user (a user can never stop another user's stream),
+    then set a short-lived cache flag the streaming generator polls. The generator
+    closes the Anthropic stream and persists the partial answer as ``stopped``.
+    """
+    turn_id = request.POST.get("turn_id")
+    if not turn_id:
+        return HttpResponse(status=400)
+    turn = get_object_or_404(AssistantTurn, pk=turn_id, user=request.user, role="user")
+    cache.set(_stop_key(turn.pk), True, timeout=_STOP_TTL_SECONDS)
+    return HttpResponse(status=204)

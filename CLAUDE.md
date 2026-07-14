@@ -506,3 +506,9 @@ See `TODO.md` for full prioritized list. **All P0 code fixes completed 2026-02-1
 - **Branch strategy**: Feature branches off `main`; PR for significant changes
 - **Before pushing**: Run `pytest` — all tests must pass, no security regressions
 - **Secrets**: See "Remaining Security TODOs" — never commit API keys, encryption keys, or DSNs
+
+---
+<!-- Shared cross-project lessons. Edit the canonical file, not here. -->
+@~/.claude/shared/LESSONS.md
+<!-- BAS-platform-only lessons. Canonical file lives in bas-platform. -->
+@~/projects/bas-platform/LESSONS.md
