@@ -57,4 +57,9 @@ urlpatterns = [
     ),
     # Document Sharing with VSO
     path("document/<int:pk>/share/", views.document_share, name="document_share"),
+    path(
+        "document/<int:pk>/share/<int:share_pk>/revoke/",
+        views.document_unshare,
+        name="document_unshare",
+    ),
 ]

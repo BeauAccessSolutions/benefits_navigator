@@ -72,14 +72,14 @@ Not code, but the deliverable marketing actually ships on.
 
 ## Sequencing and effort
 
-| Phase | Effort | Unblocks |
-|-------|--------|----------|
-| 0 — Table stakes | ~1 day + manual rotation | Everything; deploy is broken without item 1 |
-| 1 — Revocable sharing | 1–2 days | "You can revoke access anytime" |
-| 2 — Access transparency | 1–2 days | "See everyone who's viewed your records" |
-| 3 — Least privilege + exports | 2–3 days | B2B security questionnaires |
-| 4 — Operator minimization | 1–2 days | "Operator access is logged and minimized" |
-| 5 — Policy/claims register | drafting | Marketing copy itself |
+| Phase | Effort | Unblocks | Status |
+|-------|--------|----------|--------|
+| 0 — Table stakes | ~1 day + manual rotation | Everything; deploy is broken without item 1 | ✅ Done 2026-06-09 (credential rotation still manual) |
+| 1 — Revocable sharing | 1–2 days | "You can revoke access anytime" | ✅ Done 2026-06-09 |
+| 2 — Access transparency | 1–2 days | "See everyone who's viewed your records" | ✅ Done 2026-06-09 |
+| 3 — Least privilege + exports | 2–3 days | B2B security questionnaires | ✅ Done 2026-06-09 |
+| 4 — Operator minimization | 1–2 days | "Operator access is logged and minimized" | ✅ Done 2026-06-09 (set ADMIN_OTP_REQUIRED=True in prod after superusers enroll TOTP) |
+| 5 — Policy/claims register | drafting | Marketing copy itself | ✅ Drafted 2026-06-09 — docs/TRUST.md live; TERMS_DRAFT.md + PRIVACY_POLICY_DRAFT.md awaiting counsel review |
 
 Total: roughly **6–10 dev-days**. Phases 1+2 are the marketing-differentiating pair; 0 is non-negotiable; 3–4 can land after launch if pilot orgs are trusted, but before any self-serve org signup.
 

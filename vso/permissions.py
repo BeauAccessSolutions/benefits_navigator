@@ -392,3 +392,29 @@ def get_permission_context(user):
         "user_roles": set(m.role for m in memberships),
         "user_organizations": [m.organization for m in memberships],
     }
+
+
+def member_is_org_admin(user, organization):
+    """True if the user holds an active admin membership in the org."""
+    membership = get_user_organization_membership(
+        user, organization=organization, roles=[Roles.ADMIN]
+    )
+    return membership is not None
+
+
+def scope_cases_for_member(user, organization, cases):
+    """
+    Apply least-privilege case visibility.
+
+    When the org has restrict_caseworker_visibility enabled, non-admin
+    members see only cases assigned to them or unassigned. Org admins
+    (and orgs without the setting) see everything. The queryset must
+    already be filtered to the organization.
+    """
+    from django.db.models import Q
+
+    if not organization.restrict_caseworker_visibility:
+        return cases
+    if member_is_org_admin(user, organization):
+        return cases
+    return cases.filter(Q(assigned_to=user) | Q(assigned_to__isnull=True))

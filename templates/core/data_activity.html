@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+
+{% block title %}Your Data Activity - {{ SITE_NAME }}{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8 max-w-4xl">
+    <h1 class="text-3xl font-bold text-gray-900 mb-2">Your Data Activity</h1>
+    <p class="text-gray-600 mb-8">
+        Every time someone other than you — a VSO caseworker or Benefits Navigator
+        staff — views your documents or case records, it's recorded here.
+        You can revoke a VSO's access to any document from that document's page.
+    </p>
+
+    <section aria-labelledby="activity-heading" class="bg-white shadow rounded-lg overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+            <h2 id="activity-heading" class="text-lg font-medium text-gray-900">Access History</h2>
+            <p class="text-sm text-gray-500">
+                {{ total_accesses }} access{{ total_accesses|pluralize:"es" }} recorded
+            </p>
+        </div>
+
+        {% if page.object_list %}
+        <ul class="divide-y divide-gray-200">
+            {% for log in page.object_list %}
+            <li class="px-6 py-4">
+                <div class="flex items-start justify-between gap-4">
+                    <div>
+                        <p class="text-sm font-medium text-gray-900">
+                            {% if log.user %}
+                                {{ log.user.get_full_name|default:log.user_email }}
+                            {% else %}
+                                {{ log.user_email|default:"System" }}
+                            {% endif %}
+                            {% if log.org_name %}
+                                <span class="text-gray-500 font-normal">&middot; {{ log.org_name }}</span>
+                            {% endif %}
+                        </p>
+                        <p class="text-sm text-gray-600">
+                            {{ log.get_action_display }}
+                            {% if log.resource_type == 'Document' %}
+                                &mdash; document
+                            {% elif log.resource_type == 'VeteranCase' %}
+                                &mdash; case record
+                            {% endif %}
+                        </p>
+                    </div>
+                    <time datetime="{{ log.timestamp|date:'c' }}" class="text-sm text-gray-500 whitespace-nowrap">
+                        {{ log.timestamp|date:"M j, Y, g:i a" }}
+                    </time>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+
+        {% if page.has_other_pages %}
+        <nav aria-label="Access history pages" class="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+            {% if page.has_previous %}
+            <a href="?page={{ page.previous_page_number }}"
+               class="inline-flex items-center px-3 py-1.5 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                Previous
+            </a>
+            {% else %}
+            <span></span>
+            {% endif %}
+            <p class="text-sm text-gray-500">
+                Page {{ page.number }} of {{ page.paginator.num_pages }}
+            </p>
+            {% if page.has_next %}
+            <a href="?page={{ page.next_page_number }}"
+               class="inline-flex items-center px-3 py-1.5 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                Next
+            </a>
+            {% else %}
+            <span></span>
+            {% endif %}
+        </nav>
+        {% endif %}
+
+        {% else %}
+        <div class="px-6 py-12 text-center">
+            <p class="text-gray-600 font-medium">No outside access recorded.</p>
+            <p class="text-sm text-gray-500 mt-1">
+                If you share documents with a VSO, their views will appear here.
+            </p>
+        </div>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}
