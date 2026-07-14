@@ -164,7 +164,7 @@ class TestGatewayConfig:
 
     def test_default_values(self):
         config = GatewayConfig()
-        assert config.model == "claude-opus-4-8"
+        assert config.model == "claude-sonnet-5"
         assert config.max_tokens == 8192
         assert config.timeout_seconds == 120
         assert config.max_retries == 3
@@ -172,7 +172,7 @@ class TestGatewayConfig:
 
     @patch("agents.ai_gateway.settings")
     def test_from_settings(self, mock_settings):
-        mock_settings.ANTHROPIC_MODEL = "claude-sonnet-4-6"
+        mock_settings.ANTHROPIC_MODEL = "claude-opus-4-8"
         mock_settings.ANTHROPIC_MAX_TOKENS = 16000
         mock_settings.ANTHROPIC_ADAPTIVE_THINKING = False
         mock_settings.ANTHROPIC_TIMEOUT_SECONDS = 90
@@ -181,7 +181,7 @@ class TestGatewayConfig:
         mock_settings.ANTHROPIC_RETRY_MAX_DELAY = 120.0
 
         config = GatewayConfig.from_settings()
-        assert config.model == "claude-sonnet-4-6"
+        assert config.model == "claude-opus-4-8"
         assert config.max_tokens == 16000
         assert config.adaptive_thinking is False
         assert config.timeout_seconds == 90

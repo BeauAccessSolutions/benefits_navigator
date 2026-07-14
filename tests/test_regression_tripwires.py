@@ -37,6 +37,9 @@ NAMED_URLS = [
     ("agents:decision_analyzer", {}),
     ("agents:evidence_gap", {}),
     ("agents:statement_generator", {}),
+    ("agents:assistant", {}),
+    ("agents:assistant_stream", {}),
+    ("agents:assistant_stop", {}),
     # Exam prep routes
     ("examprep:guide_list", {}),
     ("examprep:rating_calculator", {}),

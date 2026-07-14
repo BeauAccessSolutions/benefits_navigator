@@ -11,6 +11,10 @@ urlpatterns = [
     # Home
     path("", views.agents_home, name="home"),
     path("history/", views.agent_history, name="history"),
+    # Streaming assistant (docs/ux/assistant-interactions.md)
+    path("assistant/", views.assistant, name="assistant"),
+    path("assistant/stream/", views.assistant_stream, name="assistant_stream"),
+    path("assistant/stop/", views.assistant_stop, name="assistant_stop"),
     # Decision Letter Analyzer
     path("decision-analyzer/", views.decision_analyzer, name="decision_analyzer"),
     path(

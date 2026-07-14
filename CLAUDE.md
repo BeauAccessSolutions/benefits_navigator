@@ -3,7 +3,7 @@
 **Last Audit:** 2026-02-11 | **Production-Readiness:** 8.0/10 | See `TODO.md` for prioritized issues
 
 ## Project Summary
-Django 5.1.14 app deployed on DigitalOcean App Platform, using the Anthropic Claude API (claude-opus-4-8 default; model env-configurable).
+Django 5.1.14 app deployed on DigitalOcean App Platform, using the Anthropic Claude API (claude-sonnet-5 default; model env-configurable).
 Celery + Redis (DO Managed Valkey) for async document processing. PostgreSQL database. Stripe for subscriptions.
 
 **Two user flows:**
@@ -546,3 +546,5 @@ Status (2026-07-07): planning/foundation. CIT = app #1, KindredAccess = app #2, 
 ---
 <!-- Shared cross-project lessons. Edit the canonical file, not here. Add via /lesson -->
 @~/.claude/shared/LESSONS.md
+<!-- BAS-platform-only lessons. Canonical file lives in bas-platform. -->
+@~/projects/bas-platform/LESSONS.md

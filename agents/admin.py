@@ -2,6 +2,8 @@ from django.contrib import admin
 from django.utils.html import format_html
 from .models import (
     AgentInteraction,
+    AssistantThread,
+    AssistantTurn,
     DecisionLetterAnalysis,
     EvidenceGapAnalysis,
     PersonalStatement,
@@ -9,6 +11,27 @@ from .models import (
     M21TopicIndex,
     M21ScrapeJob,
 )
+
+
+@admin.register(AssistantThread)
+class AssistantThreadAdmin(admin.ModelAdmin):
+    # Metadata only — the transcript is PHI, so no content is surfaced here and
+    # only the owner's email is searchable (never turn content).
+    list_display = ["id", "user", "created_at"]
+    list_filter = ["created_at"]
+    search_fields = ["user__email"]
+    readonly_fields = ["created_at", "updated_at"]
+    date_hierarchy = "created_at"
+
+
+@admin.register(AssistantTurn)
+class AssistantTurnAdmin(admin.ModelAdmin):
+    # PHI: content is not shown in the list and is not searchable.
+    list_display = ["id", "thread", "user", "role", "stopped", "created_at"]
+    list_filter = ["role", "stopped", "created_at"]
+    search_fields = ["user__email"]
+    readonly_fields = ["created_at", "updated_at"]
+    date_hierarchy = "created_at"
 
 
 @admin.register(AgentInteraction)
