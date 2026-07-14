@@ -196,14 +196,51 @@
     setComposerBusy(false);
 
     if (kind === "stopped") {
+      // Keep the partial answer visible; label it, then offer a real control
+      // group so the veteran can act on the truncated turn (docs/ux §0 focus
+      // table, §3.3). Focus lands on the group — never the answer region.
       const label = document.createElement("div");
       label.className = "mt-2 text-sm text-gray-500";
       label.textContent = "Stopped.";
       answerEl.after(label);
+
+      const group = document.createElement("div");
+      group.setAttribute("role", "group");
+      group.setAttribute("aria-label", "Continue or ask again");
+      group.className = "mt-3 flex flex-wrap gap-2";
+
+      // Continue: re-issue the turn to keep going from the partial. v1 simply
+      // re-submits the last prompt; when the gateway/view gains a real continue
+      // affordance, wire it here instead.
+      const continueBtn = document.createElement("button");
+      continueBtn.type = "button";
+      continueBtn.className =
+        "min-h-[44px] rounded-xl bg-blue-600 px-4 text-white font-medium " +
+        "hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500";
+      continueBtn.textContent = "Continue";
+      continueBtn.addEventListener("click", () => submit(lastPrompt, { retry: true }));
+
+      // Ask again: re-run the last prompt from scratch.
+      const askAgainBtn = document.createElement("button");
+      askAgainBtn.type = "button";
+      askAgainBtn.className =
+        "min-h-[44px] rounded-xl border border-gray-300 px-4 font-medium text-gray-800 " +
+        "hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500";
+      askAgainBtn.textContent = "Ask again";
+      askAgainBtn.addEventListener("click", () => submit(lastPrompt, { retry: true }));
+
+      group.append(continueBtn, askAgainBtn);
+      label.after(group);
       announce(statusLive, STATUS.stopped);
-    } else {
-      announce(statusLive, STATUS.complete);
+
+      input.value = "";
+      autogrow();
+      updateSendEnabled();
+      continueBtn.focus();  // land focus on the control group, not the answer
+      return;
     }
+
+    announce(statusLive, STATUS.complete);
     answerEl.focus();  // land the reader at the start of the completed answer
     input.value = "";
     autogrow();
