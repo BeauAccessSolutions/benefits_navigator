@@ -65,8 +65,18 @@ class VSOStaffMFAMiddleware:
 
             user_devices = list(devices_for_user(request.user, confirmed=True))
 
-            if not user_devices and path.startswith("/vso/"):
-                # User has no MFA devices set up
+            # Keycloak step-up MFA (BAS SSO): SSO users defer their second factor
+            # to Keycloak and therefore have no *local* allauth-2fa device. When
+            # the id_token asserted a second factor, accounts.adapters sets this
+            # session flag — treat that as satisfying the VSO MFA requirement so
+            # SSO staff aren't wrongly redirected to local 2FA setup.
+            from benefits_navigator.oidc_config import SSO_MFA_SESSION_KEY
+
+            sso_mfa = bool(request.session.get(SSO_MFA_SESSION_KEY, False))
+            mfa_satisfied = bool(user_devices) or sso_mfa
+
+            if not mfa_satisfied and path.startswith("/vso/"):
+                # No local MFA device AND no Keycloak-asserted second factor.
                 mfa_required = getattr(settings, "VSO_MFA_REQUIRED", False)
 
                 if mfa_required:
