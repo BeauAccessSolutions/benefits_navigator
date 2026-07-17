@@ -439,6 +439,41 @@ ACCOUNT_ADAPTER = "allauth_2fa.adapter.OTPAdapter"
 ALLAUTH_2FA_ALWAYS_REVEAL_BACKUP_TOKENS = False
 
 # ==============================================================================
+# BAS SHARED IDENTITY — Keycloak OIDC via allauth's openid_connect provider
+# ==============================================================================
+# Inert by default: with KEYCLOAK_ISSUER / OIDC_RP_CLIENT_ID unset, OIDC_ENABLED
+# is False and none of the SSO wiring engages — BN's local email/password login
+# is untouched. See benefits_navigator/oidc_config.py and
+# docs/deploy/benefits-navigator-oidc-integration.md (bas-platform).
+from benefits_navigator.oidc_config import build_oidc_config  # noqa: E402
+
+_oidc_config = build_oidc_config(env)
+OIDC_ENABLED = _oidc_config["OIDC_ENABLED"]
+
+if OIDC_ENABLED:
+    # Register the provider app only when configured (avoids a hard dependency
+    # on a SocialApp row and keeps the local-only path clean when SSO is off).
+    INSTALLED_APPS += ["allauth.socialaccount.providers.openid_connect"]
+    # Merge KEYCLOAK_ISSUER, OIDC_RP_CLIENT_ID, SOCIALACCOUNT_PROVIDERS.
+    globals().update(_oidc_config)
+
+    # Verified-email account linking (ADR-004): our adapter connects an SSO login
+    # to an existing local account ONLY when the email is verified at Keycloak,
+    # and records the id_token's MFA assertion (acr/amr) so the VSO gate can
+    # honor Keycloak step-up MFA for SSO users.
+    SOCIALACCOUNT_ADAPTER = "accounts.adapters.BASSocialAccountAdapter"
+    # A brand-new SSO user is provisioned from the token without the local signup
+    # form; the local form stays available to everyone else (dual login).
+    SOCIALACCOUNT_AUTO_SIGNUP = True
+    SOCIALACCOUNT_EMAIL_REQUIRED = True
+    # Trust Keycloak's email_verified — don't send a second BN verification email
+    # for an SSO login whose email the IdP already verified. (Linking to an
+    # *existing* local account is still gated on a verified email in the adapter.)
+    SOCIALACCOUNT_EMAIL_VERIFICATION = "none"
+    # Store the OIDC tokens so RP-initiated logout / audience checks are possible.
+    SOCIALACCOUNT_STORE_TOKENS = True
+
+# ==============================================================================
 # EMAIL CONFIGURATION
 # ==============================================================================
 EMAIL_BACKEND = env(

@@ -145,9 +145,11 @@ class TestAssistantTelemetryNoPHI:
         assert streamed == answer
 
         # --- Log sink: zero prompt/answer substrings, metadata only ------------
-        log_blob = "\n".join(
-            r.getMessage() for r in caplog.records
-        ) + "\n" + "\n".join(str(r.args) for r in caplog.records)
+        log_blob = (
+            "\n".join(r.getMessage() for r in caplog.records)
+            + "\n"
+            + "\n".join(str(r.args) for r in caplog.records)
+        )
 
         for token in _content_tokens(prompt, answer):
             assert token not in log_blob, f"PHI token {token!r} leaked into logs"
@@ -156,17 +158,15 @@ class TestAssistantTelemetryNoPHI:
         # The allowed metadata log line MUST be present — proves the tripwire
         # isn't passing merely because logging was silently skipped, and that the
         # PHI-free "start" line (turn/user id, length) is what actually emits.
-        assert any(
-            "assistant_stream start" in r.getMessage() for r in caplog.records
-        )
+        assert any("assistant_stream start" in r.getMessage() for r in caplog.records)
 
         # --- Analytics sink (AuditLog): zero prompt/answer substrings ----------
         for entry in AuditLog.objects.all():
             blob = json.dumps(entry.details) + " " + (entry.error_message or "")
             for token in _content_tokens(prompt, answer):
-                assert token not in blob, (
-                    f"PHI token {token!r} leaked into an AuditLog record"
-                )
+                assert (
+                    token not in blob
+                ), f"PHI token {token!r} leaked into an AuditLog record"
 
 
 # =============================================================================
@@ -178,9 +178,7 @@ class TestAssistantTelemetryNoPHI:
 class TestAssistantStateMachine:
     """SSE event ordering is the contract shared by view, JS controller, and tests."""
 
-    def test_normal_turn_emits_open_delta_done(
-        self, authenticated_client, monkeypatch
-    ):
+    def test_normal_turn_emits_open_delta_done(self, authenticated_client, monkeypatch):
         _use_fake_gateway(
             monkeypatch, _FakeGateway(deltas=["Hello ", "there ", "veteran."])
         )
@@ -242,8 +240,13 @@ class TestAssistantStateMachine:
         (docs/ux §4.2 / §7) — a code with no copy would surface a blank error."""
         from agents import assistant_copy
 
-        for code in ("rate_limited", "timeout", "stream_interrupted",
-                     "consent_required", "generic"):
+        for code in (
+            "rate_limited",
+            "timeout",
+            "stream_interrupted",
+            "consent_required",
+            "generic",
+        ):
             assert code in assistant_copy.ERRORS
             assert assistant_copy.ERRORS[code]["message"]
 

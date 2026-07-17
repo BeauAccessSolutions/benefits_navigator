@@ -1,5 +1,6 @@
 {% extends "allauth/layouts/entrance.html" %}
 {% load i18n %}
+{% load socialaccount %}
 
 {% block head_title %}{% trans "Sign In" %}{% endblock head_title %}
 
@@ -93,10 +94,16 @@
     </button>
 </form>
 
-{% if SOCIALACCOUNT_ENABLED %}
+{# Single Sign-On (BAS Keycloak). Self-guarding: renders ONLY when an OIDC #}
+{# provider is configured (OIDC_ENABLED). Inert by default — with SSO off, #}
+{# there are no providers, so neither the divider nor the button appears and #}
+{# the local email/password form above is the only path (dual login: both #}
+{# paths coexist during migration). #}
+{% get_providers as socialaccount_providers %}
+{% if socialaccount_providers %}
     <div class="mt-6">
         <div class="relative">
-            <div class="absolute inset-0 flex items-center">
+            <div class="absolute inset-0 flex items-center" aria-hidden="true">
                 <div class="w-full border-t border-gray-300"></div>
             </div>
             <div class="relative flex justify-center text-sm">
@@ -104,8 +111,13 @@
             </div>
         </div>
 
-        <div class="mt-6">
-            {% include "socialaccount/snippets/login.html" with page_layout="entrance" %}
+        <div class="mt-6 space-y-3">
+            {% for provider in socialaccount_providers %}
+                <a href="{% provider_login_url provider process='login' %}"
+                   class="w-full flex items-center justify-center gap-2 py-3 px-4 border border-gray-300 rounded-md shadow-sm text-base font-medium text-gray-800 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 min-h-[48px]">
+                    {% blocktrans with provider_name=provider.name %}Sign in with {{ provider_name }}{% endblocktrans %}
+                </a>
+            {% endfor %}
         </div>
     </div>
 {% endif %}

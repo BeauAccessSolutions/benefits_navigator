@@ -8,53 +8,102 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('agents', '0009_add_indexes'),
+        ("agents", "0009_add_indexes"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='AssistantThread',
+            name="AssistantThread",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='assistant_threads', to=settings.AUTH_USER_MODEL)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "user",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="assistant_threads",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Assistant Thread',
-                'verbose_name_plural': 'Assistant Threads',
-                'ordering': ['-created_at'],
+                "verbose_name": "Assistant Thread",
+                "verbose_name_plural": "Assistant Threads",
+                "ordering": ["-created_at"],
             },
         ),
         migrations.CreateModel(
-            name='AssistantTurn',
+            name="AssistantTurn",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('role', models.CharField(choices=[('user', 'User'), ('assistant', 'Assistant')], max_length=16)),
-                ('content', models.TextField(blank=True)),
-                ('stopped', models.BooleanField(default=False)),
-                ('thread', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='turns', to='agents.assistantthread')),
-                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='assistant_turns', to=settings.AUTH_USER_MODEL)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "role",
+                    models.CharField(
+                        choices=[("user", "User"), ("assistant", "Assistant")],
+                        max_length=16,
+                    ),
+                ),
+                ("content", models.TextField(blank=True)),
+                ("stopped", models.BooleanField(default=False)),
+                (
+                    "thread",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="turns",
+                        to="agents.assistantthread",
+                    ),
+                ),
+                (
+                    "user",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="assistant_turns",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Assistant Turn',
-                'verbose_name_plural': 'Assistant Turns',
-                'ordering': ['created_at', 'id'],
+                "verbose_name": "Assistant Turn",
+                "verbose_name_plural": "Assistant Turns",
+                "ordering": ["created_at", "id"],
             },
         ),
         migrations.AddIndex(
-            model_name='assistantthread',
-            index=models.Index(fields=['user', 'created_at'], name='agents_assi_user_id_a704a9_idx'),
+            model_name="assistantthread",
+            index=models.Index(
+                fields=["user", "created_at"], name="agents_assi_user_id_a704a9_idx"
+            ),
         ),
         migrations.AddIndex(
-            model_name='assistantturn',
-            index=models.Index(fields=['thread', 'created_at'], name='agents_assi_thread__1b76c0_idx'),
+            model_name="assistantturn",
+            index=models.Index(
+                fields=["thread", "created_at"], name="agents_assi_thread__1b76c0_idx"
+            ),
         ),
         migrations.AddIndex(
-            model_name='assistantturn',
-            index=models.Index(fields=['user', 'created_at'], name='agents_assi_user_id_528323_idx'),
+            model_name="assistantturn",
+            index=models.Index(
+                fields=["user", "created_at"], name="agents_assi_user_id_528323_idx"
+            ),
         ),
     ]
