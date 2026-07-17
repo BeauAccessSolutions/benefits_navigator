@@ -43,7 +43,7 @@ OIDC_PROVIDER_NAME = "Beau Access Solutions"
 # accounts.adapters records whether the id_token asserted a second factor, and
 # vso.middleware treats an SSO session as MFA-satisfied without a local
 # allauth-2fa device (which SSO users don't enroll).
-SSO_SESSION_KEY = "bas_sso"          # this login came in via Keycloak SSO
+SSO_SESSION_KEY = "bas_sso"  # this login came in via Keycloak SSO
 SSO_MFA_SESSION_KEY = "bas_sso_mfa"  # Keycloak asserted a second factor (acr/amr)
 
 

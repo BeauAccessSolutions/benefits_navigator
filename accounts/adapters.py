@@ -22,6 +22,7 @@ docs/deploy/benefits-navigator-oidc-integration.md (bas-platform):
 This is the SOCIALACCOUNT_ADAPTER only; ACCOUNT_ADAPTER stays
 ``allauth_2fa.adapter.OTPAdapter`` so the local-login 2FA path is unchanged.
 """
+
 from __future__ import annotations
 
 import logging
