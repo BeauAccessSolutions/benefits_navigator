@@ -14,13 +14,14 @@ const config: CapacitorConfig = {
   // Offline fallback assets only (mobile/www). NOT the app itself.
   webDir: 'www',
   server: {
-    // ⚠️ STAGING, deliberately. BN has NO prod deployment (verified
-    // 2026-07-18: the DO account's only BN app is benefits-navigator-staging,
-    // and no custom domain resolves). While BN is Candidate under ADR-005
-    // (bas-platform/docs/adr/005), internal TestFlight testers SHOULD hit
-    // staging. When prod exists: point this at it and cut a new build —
-    // the URL is baked into the binary, a web deploy won't move it.
-    url: 'https://benefits-navigator-staging-3o4rq.ondigitalocean.app',
+    // The PRIMARY domain on the DO app (despite the app being named
+    // "benefits-navigator-staging", it serves the real site — TRACKER §2
+    // documents this trap). Do NOT point this at the ondigitalocean.app URL:
+    // the Keycloak client registers only this domain's OIDC callback, so
+    // login CANNOT complete there — build 1.0 (1) shipped that mistake and
+    // was superseded same-day by 1.0 (2) on this URL. The URL is baked into
+    // the binary; moving it requires a new build, a web deploy won't do it.
+    url: 'https://vabenefitsnavigator.org',
     // Never allow cleartext — BN handles sensitive claims data.
     cleartext: false,
     // Keep the Keycloak IdP IN the webview or the OIDC redirect gets kicked
