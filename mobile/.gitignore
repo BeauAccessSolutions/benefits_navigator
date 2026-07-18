@@ -1,0 +1,3 @@
+# ios/ is committed (headed for TestFlight, same decision as disability-wiki) —
+# ios/.gitignore excludes Pods, build products, and the synced App/public copy.
+/node_modules/
