@@ -1,0 +1,19 @@
+{
+  "name": "benefits-navigator-mobile",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Capacitor iOS wrapper for Benefits Navigator — thin WKWebView shell around the hosted Django app (see capacitor.config.ts).",
+  "scripts": {
+    "sync": "cap sync ios",
+    "ios": "cap open ios",
+    "doctor": "cap doctor"
+  },
+  "dependencies": {
+    "@capacitor/core": "^8.4.1",
+    "@capacitor/ios": "^8.4.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.4.1",
+    "typescript": "^5.6.0"
+  }
+}
