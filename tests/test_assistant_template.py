@@ -37,7 +37,9 @@ def test_assistant_page_renders(client, veteran):
 def test_assistant_page_loads_the_external_script_and_no_inline_one(client, veteran):
     html = client.get(reverse("agents:assistant")).content.decode()
 
-    assert "js/assistant.js" in html, "the extracted assistant script must be referenced"
+    assert (
+        "js/assistant.js" in html
+    ), "the extracted assistant script must be referenced"
     assert "defer" in html, "the script must be deferred so the DOM exists at boot"
 
     # The assistant's own logic must no longer be inline — that is the piece
