@@ -80,6 +80,14 @@ jobs:
           ruff check .
           black --check .
 
+      # The assistant's live-region contract (docs/ux §6.1): announce once on
+      # completion never per token, and move focus on every state transition.
+      # These live here rather than in tests/e2e because that suite is excluded
+      # from the pytest run below, so a test placed there would gate nothing.
+      - name: Assistant accessibility tests (jsdom)
+        run: |
+          npm run test:js
+
       - name: Run tests
         run: |
           pytest --cov=. --cov-report=xml --cov-fail-under=60 -x -q --ignore=tests/e2e
