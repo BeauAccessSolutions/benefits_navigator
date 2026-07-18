@@ -31,7 +31,12 @@ const config: CapacitorConfig = {
     // other three BAS apps are currently migrating TO, so BN starts correct.
     // Everything NOT listed here opens in Safari (desired for external links,
     // e.g. va.gov).
-    allowNavigation: ['id.beauaccesssolutions.com'],
+    // www serves the site DIRECTLY (no redirect to apex — verified 2026-07-18),
+    // so any absolute www URL or server-side redirect mid-flow would kick the
+    // webview to Safari without this entry. Proper fix is also a server-side
+    // www→apex canonical redirect (tracked separately) — cookies are scoped
+    // per-host, so an in-app hop onto www can still drop the session.
+    allowNavigation: ['id.beauaccesssolutions.com', 'www.vabenefitsnavigator.org'],
   },
   ios: {
     // Match the web app's white surface so first paint isn't a jarring flash.
