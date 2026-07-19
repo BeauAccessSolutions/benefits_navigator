@@ -817,7 +817,9 @@ class TestAppealDocumentMediaViews:
         assert response["Content-Disposition"].startswith("attachment;")
         assert b"".join(response.streaming_content) == b"%PDF-1.4 fake decision letter"
 
-    def test_other_user_cannot_view_document(self, client, appeal, other_user, user_password):
+    def test_other_user_cannot_view_document(
+        self, client, appeal, other_user, user_password
+    ):
         """A second user gets 404 rather than another veteran's decision letter."""
         doc = self._make_doc(appeal)
         client.login(email=other_user.email, password=user_password)
@@ -948,7 +950,9 @@ class TestAppealDocumentMediaViews:
         # The document anchor specifically must not be _blank. Other links on the
         # page (va.gov, GitHub) are genuinely external and keep their _blank.
         anchor_start = html.index(f'href="{expected}"')
-        anchor = html[html.rindex("<a ", 0, anchor_start) : html.index(">", anchor_start)]
+        anchor = html[
+            html.rindex("<a ", 0, anchor_start) : html.index(">", anchor_start)
+        ]
         assert "_blank" not in anchor
 
 
