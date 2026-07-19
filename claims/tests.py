@@ -559,9 +559,7 @@ class TestDocumentFileAffordances:
         assert reverse("claims:document_view", kwargs={"pk": document.pk}) in html
         assert reverse("claims:document_download", kwargs={"pk": document.pk}) in html
 
-    def test_detail_page_never_links_to_media_url(
-        self, authenticated_client, document
-    ):
+    def test_detail_page_never_links_to_media_url(self, authenticated_client, document):
         """/media/ is not served, so a raw file URL would be a guaranteed 404."""
         response = authenticated_client.get(
             reverse("claims:document_detail", kwargs={"pk": document.pk})
@@ -585,9 +583,7 @@ class TestDocumentFileAffordances:
             anchor = html[html.rindex("<a ", 0, start) : html.index(">", start)]
             assert "_blank" not in anchor, f"{name} anchor is _blank targeted"
 
-    def test_no_template_comment_leaks_into_page(
-        self, authenticated_client, document
-    ):
+    def test_no_template_comment_leaks_into_page(self, authenticated_client, document):
         """
         Django's {# #} comment syntax is single-line only; a multi-line one is
         not parsed as a comment and renders as visible text to the user.
@@ -630,15 +626,17 @@ class TestDocumentFileAccessControl:
     practice. These pin it.
     """
 
-    @pytest.mark.parametrize("route", ["claims:document_view", "claims:document_download"])
+    @pytest.mark.parametrize(
+        "route", ["claims:document_view", "claims:document_download"]
+    )
     def test_owner_gets_file(self, authenticated_client, document, route):
         """The owning user receives the file bytes."""
-        response = authenticated_client.get(
-            reverse(route, kwargs={"pk": document.pk})
-        )
+        response = authenticated_client.get(reverse(route, kwargs={"pk": document.pk}))
         assert response.status_code == 200
 
-    @pytest.mark.parametrize("route", ["claims:document_view", "claims:document_download"])
+    @pytest.mark.parametrize(
+        "route", ["claims:document_view", "claims:document_download"]
+    )
     def test_other_user_gets_404(
         self, client, document, other_user, user_password, route
     ):
@@ -649,23 +647,23 @@ class TestDocumentFileAccessControl:
 
         assert response.status_code == 404
 
-    @pytest.mark.parametrize("route", ["claims:document_view", "claims:document_download"])
+    @pytest.mark.parametrize(
+        "route", ["claims:document_view", "claims:document_download"]
+    )
     def test_anonymous_is_redirected(self, client, document, route):
         """Anonymous users are sent to login, never served the file."""
         response = client.get(reverse(route, kwargs={"pk": document.pk}))
         assert response.status_code == 302
 
-    @pytest.mark.parametrize("route", ["claims:document_view", "claims:document_download"])
-    def test_soft_deleted_document_is_404(
-        self, authenticated_client, document, route
-    ):
+    @pytest.mark.parametrize(
+        "route", ["claims:document_view", "claims:document_download"]
+    )
+    def test_soft_deleted_document_is_404(self, authenticated_client, document, route):
         """Soft-deleted documents are not retrievable."""
         document.is_deleted = True
         document.save()
 
-        response = authenticated_client.get(
-            reverse(route, kwargs={"pk": document.pk})
-        )
+        response = authenticated_client.get(reverse(route, kwargs={"pk": document.pk}))
 
         assert response.status_code == 404
 
