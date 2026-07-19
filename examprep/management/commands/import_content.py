@@ -47,6 +47,9 @@ class Command(BaseCommand):
     FIXTURE_GLOSSARY_FILES = [
         "glossary_terms.json",
         "additional_glossary_terms.json",
+        # Django-fixture-format file (model/pk/fields) — import_glossary_from_fixtures
+        # already unwraps that shape. Was orphaned: no code path reached these 40 terms.
+        "glossary_terms_expanded.json",
     ]
 
     # Category mapping from JSON to model choices
