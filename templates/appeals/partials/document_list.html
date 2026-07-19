@@ -14,7 +14,12 @@
             </div>
             <div class="flex items-center gap-3">
                 {% if doc.file %}
-                <a href="{{ doc.file.url }}" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm">
+                {% comment %}
+                No target="_blank": in the Capacitor iOS wrapper _blank routes through
+                WKUIDelegate -> UIApplication.open, which opens Safari without the session
+                cookie and lands the user on a login page instead of the document.
+                {% endcomment %}
+                <a href="{% url 'appeals:appeal_document_view' appeal.pk doc.pk %}" class="text-blue-600 hover:text-blue-800 text-sm">
                     View
                 </a>
                 {% endif %}

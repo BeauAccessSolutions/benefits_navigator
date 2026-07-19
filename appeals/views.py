@@ -2,10 +2,17 @@
 Appeals app views - Appeal workflow, guidance, and management.
 """
 
+import mimetypes
+import os
+
 from django.shortcuts import render, redirect, get_object_or_404
+from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.http import FileResponse, Http404, HttpResponse
 from django.views.decorators.http import require_http_methods
+
+from core.models import AuditLog
 
 from .models import Appeal, AppealGuidance, AppealDocument, AppealNote
 from .forms import (
@@ -508,6 +515,98 @@ def appeal_delete_document(request, pk, doc_pk):
         )
 
     return redirect("appeals:appeal_detail", pk=pk)
+
+
+def _serve_appeal_document(request, pk, doc_pk, *, disposition, audit_action):
+    """
+    Shared body for the protected appeal-document media views.
+
+    Media files are never served from MEDIA_URL (see benefits_navigator/urls.py),
+    so access goes through here, which:
+    1. Requires authentication (via @login_required on the callers)
+    2. Verifies the document belongs to an appeal owned by request.user
+    3. Audit logs the access
+    4. Streams the file through Django
+
+    Mirrors claims.views.document_download / document_view_inline, with file
+    access done through the storage backend rather than a filesystem path so it
+    keeps working under USE_S3.
+    """
+    appeal = get_object_or_404(Appeal, pk=pk, user=request.user)
+    document = get_object_or_404(AppealDocument, pk=doc_pk, appeal=appeal)
+
+    if not document.file:
+        raise Http404("Document file not found")
+
+    storage = document.file.storage
+    file_name = os.path.basename(document.file.name)
+
+    if not storage.exists(document.file.name):
+        raise Http404("Document file not found in storage")
+
+    AuditLog.log(
+        action=audit_action,
+        request=request,
+        resource_type="AppealDocument",
+        resource_id=document.id,
+        details={
+            "appeal_id": appeal.id,
+            "file_name": file_name,
+            "disposition": disposition,
+        },
+    )
+
+    content_type, _ = mimetypes.guess_type(file_name)
+    if not content_type:
+        content_type = "application/octet-stream"
+
+    # Production: let nginx/apache do the transfer via X-Accel-Redirect.
+    # Only reachable with local filesystem storage, which is what SENDFILE_ROOT implies.
+    use_sendfile = getattr(settings, "USE_X_SENDFILE", False)
+    sendfile_root = getattr(settings, "SENDFILE_ROOT", "")
+
+    if use_sendfile and sendfile_root:
+        response = HttpResponse(content_type=content_type)
+        internal_path = document.file.path.replace(
+            str(settings.MEDIA_ROOT), "/protected-media"
+        )
+        response["X-Accel-Redirect"] = internal_path
+        response["Content-Disposition"] = f'{disposition}; filename="{file_name}"'
+        return response
+
+    response = FileResponse(document.file.open("rb"), content_type=content_type)
+    response["Content-Disposition"] = f'{disposition}; filename="{file_name}"'
+    return response
+
+
+@login_required
+@require_http_methods(["GET"])
+def appeal_document_view(request, pk, doc_pk):
+    """
+    View an appeal document inline (in the browser).
+    """
+    return _serve_appeal_document(
+        request,
+        pk,
+        doc_pk,
+        disposition="inline",
+        audit_action="document_view",
+    )
+
+
+@login_required
+@require_http_methods(["GET"])
+def appeal_document_download(request, pk, doc_pk):
+    """
+    Download an appeal document as an attachment.
+    """
+    return _serve_appeal_document(
+        request,
+        pk,
+        doc_pk,
+        disposition="attachment",
+        audit_action="document_download",
+    )
 
 
 # =============================================================================

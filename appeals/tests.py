@@ -16,6 +16,7 @@ Covers:
 import pytest
 from datetime import date, timedelta
 
+from django.core.files.base import ContentFile
 from django.test import TestCase, Client
 from django.urls import reverse
 from django.contrib.auth import get_user_model
@@ -759,6 +760,196 @@ class TestAppealDocumentViews:
             )
         )
         assert response.status_code == 302
+
+
+# =============================================================================
+# APPEAL PROTECTED MEDIA TESTS
+# =============================================================================
+
+
+@pytest.mark.django_db
+class TestAppealDocumentMediaViews:
+    """
+    Tests for the protected appeal-document media views.
+
+    /media/ is deliberately never served (see benefits_navigator/urls.py), so
+    these views are the only path to an appeal document's bytes.
+    """
+
+    @staticmethod
+    def _make_doc(appeal, content=b"%PDF-1.4 fake decision letter"):
+        doc = AppealDocument.objects.create(
+            appeal=appeal,
+            document_type="decision_letter",
+            title="VA Decision Letter",
+        )
+        doc.file.save("decision.pdf", ContentFile(content), save=True)
+        return doc
+
+    def test_owner_can_view_document_inline(self, authenticated_client, appeal):
+        """The owning user gets the file bytes back, served inline."""
+        doc = self._make_doc(appeal)
+
+        response = authenticated_client.get(
+            reverse(
+                "appeals:appeal_document_view",
+                kwargs={"pk": appeal.pk, "doc_pk": doc.pk},
+            )
+        )
+
+        assert response.status_code == 200
+        assert response["Content-Type"] == "application/pdf"
+        assert response["Content-Disposition"].startswith("inline;")
+        assert b"".join(response.streaming_content) == b"%PDF-1.4 fake decision letter"
+
+    def test_owner_can_download_document(self, authenticated_client, appeal):
+        """The download variant serves the same bytes as an attachment."""
+        doc = self._make_doc(appeal)
+
+        response = authenticated_client.get(
+            reverse(
+                "appeals:appeal_document_download",
+                kwargs={"pk": appeal.pk, "doc_pk": doc.pk},
+            )
+        )
+
+        assert response.status_code == 200
+        assert response["Content-Disposition"].startswith("attachment;")
+        assert b"".join(response.streaming_content) == b"%PDF-1.4 fake decision letter"
+
+    def test_other_user_cannot_view_document(self, client, appeal, other_user, user_password):
+        """A second user gets 404 rather than another veteran's decision letter."""
+        doc = self._make_doc(appeal)
+        client.login(email=other_user.email, password=user_password)
+
+        response = client.get(
+            reverse(
+                "appeals:appeal_document_view",
+                kwargs={"pk": appeal.pk, "doc_pk": doc.pk},
+            )
+        )
+
+        assert response.status_code == 404
+
+    def test_other_user_cannot_download_document(
+        self, client, appeal, other_user, user_password
+    ):
+        """Same ownership gate on the download route."""
+        doc = self._make_doc(appeal)
+        client.login(email=other_user.email, password=user_password)
+
+        response = client.get(
+            reverse(
+                "appeals:appeal_document_download",
+                kwargs={"pk": appeal.pk, "doc_pk": doc.pk},
+            )
+        )
+
+        assert response.status_code == 404
+
+    def test_document_view_requires_login(self, client, appeal):
+        """Anonymous users are redirected to login, never served the file."""
+        doc = self._make_doc(appeal)
+
+        response = client.get(
+            reverse(
+                "appeals:appeal_document_view",
+                kwargs={"pk": appeal.pk, "doc_pk": doc.pk},
+            )
+        )
+
+        assert response.status_code == 302
+
+    def test_document_from_another_appeal_is_404(
+        self, authenticated_client, appeal, board_appeal
+    ):
+        """doc_pk must belong to the appeal in the URL, not just to the user."""
+        doc = self._make_doc(board_appeal)
+
+        response = authenticated_client.get(
+            reverse(
+                "appeals:appeal_document_view",
+                kwargs={"pk": appeal.pk, "doc_pk": doc.pk},
+            )
+        )
+
+        assert response.status_code == 404
+
+    def test_document_without_file_is_404(self, authenticated_client, appeal):
+        """A metadata-only document row has no bytes to serve."""
+        doc = AppealDocument.objects.create(
+            appeal=appeal, document_type="other", title="No file"
+        )
+
+        response = authenticated_client.get(
+            reverse(
+                "appeals:appeal_document_view",
+                kwargs={"pk": appeal.pk, "doc_pk": doc.pk},
+            )
+        )
+
+        assert response.status_code == 404
+
+    def test_view_is_audit_logged(self, authenticated_client, appeal, user):
+        """Access to a document is recorded for the audit trail."""
+        from core.models import AuditLog
+
+        doc = self._make_doc(appeal)
+        authenticated_client.get(
+            reverse(
+                "appeals:appeal_document_view",
+                kwargs={"pk": appeal.pk, "doc_pk": doc.pk},
+            )
+        )
+
+        entry = AuditLog.objects.filter(
+            action="document_view", resource_type="AppealDocument", resource_id=doc.pk
+        ).first()
+        assert entry is not None
+        assert entry.user == user
+
+    def test_no_template_comment_leaks_into_page(self, authenticated_client, appeal):
+        """
+        Django's {# #} comment syntax is single-line only; a multi-line one is
+        not parsed as a comment and renders as visible text to the user.
+        """
+        self._make_doc(appeal)
+
+        response = authenticated_client.get(
+            reverse("appeals:appeal_detail", kwargs={"pk": appeal.pk})
+        )
+        html = response.content.decode()
+
+        assert "{#" not in html
+        assert "{% comment" not in html
+
+    def test_template_links_to_protected_url_without_blank(
+        self, authenticated_client, appeal
+    ):
+        """
+        The rendered document list must point at the protected view, not
+        MEDIA_URL, and must not use target="_blank" (the Capacitor iOS wrapper
+        sends _blank to Safari, which has no session cookie).
+        """
+        doc = self._make_doc(appeal)
+
+        response = authenticated_client.get(
+            reverse("appeals:appeal_detail", kwargs={"pk": appeal.pk})
+        )
+        html = response.content.decode()
+
+        expected = reverse(
+            "appeals:appeal_document_view",
+            kwargs={"pk": appeal.pk, "doc_pk": doc.pk},
+        )
+        assert expected in html
+        assert doc.file.url not in html
+
+        # The document anchor specifically must not be _blank. Other links on the
+        # page (va.gov, GitHub) are genuinely external and keep their _blank.
+        anchor_start = html.index(f'href="{expected}"')
+        anchor = html[html.rindex("<a ", 0, anchor_start) : html.index(">", anchor_start)]
+        assert "_blank" not in anchor
 
 
 # =============================================================================

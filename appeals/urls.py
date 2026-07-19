@@ -34,6 +34,17 @@ urlpatterns = [
         views.appeal_delete_document,
         name="appeal_delete_document",
     ),
+    # Protected media access (authentication + ownership required)
+    path(
+        "<int:pk>/documents/<int:doc_pk>/view/",
+        views.appeal_document_view,
+        name="appeal_document_view",
+    ),
+    path(
+        "<int:pk>/documents/<int:doc_pk>/download/",
+        views.appeal_document_download,
+        name="appeal_document_download",
+    ),
     # Notes
     path("<int:pk>/notes/add/", views.appeal_add_note, name="appeal_add_note"),
 ]
