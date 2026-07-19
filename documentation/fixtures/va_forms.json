@@ -1,41 +1,5 @@
 [
   {
-    "model": "documentation.documentcategory",
-    "pk": 1,
-    "fields": {
-      "name": "Disability Compensation Claims",
-      "slug": "disability-claims",
-      "description": "Forms for filing and managing disability compensation claims.",
-      "icon": "document-text",
-      "order": 1,
-      "is_active": true
-    }
-  },
-  {
-    "model": "documentation.documentcategory",
-    "pk": 2,
-    "fields": {
-      "name": "Appeals",
-      "slug": "appeals",
-      "description": "Forms for appealing VA decisions.",
-      "icon": "scale",
-      "order": 2,
-      "is_active": true
-    }
-  },
-  {
-    "model": "documentation.documentcategory",
-    "pk": 3,
-    "fields": {
-      "name": "Supporting Evidence",
-      "slug": "supporting-evidence",
-      "description": "Forms for submitting statements and evidence.",
-      "icon": "document-duplicate",
-      "order": 3,
-      "is_active": true
-    }
-  },
-  {
     "model": "documentation.vaform",
     "pk": 1,
     "fields": {
@@ -45,7 +9,9 @@
       "instructions": "This form is used to apply for disability compensation for conditions that are related to your military service.\n\n1. Complete Section I with your personal information\n2. In Section II, list all conditions you're claiming, including when they started and how they relate to your service\n3. Section III covers your service history - be thorough and accurate\n4. Section IV is for additional information about your conditions\n5. Sign and date the form\n\nYou can submit this form online at VA.gov, by mail, or in person at a VA regional office.",
       "official_url": "https://www.va.gov/find-forms/about-form-21-526ez/",
       "instructions_url": "https://www.va.gov/disability/how-to-file-claim/",
-      "workflow_stages": ["initial_claim"],
+      "workflow_stages": [
+        "initial_claim"
+      ],
       "deadline_info": "There is no deadline for filing an initial claim. However, effective dates may be affected by when you file.",
       "tips": "- List ALL conditions, even ones you're unsure about - you can always withdraw a condition later\n- Use lay statements from family, friends, and fellow service members to support your claim\n- Include your service treatment records if you have them\n- Be specific about how your conditions affect your daily life",
       "common_mistakes": "- Not listing all conditions\n- Vague descriptions of how conditions affect daily activities\n- Missing or incorrect service dates\n- Not including nexus evidence linking conditions to service\n- Filing without gathering supporting medical evidence first",
@@ -66,7 +32,9 @@
       "instructions": "A Supplemental Claim allows you to submit new and relevant evidence to have your claim reconsidered.\n\n1. Complete your personal information in Section I\n2. In Section II, identify the issue(s) you want reviewed\n3. Describe the new evidence you're submitting or want VA to obtain\n4. You may request a VA medical exam if appropriate\n5. Sign and date the form\n\nNew and relevant evidence must relate to your claim and not have been previously considered by VA.",
       "official_url": "https://www.va.gov/find-forms/about-form-20-0995/",
       "instructions_url": "https://www.va.gov/decision-reviews/supplemental-claim/",
-      "workflow_stages": ["supplemental_claim"],
+      "workflow_stages": [
+        "supplemental_claim"
+      ],
       "deadline_info": "No deadline for filing, but you cannot file a Supplemental Claim for the same issue more than once within one year unless you have new and relevant evidence.",
       "tips": "- Make sure your evidence is truly NEW (not previously submitted) and RELEVANT (relates to the reason for denial)\n- Request a new medical exam if your condition has worsened\n- Include a nexus letter if that was the reason for denial\n- Consider getting a private medical opinion if appropriate",
       "common_mistakes": "- Submitting evidence that was already considered\n- Evidence that doesn't address the reason for denial\n- Not explaining how the new evidence relates to your claim\n- Filing without actually having new evidence",
@@ -87,7 +55,9 @@
       "instructions": "A Higher-Level Review (HLR) is appropriate when you believe VA made an error in applying the law or evaluating existing evidence.\n\n1. Complete your personal information\n2. Identify the specific issue(s) and decision date\n3. Optionally, request an informal conference to discuss your case\n4. You may identify specific errors you want the reviewer to consider\n5. Sign and date the form\n\nNo new evidence can be submitted with an HLR. The senior reviewer will only look at evidence already in your file.",
       "official_url": "https://www.va.gov/find-forms/about-form-20-0996/",
       "instructions_url": "https://www.va.gov/decision-reviews/higher-level-review/",
-      "workflow_stages": ["higher_level_review"],
+      "workflow_stages": [
+        "higher_level_review"
+      ],
       "deadline_info": "You have ONE YEAR from the date of your decision to request a Higher-Level Review.",
       "tips": "- Request an informal conference - this is your chance to explain the error directly to a reviewer\n- Be specific about what error was made (legal, factual, procedural)\n- Review the rating decision carefully for clear and unmistakable errors\n- Consider this option when evidence is strong but was misinterpreted",
       "common_mistakes": "- Filing when you actually need to submit new evidence (use Supplemental Claim instead)\n- Missing the one-year deadline\n- Not requesting an informal conference\n- Not clearly articulating the specific error made",
@@ -108,7 +78,9 @@
       "instructions": "A Board Appeal takes your case to the Board of Veterans' Appeals for review by a Veterans Law Judge.\n\n1. Complete your personal information\n2. Identify the decision and issues you're appealing\n3. Choose your docket:\n   - Direct Review: Fastest, no new evidence or hearing\n   - Evidence Submission: Submit new evidence within 90 days\n   - Hearing Request: Present your case in a hearing\n4. Sign and date the form\n\nProcessing times vary significantly by docket. Direct Review is typically fastest.",
       "official_url": "https://www.va.gov/find-forms/about-form-10182/",
       "instructions_url": "https://www.va.gov/decision-reviews/board-appeal/",
-      "workflow_stages": ["board_appeal"],
+      "workflow_stages": [
+        "board_appeal"
+      ],
       "deadline_info": "You have ONE YEAR from the date of your decision to file a Board Appeal.",
       "tips": "- Choose your docket carefully based on your evidence situation\n- Direct Review is fastest but you can't add evidence\n- Evidence Submission docket gives you 90 days to submit new evidence\n- Hearing docket takes longest but lets you testify directly\n- Consider representation (VSO, attorney, or claims agent)",
       "common_mistakes": "- Choosing the wrong docket for your situation\n- Missing the 90-day evidence window on Evidence Submission docket\n- Not preparing adequately for a hearing\n- Filing without representation when facing complex legal issues",
@@ -129,7 +101,11 @@
       "instructions": "This versatile form is used to provide additional information or explanations to support your claim.\n\n1. Fill in your personal information at the top\n2. In the main section, write your statement clearly and specifically\n3. Focus on facts, dates, and specific details\n4. If describing an event, include who, what, when, where\n5. Sign and date the form\n\nThis form can be used by you or by witnesses providing buddy statements.",
       "official_url": "https://www.va.gov/find-forms/about-form-21-4138/",
       "instructions_url": "",
-      "workflow_stages": ["initial_claim", "supplemental_claim", "evidence_submission"],
+      "workflow_stages": [
+        "initial_claim",
+        "supplemental_claim",
+        "evidence_submission"
+      ],
       "deadline_info": "Submit with your claim or within any applicable appeal deadline.",
       "tips": "- Be specific and detailed in your statements\n- Include dates, locations, and names when possible\n- Describe how your condition affects your daily life in concrete terms\n- For buddy statements, have witnesses describe what they personally observed",
       "common_mistakes": "- Being too vague or general\n- Not including specific examples\n- Forgetting to sign and date\n- Writing opinions instead of observations (for buddy statements)",
@@ -150,7 +126,10 @@
       "instructions": "This form is specifically designed for PTSD claims to document your in-service stressor events.\n\n1. Complete your personal information\n2. Describe each stressor event in detail:\n   - What happened\n   - When it happened (be as specific as possible)\n   - Where it happened (unit, base, location)\n   - Who was involved\n   - How it affected you\n3. If you have witnesses, provide their information\n4. Sign and date the form\n\nBe as detailed as possible. Specific dates and locations help VA verify your stressors.",
       "official_url": "https://www.va.gov/find-forms/about-form-21-0781/",
       "instructions_url": "",
-      "workflow_stages": ["initial_claim", "supplemental_claim"],
+      "workflow_stages": [
+        "initial_claim",
+        "supplemental_claim"
+      ],
       "deadline_info": "Submit with your initial PTSD claim or supplemental claim.",
       "tips": "- Be as specific as possible with dates (even approximate months help)\n- Include unit designations and locations\n- Describe the fear of hostile military or terrorist activity if applicable\n- You don't need to prove every detail - VA will attempt to verify\n- Combat veterans may not need to provide extensive stressor detail",
       "common_mistakes": "- Being too vague about when/where events occurred\n- Not describing how the event affected you at the time\n- Forgetting to mention witnesses or fellow service members\n- Not completing all sections that apply to your situation",
@@ -171,7 +150,10 @@
       "instructions": "This form is for PTSD claims based on personal assault, including Military Sexual Trauma (MST).\n\n1. Complete your personal information\n2. Describe the assault event(s) - include as much detail as you're comfortable sharing\n3. Identify any behavioral changes after the assault:\n   - Requests for transfer\n   - Changes in performance\n   - Substance use changes\n   - Relationship changes\n4. List any people you told about the assault\n5. Sign and date the form\n\nYou're not required to report the assault in detail. VA understands these events are often unreported.",
       "official_url": "https://www.va.gov/find-forms/about-form-21-0781a/",
       "instructions_url": "",
-      "workflow_stages": ["initial_claim", "supplemental_claim"],
+      "workflow_stages": [
+        "initial_claim",
+        "supplemental_claim"
+      ],
       "deadline_info": "Submit with your PTSD claim. There is no time limit for filing.",
       "tips": "- You don't need to have reported the assault during service\n- Alternative evidence can include: personnel records showing changes, lay statements, medical records showing behavioral health treatment\n- VA has specially trained personnel for MST claims\n- You can request a same-gender examiner for your C&P exam\n- Consider using the VA's MST Coordinator at your local VA",
       "common_mistakes": "- Not knowing that alternative evidence is acceptable\n- Not identifying behavioral changes that may be in records\n- Not requesting accommodations for the C&P exam\n- Assuming the claim will be denied because assault wasn't reported",
@@ -192,7 +174,9 @@
       "instructions": "An Intent to File protects your effective date while you gather evidence for your claim.\n\n1. Complete your personal information\n2. Indicate what type of benefit you intend to claim\n3. Sign and date the form\n\nOnce filed, you have ONE YEAR to submit your complete claim. If approved, benefits will be effective from the date of your Intent to File.",
       "official_url": "https://www.va.gov/find-forms/about-form-21-0966/",
       "instructions_url": "",
-      "workflow_stages": ["initial_claim"],
+      "workflow_stages": [
+        "initial_claim"
+      ],
       "deadline_info": "You have ONE YEAR from the date of filing to submit your complete claim (Form 21-526EZ).",
       "tips": "- File this FIRST before gathering evidence\n- You can file online at VA.gov in seconds\n- This protects potentially thousands of dollars in back pay\n- Set a reminder to complete your claim before the year expires\n- You don't need evidence to file - just your intent",
       "common_mistakes": "- Not filing at all and losing months of potential back pay\n- Forgetting to submit the full claim within one year\n- Not realizing you can file this online quickly\n- Waiting to file until you have all evidence ready",
