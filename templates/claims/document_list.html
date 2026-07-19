@@ -130,8 +130,12 @@
                         {{ document.file_size_mb }} MB
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        {% comment %}
+                        "Details" not "View": this goes to the metadata page. The
+                        detail page's own "View" button is what opens the file.
+                        {% endcomment %}
                         <a href="{% url 'claims:document_detail' pk=document.id %}" class="text-blue-600 hover:text-blue-800 hover:underline focus:underline">
-                            View
+                            Details<span class="sr-only"> for {{ document.file_name }}</span>
                         </a>
                     </td>
                 </tr>
