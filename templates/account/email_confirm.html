@@ -1,0 +1,43 @@
+{% extends "allauth/layouts/entrance.html" %}
+{% load i18n %}
+{% load account %}
+
+{% block head_title %}{% trans "Confirm Email Address" %}{% endblock head_title %}
+
+{% block content %}
+<div class="text-center mb-6">
+    <h1 class="text-2xl font-bold text-gray-900">{% trans "Confirm your email" %}</h1>
+</div>
+
+{% if confirmation %}
+    {% user_display confirmation.email_address.user as user_display %}
+    {% if can_confirm %}
+        <p class="text-gray-600 text-center mb-6">
+            {% blocktrans with confirmation.email_address.email as email %}Please confirm that <strong>{{ email }}</strong> belongs to {{ user_display }}.{% endblocktrans %}
+        </p>
+        <form method="post" action="{% url 'account_confirm_email' confirmation.key %}">
+            {% csrf_token %}
+            {{ redirect_field }}
+            <button type="submit"
+                    class="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-base font-medium text-white bg-blue-700 hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 min-h-[48px]">
+                {% trans "Confirm" %}
+            </button>
+        </form>
+    {% else %}
+        <div class="p-4 bg-amber-50 border border-amber-200 rounded-md text-amber-800 text-sm" role="alert">
+            {% blocktrans with confirmation.email_address.email as email %}Unable to confirm {{ email }} because it is already confirmed by a different account.{% endblocktrans %}
+        </div>
+    {% endif %}
+{% else %}
+    {% url 'account_email' as email_url %}
+    <div class="p-4 bg-amber-50 border border-amber-200 rounded-md text-amber-800 text-sm" role="alert">
+        {% blocktrans %}This email confirmation link has expired or is invalid. Please <a href="{{ email_url }}" class="underline font-medium">request a new one</a>.{% endblocktrans %}
+    </div>
+{% endif %}
+
+<div class="mt-6 text-center">
+    <a href="{% url 'account_login' %}" class="text-blue-700 hover:text-blue-800 underline text-sm">
+        {% trans "Return to sign in" %}
+    </a>
+</div>
+{% endblock content %}

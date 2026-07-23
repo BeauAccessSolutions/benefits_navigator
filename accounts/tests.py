@@ -1340,3 +1340,72 @@ class TestOrgInviteAcceptView:
         self.invitation.refresh_from_db()
         assert self.invitation.accepted_at is None
         assert not OrganizationMembership.objects.filter(user=invited).exists()
+
+
+# =============================================================================
+# ALLAUTH TEMPLATE STYLING TESTS
+# =============================================================================
+# Only account/login.html & signup.html were custom-styled; every other allauth
+# page fell back to the bundled unstyled default (raw inputs, broken on mobile).
+# These assert the project's own styled overrides render for the reachable
+# signup / login / password-reset flow pages.
+
+
+@pytest.mark.django_db
+class TestAllauthStyledTemplates:
+    """Each auth-flow page must render the project's styled template override."""
+
+    # (url_name, args, expected_template) — GET-reachable without auth.
+    PUBLIC_PAGES = [
+        ("account_email_verification_sent", [], "account/verification_sent.html"),
+        ("account_reset_password", [], "account/password_reset.html"),
+        ("account_reset_password_done", [], "account/password_reset_done.html"),
+        (
+            "account_reset_password_from_key_done",
+            [],
+            "account/password_reset_from_key_done.html",
+        ),
+        # Invalid key → the token-fail / expired branch still renders our template.
+        (
+            "account_reset_password_from_key",
+            ["abc", "bogus-key"],
+            "account/password_reset_from_key.html",
+        ),
+        ("account_confirm_email", ["bogus-key"], "account/email_confirm.html"),
+    ]
+
+    @pytest.mark.parametrize("url_name,args,template", PUBLIC_PAGES)
+    def test_public_auth_page_uses_styled_template(
+        self, client, url_name, args, template
+    ):
+        response = client.get(reverse(url_name, args=args))
+        assert (
+            response.status_code == 200
+        ), f"{url_name} returned {response.status_code}"
+        names = {t.name for t in response.templates if t.name}
+        assert template in names, f"{url_name} did not render {template}"
+        # Styled entrance card marker (present via login.html's proven pattern).
+        assert (
+            b"px-4 py-3 border" in response.content
+            or b"text-gray-900" in response.content
+        )
+
+    def test_password_change_uses_styled_template(self, client, user, user_password):
+        """Password change requires login; still must use the styled template."""
+        client.force_login(user)
+        response = client.get(reverse("account_change_password"))
+        assert response.status_code == 200
+        names = {t.name for t in response.templates if t.name}
+        assert "account/password_change.html" in names
+        html = response.content.decode()
+        assert 'name="oldpassword"' in html
+        assert "px-4 py-3 border" in html
+
+    def test_logout_confirm_uses_styled_template(self, client, user):
+        """Logout confirmation page (shown to logged-in users) is styled."""
+        client.force_login(user)
+        response = client.get(reverse("account_logout"))
+        assert response.status_code == 200
+        names = {t.name for t in response.templates if t.name}
+        assert "account/logout.html" in names
+        assert b"Sign Out" in response.content
