@@ -311,15 +311,31 @@ Provide your analysis in the JSON format specified. Be sure to recommend the BES
         result["_tokens_used"] = tokens
         result["_cost_estimate"] = float(self.estimate_cost(tokens))
 
-        # Calculate appeal deadline if decision date available
+        # Calculate the appeal deadline if a decision date is available.
+        #
+        # This 1-year date is the deadline for a Higher-Level Review or a Board
+        # appeal (38 CFR § 20.202). It is NOT an absolute bar on appealing: a
+        # Supplemental Claim can be filed at any time with new and relevant
+        # evidence (38 CFR § 20.204) — filing within a year only preserves the
+        # effective date. We attach `appeal_deadline_note` so the UI can present
+        # the date honestly instead of telling the veteran they are out of
+        # options once a year has passed.
+        deadline_note = (
+            "This 1-year deadline applies to a Higher-Level Review or Board "
+            "appeal (38 CFR § 20.202). A Supplemental Claim can be filed at any "
+            "time with new and relevant evidence (38 CFR § 20.204); filing "
+            "within one year of the decision preserves your effective date."
+        )
         if decision_date:
             result["appeal_deadline"] = (
                 decision_date + timedelta(days=365)
             ).isoformat()
+            result["appeal_deadline_note"] = deadline_note
         elif result.get("decision_date"):
             try:
                 d = date.fromisoformat(result["decision_date"])
                 result["appeal_deadline"] = (d + timedelta(days=365)).isoformat()
+                result["appeal_deadline_note"] = deadline_note
             except (ValueError, TypeError):
                 pass
 

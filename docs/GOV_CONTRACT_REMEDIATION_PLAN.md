@@ -154,15 +154,22 @@ caseworkers act on colleagues' cases by ID.
 
 ## Phase 2 — Correctness a veteran can rely on (~1 week)
 
-### 2.1 Supplemental-claim eligibility (P1)
-- [ ] `appeals/forms.py:60`: stop rejecting >1-year-old decisions at intake. Warn instead:
-      HLR/Board are time-barred, Supplemental remains available; effective-date consequences
-      (wording pattern already established in `appeal_detail.html`, 2026-07-23).
-- [ ] `agents/services.py:314`: replace the blanket 1-year `appeal_deadline` with per-lane
-      deadlines (HLR/Board: 1 year; Supplemental: none + effective-date note) in the analyzer
-      output schema.
-- [ ] Tests: intake accepts an 18-month-old decision; analyzer output distinguishes lanes.
-- **Acceptance:** no code path tells a veteran they cannot file a Supplemental Claim after a
+### 2.1 Supplemental-claim eligibility (P1) — ✅ DONE 2026-07-23 (branch `claude/appeal-supplemental-deadline`)
+- [x] `appeals/forms.py` `clean_original_decision_date`: stopped rejecting >1-year-old decisions at
+      intake (the form runs before the lane is chosen; Supplemental has no deadline per 38 CFR
+      § 20.204). Kept the future-date guard. Lane-specific deadline handling stays in `Appeal.save()`
+      (None for supplemental, decision + 1 year for HLR/Board per 38 CFR § 20.202) and the detail page.
+- [x] `agents/services.py`: kept the 1-year date (it IS the HLR/Board deadline) but added
+      `appeal_deadline_note` clarifying a Supplemental Claim can be filed anytime with new evidence
+      (§ 20.204) and that filing within a year preserves the effective date. CFR cites in comments.
+- [x] Template `decision_analyzer_result.html`: the deadline box was a red "Appeal Deadline (1 year)"
+      alert implying no options after a year; reframed (amber) as the HLR/Board deadline + the
+      supplemental-anytime note.
+- [x] Tests: `TestAppealStartFormDeadline` (old decision allowed, future rejected),
+      `TestAppealStartOldDecisionView` (old→supplemental creates appeal with no deadline; HLR
+      regression keeps 1-year), `TestDecisionLetterDeadlineNote` (analyzer note distinguishes lanes).
+      Full appeals + agents suites: 192 passed.
+- **Acceptance met:** no code path tells a veteran they cannot file a Supplemental Claim after a
   year; CFR citations in code comments.
 
 ### 2.2 Structured AI outputs on the legacy path (P2 → promoted)

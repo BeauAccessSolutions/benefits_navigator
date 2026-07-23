@@ -1244,6 +1244,7 @@ class TestM21TaskAcksLate(TestCase):
                 f"job per run) and must NOT set acks_late",
             )
 
+
 # =============================================================================
 # PHI ENCRYPTION-AT-REST TESTS (HIPAA §164.312(a)(2)(iv))
 # =============================================================================
@@ -1467,3 +1468,63 @@ class TestEvidenceGapAndRatingEncryptionAtRest(TestCase):
 
         cond_raw = self._raw("agents_ratinganalysis", "conditions", analysis.pk)
         self.assertNotIn("PTSD", cond_raw)
+
+
+class TestDecisionLetterDeadlineNote(TestCase):
+    """
+    The analyzer stamps a 1-year deadline (HLR/Board, 38 CFR § 20.202) but must
+    flag that a Supplemental Claim has no deadline (38 CFR § 20.204) so the UI
+    does not tell veterans they are out of options.
+    """
+
+    def test_analyze_attaches_lane_aware_deadline_note(self):
+        from datetime import date
+
+        from agents.services import DecisionLetterAnalyzer
+
+        payload = json.dumps(
+            {
+                "granted": [],
+                "denied": [{"condition": "PTSD", "reason": "No nexus"}],
+                "deferred": [],
+                "summary": "Test summary",
+                "appeal_options": [],
+            }
+        )
+        decision_date = date(2024, 1, 1)
+        analyzer = DecisionLetterAnalyzer()
+        with patch.object(
+            DecisionLetterAnalyzer, "_call_openai", return_value=(payload, 100)
+        ):
+            result = analyzer.analyze("letter text", decision_date=decision_date)
+
+        # 1-year HLR/Board deadline still computed (365 days from the decision).
+        self.assertEqual(
+            result["appeal_deadline"],
+            (decision_date + timedelta(days=365)).isoformat(),
+        )
+        # ...but explicitly qualified as not an absolute bar.
+        note = result["appeal_deadline_note"]
+        self.assertIn("Supplemental Claim", note)
+        self.assertIn("20.204", note)
+
+    def test_no_deadline_note_without_decision_date(self):
+        from agents.services import DecisionLetterAnalyzer
+
+        payload = json.dumps(
+            {
+                "granted": [],
+                "denied": [],
+                "deferred": [],
+                "summary": "s",
+                "appeal_options": [],
+            }
+        )
+        analyzer = DecisionLetterAnalyzer()
+        with patch.object(
+            DecisionLetterAnalyzer, "_call_openai", return_value=(payload, 100)
+        ):
+            result = analyzer.analyze("letter text", decision_date=None)
+
+        self.assertNotIn("appeal_deadline", result)
+        self.assertNotIn("appeal_deadline_note", result)
