@@ -6,7 +6,7 @@ Provides:
 - Organization scope validation
 """
 
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 
 from django.conf import settings
 from django.shortcuts import redirect
@@ -14,6 +14,28 @@ from django.contrib import messages
 from django.utils import timezone
 
 from .views import get_user_staff_memberships
+
+
+def compute_mfa_grace_end(joined_at, enforcement_start, grace_days):
+    """When VSO MFA enforcement starts blocking a given staffer.
+
+    The grace window runs ``grace_days`` from the LATER of the staffer's
+    membership creation (``joined_at``) and the org-wide enforcement start date
+    (``enforcement_start``, a ``date`` or ``None``). Anchoring to the enforcement
+    date means turning MFA on doesn't instantly lock out staff whose membership
+    predates it — they get a fresh window to enroll.
+
+    Returns a timezone-aware datetime, or ``None`` if ``joined_at`` is missing.
+    """
+    if joined_at is None:
+        return None
+    anchor = joined_at
+    if enforcement_start is not None:
+        start_dt = datetime.combine(enforcement_start, time.min)
+        if timezone.is_aware(joined_at):
+            start_dt = timezone.make_aware(start_dt)
+        anchor = max(joined_at, start_dt)
+    return anchor + timedelta(days=grace_days)
 
 
 class VSOStaffMFAMiddleware:
@@ -81,15 +103,19 @@ class VSOStaffMFAMiddleware:
 
                 if mfa_required:
                     grace_days = getattr(settings, "VSO_MFA_GRACE_PERIOD_DAYS", 7)
+                    enforcement_start = getattr(
+                        settings, "VSO_MFA_ENFORCEMENT_START", None
+                    )
                     joined_at = (
                         memberships.order_by("created_at")
                         .values_list("created_at", flat=True)
                         .first()
                     )
                     grace_ends = (
-                        joined_at + timedelta(days=grace_days)
-                        if joined_at
-                        else timezone.now()
+                        compute_mfa_grace_end(
+                            joined_at, enforcement_start, grace_days
+                        )
+                        or timezone.now()
                     )
 
                     if timezone.now() >= grace_ends:
