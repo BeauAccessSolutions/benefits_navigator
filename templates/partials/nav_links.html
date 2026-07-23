@@ -1,0 +1,67 @@
+{% comment %}
+Shared main-navigation links, rendered in both the desktop bar and the mobile
+dropdown so the two never drift. Link classes are layout-agnostic (block + py-2)
+so they read correctly whether the parent <ul> is a flex row or a flex column.
+{% endcomment %}
+<li>
+    <a href="/claims/" class="block py-2 hover:underline focus:underline"
+       {% if request.resolver_match.app_name == 'claims' %}aria-current="page"{% endif %}>
+        Claims Assistant
+    </a>
+</li>
+<li>
+    <a href="/exam-prep/" class="block py-2 hover:underline focus:underline"
+       {% if request.resolver_match.app_name == 'examprep' %}aria-current="page"{% endif %}>
+        C&amp;P Exam Prep
+    </a>
+</li>
+<li>
+    <a href="/appeals/" class="block py-2 hover:underline focus:underline"
+       {% if request.resolver_match.app_name == 'appeals' %}aria-current="page"{% endif %}>
+        Appeals Guidance
+    </a>
+</li>
+<li>
+    <a href="/docs/" class="block py-2 hover:underline focus:underline"
+       {% if request.resolver_match.app_name == 'documentation' %}aria-current="page"{% endif %}>
+        Documentation
+    </a>
+</li>
+{% if user.is_authenticated %}
+<li>
+    <a href="/journey/" class="block py-2 hover:underline focus:underline"
+       {% if request.resolver_match.url_name == 'journey_dashboard' %}aria-current="page"{% endif %}>
+        My Journey
+    </a>
+</li>
+<li>
+    <a href="/dashboard/" class="block py-2 hover:underline focus:underline"
+       {% if request.resolver_match.url_name == 'dashboard' %}aria-current="page"{% endif %}>
+        Dashboard
+    </a>
+</li>
+{% if is_vso_staff %}
+<li>
+    <a href="{% url 'vso:dashboard' %}" class="block py-2 md:py-1 md:px-3 hover:underline focus:underline bg-green-700 rounded"
+       {% if request.resolver_match.app_name == 'vso' %}aria-current="page"{% endif %}>
+        VSO Portal
+    </a>
+</li>
+{% endif %}
+<li>
+    <a href="/accounts/logout/" class="block py-2 hover:underline focus:underline">
+        Logout
+    </a>
+</li>
+{% else %}
+<li>
+    <a href="/accounts/login/" class="block py-2 hover:underline focus:underline">
+        Login
+    </a>
+</li>
+<li>
+    <a href="/accounts/signup/" class="block md:inline-block py-2 md:px-4 md:py-2 md:rounded bg-white text-blue-900 md:hover:bg-gray-100 md:focus:bg-gray-100 rounded px-4">
+        Sign Up
+    </a>
+</li>
+{% endif %}

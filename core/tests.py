@@ -2114,3 +2114,43 @@ class TestRedisSSLOptions(TestCase):
         self.assertNotIn("ssl_ca_certs", redis_ssl_options("required"))
         opts = redis_ssl_options("required", "/etc/ssl/do-valkey-ca.crt")
         self.assertEqual(opts["ssl_ca_certs"], "/etc/ssl/do-valkey-ca.crt")
+
+
+# =============================================================================
+# RESPONSIVE NAVIGATION TESTS
+# =============================================================================
+# The header nav overflowed on mobile (no hamburger). It now renders a desktop
+# bar plus a CSS-only <details> hamburger for mobile, sharing one links partial.
+
+
+@pytest.mark.django_db
+class TestResponsiveNav:
+    """base.html renders both a desktop nav and a mobile <details> hamburger."""
+
+    def test_home_renders_desktop_and_mobile_nav(self, client):
+        html = client.get(reverse("home")).content.decode()
+        # Desktop bar + mobile dropdown are distinct <nav> landmarks.
+        assert 'aria-label="Main navigation"' in html
+        assert 'aria-label="Mobile navigation"' in html
+        # The CSS-only hamburger toggle.
+        assert "<details" in html
+        assert "Toggle navigation menu" in html
+        # Links render in BOTH navs (shared partial included twice).
+        assert html.count('href="/claims/"') >= 2
+        assert html.count('href="/appeals/"') >= 2
+
+    def test_nav_partial_comment_not_leaked(self, client):
+        """
+        Regression: the links partial used a multi-line {# #} comment, which
+        Django only treats as a comment on its first line — the rest rendered
+        as visible text in the header. Guard against that class of bug.
+        """
+        html = client.get(reverse("home")).content.decode()
+        assert "flex row or a flex column" not in html
+        assert "Shared main-navigation links" not in html
+
+    def test_authenticated_nav_shows_member_links(self, authenticated_client):
+        """Logged-in users see Dashboard/Logout in both desktop and mobile navs."""
+        html = authenticated_client.get(reverse("home")).content.decode()
+        assert html.count('href="/dashboard/"') >= 2
+        assert html.count('href="/accounts/logout/"') >= 2
