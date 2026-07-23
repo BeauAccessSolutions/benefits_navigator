@@ -1,7 +1,84 @@
 # VA Benefits Navigator — TODO & Audit Tracker
 
-**Last Updated:** 2026-07-22
-**Updated By:** Claude Code — worked through all P1 items and several P2 items from the 2026-06-09 audit (see checkmarks below; 1029 tests passing, ruff/black clean)
+**Last Updated:** 2026-07-23
+**Updated By:** Claude Code — logged the 2026-07-23 external (Codex) audit findings below; every finding was independently verified against the current working tree before recording. No fixes applied yet.
+
+---
+
+## Audit Summary (2026-07-23 — external Codex audit, verified line-by-line)
+
+Verdict: **not production-ready for sensitive veteran data.** 1 critical + 7 high findings, all
+confirmed against current code on `fix/seed-documentation-content`. Remediation order recommended
+by the auditor: deletion/export lifecycle → VSO authorization scoping → invitation binding →
+protected media & storage → appeal-rule correction → encryption/AI/config hardening.
+
+### P0 — CRITICAL
+- [ ] **Account deletion is a no-op** — `accounts/views.py:262` promises permanent deletion in 30
+  days but only writes an `AuditLog` entry and logs the user out. No `deletion_scheduled_at` field
+  exists anywhere on the User model (verified by grep), no Celery task, no disablement, no cancel
+  mechanism — the user can log back in and all data remains. `AssistantTurn`'s PHI docstring
+  explicitly relies on account deletion existing. GDPR/stated-policy violation.
+
+### P1 — HIGH
+- [ ] **VSO: restricted caseworkers can act on other workers' cases** — `scope_cases_for_member`
+  (`vso/permissions.py:405`) is applied in only 4 places (dashboard case metrics, `case_list`
+  default branch, `case_detail`, `reports`). Org-only lookups (`pk=pk, organization=org`) let a
+  restricted caseworker who guesses a case ID hit: `case_update_status` (:744), `case_archive`
+  (:788), `add_case_note` (:833), `complete_action_item` (:872), `shared_document_review` (:976),
+  `case_notes_partial` (:1075), `case_documents_partial` (:1094), `start_appeal_from_case` (:1451),
+  and `bulk_case_action` (:569). Also: dashboard `recent_notes` (:234) queries by org only, and
+  `case_list`'s `archived=1` branch (:355-360) rebuilds the queryset without re-applying the scope.
+  Only bites when `restrict_caseworker_visibility` is on. *Distinct from the cross-org IDOR fixed
+  2026-02-11 — that fix (analysis queries in `shared_document_review`) is still in place.*
+- [ ] **Org invitations not bound to invited email** — `accounts/views.py:1145`: email mismatch
+  shows a warning on GET, but POST accepts anyway; `OrganizationInvitation.accept()`
+  (`accounts/models.py:686`) never checks email. Anyone with a forwarded/leaked admin or caseworker
+  invitation link can claim that role from any authenticated account.
+- [ ] **"Export my data" crashes for real users** — `accounts/views.py:150-182` reads
+  `claim.condition` / `claim.filed_date` (Claim has `title` / `submission_date` —
+  `claims/models.py:299`) and `appeal.condition` / `appeal.appeal_lane` (Appeal has
+  `conditions_appealed` / `appeal_type`). Any user with a claim or appeal gets a 500. Also
+  silently truncates at 1,000 records/category and omits/redacts data while calling itself a
+  complete export.
+- [ ] **Appeal documents: unsafe serving, deletion, and upload validation** —
+  `templates/appeals/partials/document_list.html:17` links `doc.file.url` directly (404 today;
+  auth bypass if media becomes public); `appeal_delete_document` (`appeals/views.py:487`)
+  deletes only the DB row, not the stored file; `AppealDocumentForm` (`appeals/forms.py:275`)
+  has no server-side type/size validation (client-side `accept=` only). Protected-media fix
+  exists on branch (PR #36) but is unmerged.
+- [ ] **S3 storage config is silently ignored** — `settings.py:523+` sets `DEFAULT_FILE_STORAGE`
+  and `STATICFILES_STORAGE`, both removed in Django ≥5.1 (project pins `Django>=5.2.13`); with
+  `USE_S3=True` Django still uses local `FileSystemStorage`. Must migrate to the `STORAGES` dict.
+  Additionally `claims/tasks.py:97` uses `document.file.path`, which remote storage doesn't support.
+- [ ] **Appeal eligibility wrongly blocks valid Supplemental Claims** — `appeals/forms.py:60`
+  (`clean_original_decision_date`) rejects any decision >1 year old before the user picks a lane,
+  but Supplemental Claims have no time limit (the model-level fix from 2026-02-11 covered
+  `Appeal.save()` only, not the intake form). The AI analyzer also stamps a blanket 1-year
+  `appeal_deadline` (`agents/services.py:314-323`).
+- [ ] **Sensitive narratives inconsistently encrypted** — `VeteranCase` narrative fields ARE
+  encrypted, but: `CaseNote.content` is plain `TextField` (`vso/models.py:254`), agent analyses
+  store conditions granted/denied as plain `JSONField` (`agents/models.py:88+`), and
+  `AssistantTurn.content` (PHI-flagged transcript, `agents/models.py:876+`) is plain `TextField`
+  whose deletion story depends on the nonexistent account deletion above.
+
+### P2 — from the same audit (some already tracked elsewhere in this file)
+- [ ] Legacy high-stakes AI analyses use `_parse_json_response` on unconstrained JSON instead of
+  the gateway's Pydantic `complete_structured` path (`agents/services.py:308`)
+- [ ] Redis/Celery TLS uses `ssl.CERT_NONE` (`settings.py:263`) — no cert verification
+- [ ] `VSO_MFA_REQUIRED` and `ADMIN_OTP_REQUIRED` both default False (`settings.py:660+`)
+- [ ] `HealthCheckMiddleware` intercepts `/health/` by path only (`core/middleware.py:26`), so
+  `/health/?full=1` never reaches the full-status view — detailed health check is unreachable
+  in production
+- [ ] Open-ended dependency pins: local Python resolves Django 6.0 while CI/prod (3.11) resolves
+  5.2 — pin an upper bound
+- [ ] CSP `unsafe-inline` + unpkg.com script-src (`settings.py:388`) — already tracked in P2 below
+- [ ] AGENTS.md:379 still says git-history scrub is pending — stale; scrub completed 2026-02-12
+  per this file. Credential rotation in DO Console genuinely still open.
+
+### Verification notes (2026-07-23)
+- All line references above re-checked against the working tree this date; none were stale.
+- Auditor ran: ruff pass, security-invariant script pass, 1013 passed / 112 setup errors (all
+  Playwright-not-installed, matching the known sandbox limitation; CI excludes E2E).
 
 ---
 
@@ -23,7 +100,12 @@ Tier 1 scans + 7-specialist review. Overall **3.4/5** (up from 2.9/5 on 2026-04-
 - [x] **Security tests: signed-URL expiry/tampering + encryption round-trip + GraphQL PII redaction** — `tests/test_security_controls.py` (18 tests) 2026-06-09.
 
 ### P2 — NEW (Fix before scaling)
-- [x] M21 scraper tasks lack acks_late/retry config — `acks_late=True` added to all 5 tasks in `agents/tasks.py` (2026-07-22)
+- [x] M21 scraper tasks lack acks_late/retry config — `acks_late=True` initially added to all 5 tasks
+  in `agents/tasks.py` (2026-07-22), then **partially reverted after peer review (2026-07-23)**:
+  `scrape_m21_bulk` creates/mutates a job record per run (not idempotent — Celery requires late-ack
+  tasks to be idempotent), so it and its two synchronous callers (`scrape_m21_all_known`,
+  `update_stale_m21_sections`) are back to early ack. `scrape_m21_section` (update_or_create) and
+  `build_m21_topic_indices` (get_or_create) are idempotent and keep `acks_late=True`.
 - [x] `core/health.py` except/pass hides Redis failure — now logs a warning instead of silently swallowing (2026-07-22)
 - [x] Download-anomaly alerts include user email — fixed 2026-06-09 (user ID only)
 - [ ] No per-user token-spend cap — `accounts/models.py:895` counts analyses, not tokens
