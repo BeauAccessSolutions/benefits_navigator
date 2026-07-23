@@ -1112,3 +1112,46 @@ class TestCaseNotePHIEncryptionAtRest(TestCase):
             raw = cursor.fetchone()[0]
         self.assertNotIn("suicidal", raw)
         self.assertEqual(FieldEncryption.decrypt(raw), secret)
+
+
+class TestMFAGraceEnd(TestCase):
+    """
+    compute_mfa_grace_end anchors the VSO MFA grace window to the later of
+    membership creation and the enforcement-start date, so turning MFA on
+    doesn't instantly lock out pre-existing staff.
+    """
+
+    def test_no_enforcement_start_anchors_to_membership(self):
+        from datetime import timedelta
+        from django.utils import timezone
+        from vso.middleware import compute_mfa_grace_end
+
+        joined = timezone.now() - timedelta(days=100)
+        end = compute_mfa_grace_end(joined, None, 7)
+        self.assertEqual(end, joined + timedelta(days=7))
+
+    def test_enforcement_start_later_than_membership_wins(self):
+        from datetime import timedelta
+        from django.utils import timezone
+        from vso.middleware import compute_mfa_grace_end
+
+        # Old member, enforcement turned on today -> fresh 7-day window from today.
+        joined = timezone.now() - timedelta(days=365)
+        today = timezone.now().date()
+        end = compute_mfa_grace_end(joined, today, 7)
+        self.assertGreater(end, timezone.now())  # not already elapsed
+
+    def test_enforcement_start_earlier_than_membership_uses_membership(self):
+        from datetime import timedelta
+        from django.utils import timezone
+        from vso.middleware import compute_mfa_grace_end
+
+        joined = timezone.now() - timedelta(days=2)
+        old_start = (timezone.now() - timedelta(days=400)).date()
+        end = compute_mfa_grace_end(joined, old_start, 7)
+        self.assertEqual(end, joined + timedelta(days=7))
+
+    def test_none_joined_returns_none(self):
+        from vso.middleware import compute_mfa_grace_end
+
+        self.assertIsNone(compute_mfa_grace_end(None, None, 7))

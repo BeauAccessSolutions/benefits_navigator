@@ -4,6 +4,7 @@ Django settings for benefits_navigator project.
 
 import os
 import sys
+from datetime import date
 from pathlib import Path
 import environ
 
@@ -682,11 +683,22 @@ RATELIMIT_USE_CACHE = "default"
 # VSO STAFF MFA
 # ==============================================================================
 # When VSO_MFA_REQUIRED is True, VSO staff without a confirmed 2FA device are
-# blocked from /vso/ pages after the grace period (measured from when their
-# staff membership was created) and redirected to 2FA setup.
-
-VSO_MFA_REQUIRED = env.bool("VSO_MFA_REQUIRED", default=False)
+# blocked from /vso/ pages after a grace period and redirected to 2FA setup.
+# MFA is HIPAA person/entity authentication (§164.312(d)); default ON.
+#
+# The grace window runs GRACE_PERIOD_DAYS from the LATER of each staffer's
+# membership creation and VSO_MFA_ENFORCEMENT_START. When turning enforcement on
+# for an org that already has staff, set VSO_MFA_ENFORCEMENT_START to the rollout
+# date (YYYY-MM-DD) so everyone gets a fresh window to enroll instead of being
+# blocked immediately (their membership predates the grace period). Leave it
+# unset on a fresh deployment (no pre-existing staff to strand).
+VSO_MFA_REQUIRED = env.bool("VSO_MFA_REQUIRED", default=True)
 VSO_MFA_GRACE_PERIOD_DAYS = env.int("VSO_MFA_GRACE_PERIOD_DAYS", default=7)
+
+_mfa_enforcement_start = env("VSO_MFA_ENFORCEMENT_START", default="")
+VSO_MFA_ENFORCEMENT_START = (
+    date.fromisoformat(_mfa_enforcement_start) if _mfa_enforcement_start else None
+)
 
 # When True, /admin requires a verified TOTP device (django-otp OTPAdminSite).
 # Enable in production once superusers have enrolled devices; bootstrapping a
