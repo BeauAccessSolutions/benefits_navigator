@@ -20,15 +20,17 @@ protected media & storage → appeal-rule correction → encryption/AI/config ha
   explicitly relies on account deletion existing. GDPR/stated-policy violation.
 
 ### P1 — HIGH
-- [ ] **VSO: restricted caseworkers can act on other workers' cases** — `scope_cases_for_member`
-  (`vso/permissions.py:405`) is applied in only 4 places (dashboard case metrics, `case_list`
-  default branch, `case_detail`, `reports`). Org-only lookups (`pk=pk, organization=org`) let a
-  restricted caseworker who guesses a case ID hit: `case_update_status` (:744), `case_archive`
-  (:788), `add_case_note` (:833), `complete_action_item` (:872), `shared_document_review` (:976),
-  `case_notes_partial` (:1075), `case_documents_partial` (:1094), `start_appeal_from_case` (:1451),
-  and `bulk_case_action` (:569). Also: dashboard `recent_notes` (:234) queries by org only, and
-  `case_list`'s `archived=1` branch (:355-360) rebuilds the queryset without re-applying the scope.
-  Only bites when `restrict_caseworker_visibility` is on. *Distinct from the cross-org IDOR fixed
+- [x] **VSO: restricted caseworkers can act on other workers' cases** — Fixed 2026-07-23. Added
+  `get_scoped_case_or_404()` (`vso/permissions.py`), which applies the org filter **and**
+  `scope_cases_for_member`; every case-by-pk endpoint now routes through it (`case_detail`,
+  `case_update_status`, `case_archive`, `add_case_note`, `complete_action_item`,
+  `shared_document_review`, `case_notes_partial`, `case_documents_partial`, `start_appeal_from_case`,
+  `evidence_packet_builder`). `bulk_case_action` scopes its `pk__in` queryset; dashboard
+  `recent_notes` filters through scoped cases; `case_list`'s `archived=1` branch re-applies the
+  scope. Tests: parameterized 404 suite over every endpoint + AST meta-test that fails on any raw
+  `get_object_or_404(VeteranCase)` / `VeteranCase.objects` pk lookup in `vso/views.py`
+  (`TestIntraOrgCaseworkerIsolation`, `TestScopedCaseHelper`,
+  `test_no_unscoped_case_by_pk_lookups_in_views`). *Distinct from the cross-org IDOR fixed
   2026-02-11 — that fix (analysis queries in `shared_document_review`) is still in place.*
 - [ ] **Org invitations not bound to invited email** — `accounts/views.py:1145`: email mismatch
   shows a warning on GET, but POST accepts anyway; `OrganizationInvitation.accept()`

@@ -1155,3 +1155,254 @@ class TestMFAGraceEnd(TestCase):
         from vso.middleware import compute_mfa_grace_end
 
         self.assertIsNone(compute_mfa_grace_end(None, None, 7))
+
+
+# =============================================================================
+# INTRA-ORG AUTHORIZATION TESTS (Phase 1.1)
+# =============================================================================
+# A restricted caseworker must not be able to act on a COLLEAGUE'S case in the
+# same org by guessing/enumerating its id. This is INTRA-org isolation, distinct
+# from the cross-org IDOR fixed 2026-02-11 (see TestCrossOrgSecurity above).
+
+# Every case-by-pk endpoint, with the HTTP method that reaches the case lookup
+# and a builder for its URL args. Parameterizing over this list means a newly
+# added case endpoint that forgets get_scoped_case_or_404 will fail the negative
+# suite the moment its row is added here.
+INTRA_ORG_CASE_ENDPOINTS = [
+    ("vso:case_detail", "get", lambda case: [case.pk]),
+    ("vso:case_update_status", "post", lambda case: [case.pk]),
+    ("vso:case_archive", "post", lambda case: [case.pk]),
+    ("vso:add_case_note", "post", lambda case: [case.pk]),
+    ("vso:complete_action_item", "post", lambda case: [case.pk, 999999]),
+    ("vso:shared_document_review", "get", lambda case: [case.pk, 999999]),
+    ("vso:case_notes_partial", "get", lambda case: [case.pk]),
+    ("vso:case_documents_partial", "get", lambda case: [case.pk]),
+    ("vso:start_appeal", "post", lambda case: [case.pk]),
+    ("vso:evidence_packet", "get", lambda case: [case.pk]),
+]
+
+
+@pytest.mark.django_db
+class TestIntraOrgCaseworkerIsolation:
+    """
+    In an org with restrict_caseworker_visibility=True, a restricted caseworker
+    sees only cases assigned to them or unassigned. These tests prove that
+    least-privilege scoping is enforced on EVERY case-by-pk endpoint, not just
+    the list/detail views, closing the intra-org authorization gap.
+    """
+
+    @pytest.fixture(autouse=True)
+    def setup(self, db):
+        from vso.models import VeteranCase
+
+        self.org = Organization.objects.create(
+            name="Restricted Org",
+            slug="restricted-org",
+            org_type="vso",
+            restrict_caseworker_visibility=True,
+        )
+        self.worker_a = User.objects.create_user(
+            email="worker_a@example.com", password="TestPass123!"
+        )
+        self.worker_b = User.objects.create_user(
+            email="worker_b@example.com", password="TestPass123!"
+        )
+        self.veteran = User.objects.create_user(
+            email="vet_intra@example.com", password="TestPass123!"
+        )
+        for worker in (self.worker_a, self.worker_b):
+            OrganizationMembership.objects.create(
+                user=worker,
+                organization=self.org,
+                role="caseworker",
+                is_active=True,
+            )
+        # Case assigned to worker B. Worker A is a restricted, unassigned peer.
+        self.case_b = VeteranCase.objects.create(
+            organization=self.org,
+            veteran=self.veteran,
+            assigned_to=self.worker_b,
+            title="Worker B's case",
+            status="intake",
+        )
+
+    @pytest.mark.parametrize("url_name,method,args_fn", INTRA_ORG_CASE_ENDPOINTS)
+    def test_restricted_worker_cannot_reach_colleague_case(
+        self, client, url_name, method, args_fn
+    ):
+        """Worker A (restricted) is scoped out of Worker B's case everywhere."""
+        client.login(email="worker_a@example.com", password="TestPass123!")
+        url = reverse(url_name, args=args_fn(self.case_b))
+        response = getattr(client, method)(url)
+        # 404 = scoped out, indistinguishable from "does not exist". A redirect
+        # is only acceptable if it does NOT land back on the target case.
+        assert response.status_code in (
+            404,
+            302,
+        ), f"{url_name} returned {response.status_code}; expected 404 or 302"
+        if response.status_code == 302:
+            assert f"/{self.case_b.pk}/" not in response.url
+
+    def test_assigned_worker_can_reach_own_case(self, client):
+        """Regression: the ASSIGNED worker is not over-blocked by scoping."""
+        client.login(email="worker_b@example.com", password="TestPass123!")
+        url = reverse("vso:case_detail", args=[self.case_b.pk])
+        response = client.get(url)
+        assert response.status_code == 200
+
+    def test_admin_in_restricted_org_can_reach_any_case(self, client):
+        """Regression: admins bypass caseworker visibility restrictions."""
+        admin = User.objects.create_user(
+            email="admin_intra@example.com", password="TestPass123!"
+        )
+        OrganizationMembership.objects.create(
+            user=admin, organization=self.org, role="admin", is_active=True
+        )
+        client.login(email="admin_intra@example.com", password="TestPass123!")
+        response = client.get(reverse("vso:case_detail", args=[self.case_b.pk]))
+        assert response.status_code == 200
+
+    def test_unrestricted_org_worker_can_reach_colleague_case(self, client):
+        """Regression: without the flag, caseworkers see all org cases."""
+        from vso.models import VeteranCase
+
+        open_org = Organization.objects.create(
+            name="Open Org",
+            slug="open-org",
+            org_type="vso",
+            restrict_caseworker_visibility=False,
+        )
+        worker_c = User.objects.create_user(
+            email="worker_c@example.com", password="TestPass123!"
+        )
+        worker_d = User.objects.create_user(
+            email="worker_d@example.com", password="TestPass123!"
+        )
+        vet = User.objects.create_user(
+            email="vet_open@example.com", password="TestPass123!"
+        )
+        for worker in (worker_c, worker_d):
+            OrganizationMembership.objects.create(
+                user=worker, organization=open_org, role="caseworker", is_active=True
+            )
+        case_d = VeteranCase.objects.create(
+            organization=open_org,
+            veteran=vet,
+            assigned_to=worker_d,
+            title="Worker D's case",
+            status="intake",
+        )
+        client.login(email="worker_c@example.com", password="TestPass123!")
+        response = client.get(reverse("vso:case_detail", args=[case_d.pk]))
+        assert response.status_code == 200
+
+
+@pytest.mark.django_db
+class TestScopedCaseHelper:
+    """Unit tests for get_scoped_case_or_404 (the single sanctioned lookup)."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self, db):
+        from vso.models import VeteranCase
+
+        self.org = Organization.objects.create(
+            name="Helper Org",
+            slug="helper-org",
+            org_type="vso",
+            restrict_caseworker_visibility=True,
+        )
+        self.worker_a = User.objects.create_user(email="ha@example.com", password="x")
+        self.worker_b = User.objects.create_user(email="hb@example.com", password="x")
+        self.vet = User.objects.create_user(email="hv@example.com", password="x")
+        for worker in (self.worker_a, self.worker_b):
+            OrganizationMembership.objects.create(
+                user=worker, organization=self.org, role="caseworker", is_active=True
+            )
+        self.case_b = VeteranCase.objects.create(
+            organization=self.org,
+            veteran=self.vet,
+            assigned_to=self.worker_b,
+            title="B",
+            status="intake",
+        )
+        self.case_unassigned = VeteranCase.objects.create(
+            organization=self.org,
+            veteran=self.vet,
+            assigned_to=None,
+            title="Unassigned",
+            status="intake",
+        )
+
+    def test_restricted_worker_gets_404_for_colleague_case(self):
+        from django.http import Http404
+        from vso.permissions import get_scoped_case_or_404
+
+        with pytest.raises(Http404):
+            get_scoped_case_or_404(self.worker_a, self.org, self.case_b.pk)
+
+    def test_assigned_worker_gets_own_case(self):
+        from vso.permissions import get_scoped_case_or_404
+
+        case = get_scoped_case_or_404(self.worker_b, self.org, self.case_b.pk)
+        assert case.pk == self.case_b.pk
+
+    def test_restricted_worker_can_see_unassigned_case(self):
+        from vso.permissions import get_scoped_case_or_404
+
+        case = get_scoped_case_or_404(self.worker_a, self.org, self.case_unassigned.pk)
+        assert case.pk == self.case_unassigned.pk
+
+    def test_none_org_raises_404(self):
+        from django.http import Http404
+        from vso.permissions import get_scoped_case_or_404
+
+        with pytest.raises(Http404):
+            get_scoped_case_or_404(self.worker_a, None, self.case_b.pk)
+
+
+@pytest.mark.django_db
+def test_no_unscoped_case_by_pk_lookups_in_views():
+    """
+    Meta-test / tripwire: no VSO view may look a case up by pk through a raw,
+    org-only queryset. Every case-by-pk access MUST go through
+    get_scoped_case_or_404 (which applies scope_cases_for_member). This catches
+    future endpoints that reintroduce the intra-org authorization gap.
+    """
+    import ast
+    from pathlib import Path
+
+    import vso.views
+
+    source = Path(vso.views.__file__).read_text()
+    tree = ast.parse(source)
+
+    def leftmost_name(node):
+        while isinstance(node, (ast.Attribute, ast.Call, ast.Subscript)):
+            if isinstance(node, ast.Call):
+                node = node.func
+            else:
+                node = node.value
+        return node.id if isinstance(node, ast.Name) else None
+
+    offenders = []
+    for call in ast.walk(tree):
+        if not isinstance(call, ast.Call):
+            continue
+        func = call.func
+        fname = (
+            func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
+        )
+        # get_object_or_404(VeteranCase..., pk=...) — bare model / manager lookup
+        if fname == "get_object_or_404" and call.args:
+            if leftmost_name(call.args[0]) == "VeteranCase":
+                offenders.append(("get_object_or_404", call.lineno))
+        # VeteranCase.objects...filter/get(pk=... / pk__in=...) not via scope
+        if fname in {"filter", "get"} and leftmost_name(func) == "VeteranCase":
+            kwargs = {kw.arg for kw in call.keywords}
+            if "pk" in kwargs or "pk__in" in kwargs:
+                offenders.append((fname, call.lineno))
+
+    assert not offenders, (
+        "Unscoped case-by-pk lookups found in vso/views.py "
+        f"(route them through get_scoped_case_or_404): {offenders}"
+    )
