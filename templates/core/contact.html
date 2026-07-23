@@ -45,6 +45,7 @@
                        name="name"
                        value="{{ user_name|default:form_data.name|default:'' }}"
                        required
+                       aria-required="true"
                        class="w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
             </div>
 
@@ -58,6 +59,7 @@
                        name="email"
                        value="{{ user_email|default:form_data.email|default:'' }}"
                        required
+                       aria-required="true"
                        class="w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
             </div>
 
@@ -87,6 +89,7 @@
                        name="subject"
                        value="{{ form_data.subject|default:'' }}"
                        required
+                       aria-required="true"
                        placeholder="Brief description of your question or issue"
                        class="w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
             </div>
@@ -100,6 +103,7 @@
                           name="message"
                           rows="6"
                           required
+                          aria-required="true"
                           placeholder="Please describe your question, issue, or suggestion in detail..."
                           class="w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">{{ form_data.message|default:'' }}</textarea>
             </div>

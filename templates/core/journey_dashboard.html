@@ -81,7 +81,7 @@
                     </button>
                 </div>
 
-                <div id="timeline-content">
+                <div id="timeline-content" aria-live="polite" aria-atomic="false">
                     {% include 'core/partials/journey_timeline.html' %}
                 </div>
             </div>
@@ -102,7 +102,7 @@
                 {% if deadlines %}
                 <div class="divide-y divide-gray-200">
                     {% for deadline in deadlines %}
-                    <div id="deadline-{{ deadline.pk }}" class="p-4">
+                    <div id="deadline-{{ deadline.pk }}" class="p-4" aria-live="polite" aria-atomic="false">
                         {% include 'core/partials/deadline_item.html' %}
                     </div>
                     {% endfor %}

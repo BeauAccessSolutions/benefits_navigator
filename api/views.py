@@ -8,6 +8,8 @@ Provides endpoints for mobile app authentication:
 - /api/v1/auth/me/ - Get current user info
 """
 
+import logging
+
 from django.contrib.auth import get_user_model
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
@@ -21,6 +23,8 @@ from rest_framework_simplejwt.views import (
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 from core.models import AuditLog
+
+logger = logging.getLogger(__name__)
 
 User = get_user_model()
 
@@ -63,7 +67,9 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
                 success=True,
             )
         except Exception:
-            pass  # Don't fail login if audit log fails
+            # Don't fail login if audit logging fails, but a failure here
+            # is a security-relevant blind spot — it must not be silent.
+            logger.exception("Failed to write audit log for api_login")
 
         return data
 
@@ -236,7 +242,7 @@ def logout(request):
                 success=True,
             )
         except Exception:
-            pass
+            logger.exception("Failed to write audit log for api_logout")
 
         return Response({"message": "Successfully logged out"})
     except TokenError:

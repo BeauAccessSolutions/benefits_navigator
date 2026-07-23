@@ -292,6 +292,61 @@ class TestLogout:
 
 
 @pytest.mark.django_db
+class TestAuditLogFailureIsNotSilent:
+    """
+    Login/logout wrap their AuditLog.objects.create() call in try/except so
+    a broken audit log can't block auth — but TODO.md flagged that failure
+    as a completely silent `except: pass`, which is a security blind spot.
+    It must now be logged (and auth must still succeed) instead of vanishing.
+    """
+
+    def test_login_succeeds_and_logs_when_audit_log_write_fails(
+        self, api_client, user, monkeypatch, caplog
+    ):
+        from core.models import AuditLog
+
+        def boom(*args, **kwargs):
+            raise RuntimeError("simulated audit log outage")
+
+        monkeypatch.setattr(AuditLog.objects, "create", boom)
+
+        with caplog.at_level("ERROR"):
+            response = api_client.post(
+                reverse("api:token_obtain"),
+                {"email": "testuser@example.com", "password": "testpass123"},
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert any("audit log" in record.message.lower() for record in caplog.records)
+
+    def test_logout_succeeds_and_logs_when_audit_log_write_fails(
+        self, api_client, user, monkeypatch, caplog
+    ):
+        from core.models import AuditLog
+
+        obtain_response = api_client.post(
+            reverse("api:token_obtain"),
+            {"email": "testuser@example.com", "password": "testpass123"},
+        )
+        access_token = obtain_response.data["access"]
+        refresh_token = obtain_response.data["refresh"]
+
+        def boom(*args, **kwargs):
+            raise RuntimeError("simulated audit log outage")
+
+        monkeypatch.setattr(AuditLog.objects, "create", boom)
+        api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {access_token}")
+
+        with caplog.at_level("ERROR"):
+            response = api_client.post(
+                reverse("api:logout"), {"refresh": refresh_token}
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert any("audit log" in record.message.lower() for record in caplog.records)
+
+
+@pytest.mark.django_db
 class TestGraphQLWithJWT:
     """Tests for GraphQL endpoint with JWT authentication."""
 

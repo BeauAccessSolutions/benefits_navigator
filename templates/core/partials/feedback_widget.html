@@ -17,7 +17,7 @@ Usage: {% include 'core/partials/feedback_widget.html' with page_title="Page Nam
     </button>
 
     <!-- Expanded State - Quick Rating -->
-    <div id="feedback-expanded" class="hidden bg-white rounded-lg shadow-xl border border-gray-200 p-4 w-72">
+    <div id="feedback-expanded" class="hidden bg-white rounded-lg shadow-xl border border-gray-200 p-4 w-72" aria-live="polite" aria-atomic="false">
         <div class="flex justify-between items-start mb-3">
             <h4 class="text-sm font-semibold text-gray-900">Was this page helpful?</h4>
             <button onclick="document.getElementById('feedback-expanded').classList.add('hidden'); document.getElementById('feedback-collapsed').classList.remove('hidden');"

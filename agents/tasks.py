@@ -20,7 +20,7 @@ from agents.knowva_scraper import KnowVAScraper, KNOWN_ARTICLE_IDS
 logger = logging.getLogger(__name__)
 
 
-@shared_task(bind=True, max_retries=3)
+@shared_task(bind=True, max_retries=3, acks_late=True)
 def scrape_m21_section(self, article_id: str, force_update: bool = False):
     """
     Scrape a single M21-1 section.
@@ -83,6 +83,12 @@ def scrape_m21_section(self, article_id: str, force_update: bool = False):
         raise self.retry(exc=e, countdown=retry_delay)
 
 
+# NOT acks_late: this task creates a fresh M21ScrapeJob and mutates its progress
+# incrementally, so it is not idempotent — redelivery after a worker crash would
+# strand the original job in "running", create a duplicate, and repeat forced
+# scrapes. Celery requires late-ack tasks to be idempotent. Early ack means a
+# crash loses the message instead, which is acceptable for re-runnable
+# reference-content scrapes (no user data).
 @shared_task
 def scrape_m21_bulk(article_ids: list, force_update: bool = False):
     """
@@ -187,6 +193,8 @@ def scrape_m21_bulk(article_ids: list, force_update: bool = False):
     }
 
 
+# NOT acks_late: calls scrape_m21_bulk() synchronously, inheriting its
+# non-idempotency (see comment there).
 @shared_task
 def scrape_m21_all_known():
     """
@@ -198,6 +206,8 @@ def scrape_m21_all_known():
     return scrape_m21_bulk(article_ids, force_update=False)
 
 
+# NOT acks_late: calls scrape_m21_bulk() synchronously, inheriting its
+# non-idempotency (see comment there).
 @shared_task
 def update_stale_m21_sections(days_old: int = 30):
     """
@@ -222,7 +232,7 @@ def update_stale_m21_sections(days_old: int = 30):
         return {"status": "no_updates_needed"}
 
 
-@shared_task
+@shared_task(acks_late=True)
 def build_m21_topic_indices():
     """
     Build/rebuild topic-based indices for M21 sections.

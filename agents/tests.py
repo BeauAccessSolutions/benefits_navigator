@@ -1155,3 +1155,91 @@ class TestAIConsentEnforcement(TestCase):
         # Should return False, not raise exception
         result = check_ai_consent(new_user)
         self.assertFalse(result)
+
+
+# =============================================================================
+# DISCLAIMER COVERAGE TESTS
+# =============================================================================
+
+
+@pytest.mark.agent
+class TestStatementGeneratorDisclaimer(TestCase):
+    """Personal statement pages must carry the 'not legal advice' disclaimer (TODO.md P1)."""
+
+    def setUp(self):
+        self.client = Client()
+        self.user = User.objects.create_user(
+            email="disclaimer_test@example.com", password="TestPass123!"
+        )
+        self.user.profile.ai_processing_consent = True
+        self.user.profile.save()
+        self.client.login(
+            username="disclaimer_test@example.com", password="TestPass123!"
+        )
+
+    def test_statement_generator_form_shows_disclaimer(self):
+        """The statement generator form page shows the educational-use disclaimer."""
+        response = self.client.get(reverse("agents:statement_generator"))
+        self.assertContains(response, "Educational use only")
+        self.assertContains(response, "not legal advice")
+
+    def test_statement_result_shows_disclaimer(self):
+        """The generated statement result page shows the educational-use disclaimer."""
+        interaction = AgentInteraction.objects.create(
+            user=self.user, agent_type="statement_generator"
+        )
+        statement = PersonalStatement.objects.create(
+            interaction=interaction,
+            user=self.user,
+            condition="Tinnitus",
+            generated_statement="During my service, I was exposed to loud noise.",
+        )
+        response = self.client.get(
+            reverse("agents:statement_result", args=[statement.pk])
+        )
+        self.assertContains(response, "Educational use only")
+        self.assertContains(response, "not legal advice")
+
+
+# =============================================================================
+# M21 TASK RELIABILITY (TODO.md P2: acks_late missing on scraper tasks)
+# =============================================================================
+
+
+class TestM21TaskAcksLate(TestCase):
+    """
+    Celery requires late-ack tasks to be idempotent, because redelivery
+    after a worker crash re-runs them from the top. Only the M21 tasks
+    whose writes are keyed upserts (update_or_create / get_or_create) may
+    set acks_late; scrape_m21_bulk creates and incrementally mutates a
+    fresh M21ScrapeJob per run, so it — and the tasks that call it
+    synchronously — must ack early or redelivery would strand the original
+    job in "running" and duplicate scrapes.
+    """
+
+    def test_idempotent_m21_tasks_have_acks_late(self):
+        from agents.tasks import scrape_m21_section, build_m21_topic_indices
+
+        for task in (scrape_m21_section, build_m21_topic_indices):
+            self.assertTrue(
+                task.acks_late,
+                f"{task.name} is idempotent and must set acks_late=True",
+            )
+
+    def test_non_idempotent_m21_tasks_ack_early(self):
+        from agents.tasks import (
+            scrape_m21_bulk,
+            scrape_m21_all_known,
+            update_stale_m21_sections,
+        )
+
+        for task in (
+            scrape_m21_bulk,
+            scrape_m21_all_known,
+            update_stale_m21_sections,
+        ):
+            self.assertFalse(
+                task.acks_late,
+                f"{task.name} is not idempotent (creates/mutates a scrape "
+                f"job per run) and must NOT set acks_late",
+            )

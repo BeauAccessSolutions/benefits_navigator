@@ -3,6 +3,7 @@ Template tags for displaying supportive messages to veterans.
 """
 
 from django import template
+from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from core.models import SupportiveMessage
 
@@ -65,17 +66,26 @@ def supportive_message(context, css_class=""):
     tone_class = TONE_COLORS.get(message.tone, TONE_COLORS["encouraging"])
     icon_color = TONE_ICON_COLORS.get(message.tone, "text-blue-500")
 
-    html = f"""
-    <div class="supportive-message rounded-lg border p-4 {tone_class} {css_class}">
-        <div class="flex items-start gap-3">
-            <div class="flex-shrink-0 {icon_color}">
-                {icon_svg}
+    # message.message is DB content (editable via admin) — it must be
+    # auto-escaped like any other user-facing text. Only icon_svg is a
+    # trusted, hardcoded constant from ICON_MAP, so it alone is marked safe.
+    return format_html(
+        """
+        <div class="supportive-message rounded-lg border p-4 {} {}">
+            <div class="flex items-start gap-3">
+                <div class="flex-shrink-0 {}">
+                    {}
+                </div>
+                <p class="text-sm font-medium">{}</p>
             </div>
-            <p class="text-sm font-medium">{message.message}</p>
         </div>
-    </div>
-    """
-    return mark_safe(html)
+        """,
+        tone_class,
+        css_class,
+        icon_color,
+        mark_safe(icon_svg),
+        message.message,
+    )
 
 
 @register.inclusion_tag("core/partials/supportive_message.html", takes_context=True)

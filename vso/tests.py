@@ -7,6 +7,8 @@ Covers:
 - VSO dashboard and case management permissions
 """
 
+from unittest import mock
+
 import pytest
 from django.test import TestCase
 from django.urls import reverse
@@ -609,6 +611,193 @@ class TestGapCheckerService(TestCase):
         # With only granted condition, should return needs_review
         label = self.GapCheckerService.get_triage_label(self.case)
         self.assertEqual(label, "needs_review")
+
+
+# =============================================================================
+# CASE LIST N+1 REGRESSION TEST (TODO.md P1: vso/views.py triage-per-case)
+# =============================================================================
+
+
+class TestCaseListQueryCount(TestCase):
+    """
+    case_list() runs GapCheckerService.get_triage_label() over every case in
+    the org. That must not issue a fresh query per case (N+1) — query count
+    should stay flat as the case count grows.
+    """
+
+    def setUp(self):
+        from vso.models import VeteranCase, CaseCondition
+
+        self.org = Organization.objects.create(
+            name="Query Count VSO",
+            slug="query-count-vso",
+            org_type="vso",
+        )
+        self.staff = User.objects.create_user(
+            email="qc_staff@example.com", password="TestPass123!"
+        )
+        OrganizationMembership.objects.create(
+            user=self.staff,
+            organization=self.org,
+            role="admin",
+            is_active=True,
+        )
+        self.VeteranCase = VeteranCase
+        self.CaseCondition = CaseCondition
+        self.client.login(username="qc_staff@example.com", password="TestPass123!")
+        self._vet_counter = 0
+
+    def _create_cases(self, count):
+        for _ in range(count):
+            self._vet_counter += 1
+            veteran = User.objects.create_user(
+                email=f"qc_vet{self._vet_counter}@example.com", password="TestPass123!"
+            )
+            case = self.VeteranCase.objects.create(
+                organization=self.org,
+                veteran=veteran,
+                title=f"QC Case {self._vet_counter}",
+                status="gathering_evidence",
+            )
+            self.CaseCondition.objects.create(
+                case=case,
+                condition_name="PTSD",
+                workflow_status="gathering_evidence",
+                has_diagnosis=True,
+                has_in_service_event=True,
+                has_nexus=False,
+            )
+
+    def test_query_count_does_not_scale_with_case_count(self):
+        """Query count for 2 cases should match query count for 8 cases.
+
+        Each request uses a fresh, freshly-logged-in client so that
+        session-level caching (e.g. org-membership lookups cached after the
+        first request) can't mask or fake a query-count difference — the
+        only thing that should vary between the two requests is case count.
+        """
+        from django.test import Client
+        from django.test.utils import CaptureQueriesContext
+        from django.db import connection
+
+        self._create_cases(2)
+        small_client = Client()
+        small_client.login(username="qc_staff@example.com", password="TestPass123!")
+        with CaptureQueriesContext(connection) as small:
+            small_client.get(reverse("vso:case_list"))
+
+        self._create_cases(6)
+
+        large_client = Client()
+        large_client.login(username="qc_staff@example.com", password="TestPass123!")
+        with CaptureQueriesContext(connection) as large:
+            large_client.get(reverse("vso:case_list"))
+
+        self.assertEqual(
+            len(small.captured_queries),
+            len(large.captured_queries),
+            "case_list query count scaled with case count — N+1 regression",
+        )
+
+
+# =============================================================================
+# ACCEPT INVITATION ATOMICITY TESTS (TODO.md P1: transaction.atomic)
+# =============================================================================
+
+
+class TestAcceptInvitationAtomicity(TestCase):
+    """
+    accept_invitation() does 3 writes (accept invitation, create case, create
+    milestone note). They must succeed or fail together — a failure partway
+    through must not leave an accepted invitation with no case.
+    """
+
+    def setUp(self):
+        from accounts.models import OrganizationInvitation
+
+        self.org = Organization.objects.create(
+            name="Atomic Test VSO",
+            slug="atomic-test-vso",
+            org_type="vso",
+        )
+        self.caseworker = User.objects.create_user(
+            email="atomic_caseworker@example.com", password="TestPass123!"
+        )
+        self.veteran = User.objects.create_user(
+            email="atomic_veteran@example.com", password="TestPass123!"
+        )
+        self.invitation = OrganizationInvitation.objects.create(
+            organization=self.org,
+            email=self.veteran.email,
+            role="veteran",
+            invited_by=self.caseworker,
+        )
+        self.client.login(
+            username="atomic_veteran@example.com", password="TestPass123!"
+        )
+
+    def _seed_pending_case_session(self):
+        session = self.client.session
+        session[f"pending_case_{self.invitation.token}"] = {
+            "title": "Atomic Test Case",
+            "description": "",
+            "priority": "normal",
+            "invited_by_id": self.caseworker.id,
+        }
+        session.save()
+
+    def test_accept_creates_membership_case_and_note_together(self):
+        """Happy path: invitation, case, and note are all created."""
+        from accounts.models import OrganizationMembership
+        from vso.models import VeteranCase, CaseNote
+
+        self._seed_pending_case_session()
+        response = self.client.post(
+            reverse("vso:accept_invitation", args=[self.invitation.token])
+        )
+        self.assertEqual(response.status_code, 302)
+
+        self.invitation.refresh_from_db()
+        self.assertIsNotNone(self.invitation.accepted_at)
+        self.assertTrue(
+            OrganizationMembership.objects.filter(
+                user=self.veteran, organization=self.org
+            ).exists()
+        )
+        case = VeteranCase.objects.get(organization=self.org, veteran=self.veteran)
+        self.assertTrue(
+            CaseNote.objects.filter(case=case, note_type="milestone").exists()
+        )
+
+    def test_failure_creating_note_rolls_back_invitation_and_case(self):
+        """
+        If the note creation fails, the invitation must not be left
+        accepted and no orphan case should exist — proves the 3 writes
+        share one transaction instead of partially committing.
+        """
+        from accounts.models import OrganizationMembership
+        from vso.models import VeteranCase, CaseNote
+
+        self._seed_pending_case_session()
+
+        with mock.patch(
+            "vso.views.CaseNote.objects.create",
+            side_effect=RuntimeError("simulated failure"),
+        ):
+            with self.assertRaises(RuntimeError):
+                self.client.post(
+                    reverse("vso:accept_invitation", args=[self.invitation.token])
+                )
+
+        self.invitation.refresh_from_db()
+        self.assertIsNone(self.invitation.accepted_at)
+        self.assertFalse(
+            OrganizationMembership.objects.filter(
+                user=self.veteran, organization=self.org
+            ).exists()
+        )
+        self.assertFalse(VeteranCase.objects.filter(organization=self.org).exists())
+        self.assertFalse(CaseNote.objects.exists())
 
 
 # =============================================================================

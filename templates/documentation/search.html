@@ -51,7 +51,7 @@
     </div>
 
     <!-- Search Results -->
-    <div id="search-results">
+    <div id="search-results" aria-live="polite" aria-atomic="false">
         {% if query %}
             {% if has_results %}
                 {% include 'documentation/partials/search_results.html' %}

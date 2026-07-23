@@ -273,7 +273,7 @@
                         </span>
                     </td>
                     <td class="px-6 py-4 text-sm text-gray-500">
-                        {{ case.assigned_to.get_full_name|default:case.assigned_to.email|default:"Unassigned" }}
+                        {% if case.assigned_to %}{{ case.assigned_to.get_full_name|default:case.assigned_to.email }}{% else %}Unassigned{% endif %}
                     </td>
                     <td class="px-6 py-4 text-sm text-gray-500">
                         {% if case.is_overdue %}

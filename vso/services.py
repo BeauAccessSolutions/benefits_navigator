@@ -190,11 +190,17 @@ class GapCheckerService:
         Returns:
             One of: 'ready_to_file', 'needs_evidence', 'needs_nexus', 'needs_review'
         """
-        conditions = case.case_conditions.exclude(
-            workflow_status__in=["granted", "denied", "claim_filed", "pending_decision"]
-        )
+        # Filter in Python (not .exclude() on the manager) so this respects
+        # prefetch_related("case_conditions") instead of issuing a fresh
+        # query per case when called in a loop over many cases.
+        excluded_statuses = {"granted", "denied", "claim_filed", "pending_decision"}
+        conditions = [
+            c
+            for c in case.case_conditions.all()
+            if c.workflow_status not in excluded_statuses
+        ]
 
-        if not conditions.exists():
+        if not conditions:
             return GapCheckerService.NEEDS_REVIEW
 
         # Check evidence completeness across all active conditions

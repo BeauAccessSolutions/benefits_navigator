@@ -37,7 +37,7 @@
                             <span class="block text-sm font-medium text-gray-900">{{ case.title }}</span>
                             <span class="block text-sm text-gray-500">{{ case.organization.name }}</span>
                             <span class="block text-xs text-gray-400 mt-1">
-                                Caseworker: {{ case.assigned_to.get_full_name|default:case.assigned_to.email|default:"Unassigned" }}
+                                Caseworker: {% if case.assigned_to %}{{ case.assigned_to.get_full_name|default:case.assigned_to.email }}{% else %}Unassigned{% endif %}
                             </span>
                         </div>
                         <span class="ml-auto inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">

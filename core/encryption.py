@@ -80,7 +80,7 @@ class FieldEncryption:
     def _get_fernet(cls) -> Fernet:
         """Get or create Fernet instance."""
         key = _get_encryption_key()
-        key_hash = hashlib.md5(key).hexdigest()
+        key_hash = hashlib.md5(key, usedforsecurity=False).hexdigest()
 
         # Invalidate cache if key changed (useful for testing)
         if cls._fernet is None or cls._key_hash != key_hash:
