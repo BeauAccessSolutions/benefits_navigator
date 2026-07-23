@@ -17,7 +17,7 @@ Covers:
 import pytest
 from datetime import date, timedelta
 
-from django.test import TestCase, Client, RequestFactory
+from django.test import TestCase, Client, RequestFactory, override_settings
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 
@@ -1999,3 +1999,76 @@ class TestCheckCeleryHealthLogsRedisFailure(TestCase):
         self.assertTrue(
             any("queue length" in message.lower() for message in logs.output)
         )
+
+# =============================================================================
+# IDLE SESSION TIMEOUT MIDDLEWARE TESTS (HIPAA automatic logoff)
+# =============================================================================
+
+
+@pytest.mark.django_db
+class TestIdleSessionTimeoutMiddleware:
+    """
+    Automatic logoff after inactivity — HIPAA Security Rule §164.312(a)(2)(iii).
+    """
+
+    URL_NAME = "accounts:privacy_settings"
+
+    def test_active_session_is_not_logged_out(self, authenticated_client):
+        """A session used within the timeout window stays authenticated."""
+        url = reverse(self.URL_NAME)
+        assert authenticated_client.get(url).status_code == 200
+        # Immediately again — well within the idle window.
+        assert authenticated_client.get(url).status_code == 200
+
+    def test_idle_session_is_logged_out(self, authenticated_client):
+        """A session idle past the timeout is logged out and redirected."""
+        import time
+        from core.middleware import IDLE_ACTIVITY_KEY
+
+        url = reverse(self.URL_NAME)
+        authenticated_client.get(url)  # establishes activity marker
+
+        session = authenticated_client.session
+        session[IDLE_ACTIVITY_KEY] = int(time.time()) - 3600  # 1h ago > 30m default
+        session.save()
+
+        response = authenticated_client.get(url)
+        assert response.status_code == 302
+        assert "/accounts/login/" in response.url
+
+        # The session was flushed — a follow-up request is anonymous.
+        follow = authenticated_client.get(url)
+        assert follow.status_code == 302  # login-required redirect
+
+    def test_htmx_idle_gets_hx_redirect(self, authenticated_client):
+        """HTMX requests get a 204 + HX-Redirect instead of a body redirect."""
+        import time
+        from core.middleware import IDLE_ACTIVITY_KEY
+
+        url = reverse(self.URL_NAME)
+        authenticated_client.get(url)
+
+        session = authenticated_client.session
+        session[IDLE_ACTIVITY_KEY] = int(time.time()) - 3600
+        session.save()
+
+        response = authenticated_client.get(url, HTTP_HX_REQUEST="true")
+        assert response.status_code == 204
+        assert response["HX-Redirect"] == "/accounts/login/"
+
+    @override_settings(SESSION_IDLE_TIMEOUT=0)
+    def test_timeout_zero_disables_logoff(self, authenticated_client):
+        """SESSION_IDLE_TIMEOUT=0 disables automatic logoff entirely."""
+        import time
+        from core.middleware import IDLE_ACTIVITY_KEY
+
+        url = reverse(self.URL_NAME)
+        session = authenticated_client.session
+        session[IDLE_ACTIVITY_KEY] = int(time.time()) - 999999
+        session.save()
+
+        assert authenticated_client.get(url).status_code == 200
+
+    def test_anonymous_request_unaffected(self, client):
+        """Unauthenticated requests pass through the middleware untouched."""
+        assert client.get(reverse("home")).status_code == 200

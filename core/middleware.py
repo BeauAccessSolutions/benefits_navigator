@@ -3,7 +3,13 @@ Custom middleware for the VA Benefits Navigator.
 """
 
 import logging
-from django.http import JsonResponse
+import time
+
+from django.conf import settings
+from django.contrib.auth import logout
+from django.contrib import messages
+from django.http import HttpResponse, JsonResponse
+from django.shortcuts import redirect
 from django.utils.deprecation import MiddlewareMixin
 
 logger = logging.getLogger(__name__)
@@ -219,3 +225,63 @@ class SecurityHeadersMiddleware(MiddlewareMixin):
             response["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
 
         return response
+
+
+# Session key holding the unix timestamp of the last request on the session.
+IDLE_ACTIVITY_KEY = "_last_activity"
+
+
+class IdleSessionTimeoutMiddleware:
+    """
+    Automatic logoff after inactivity — HIPAA Security Rule §164.312(a)(2)(iii).
+
+    For authenticated users, tracks the timestamp of the last request in the
+    session. If the gap since the last request exceeds ``SESSION_IDLE_TIMEOUT``
+    seconds, the session is logged out (flushed) before the view runs and the
+    user is redirected to the login page. Protects an unattended workstation
+    that has veteran PHI on screen.
+
+    Must run after AuthenticationMiddleware (needs ``request.user``) and after
+    SessionMiddleware (reads/writes ``request.session``). A timeout of 0
+    disables the behavior.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        # Read per request so runtime config / override_settings takes effect.
+        timeout = getattr(settings, "SESSION_IDLE_TIMEOUT", 0) or 0
+
+        if timeout and self._is_authenticated(request):
+            now = int(time.time())
+            last = request.session.get(IDLE_ACTIVITY_KEY)
+
+            if last is not None and (now - last) > timeout:
+                return self._expire(request)
+
+            # Record activity. Assigning to the session marks it modified so it
+            # is saved even without SESSION_SAVE_EVERY_REQUEST.
+            request.session[IDLE_ACTIVITY_KEY] = now
+
+        return self.get_response(request)
+
+    @staticmethod
+    def _is_authenticated(request):
+        return hasattr(request, "user") and request.user.is_authenticated
+
+    @staticmethod
+    def _expire(request):
+        logout(request)  # flushes the session, clearing the activity marker
+        messages.info(
+            request, "You were signed out due to inactivity. Please sign in again."
+        )
+        login_url = getattr(settings, "LOGIN_URL", "/accounts/login/")
+
+        # HTMX requests can't follow a normal redirect body — use HX-Redirect.
+        if request.headers.get("HX-Request"):
+            response = HttpResponse(status=204)
+            response["HX-Redirect"] = login_url
+            return response
+
+        return redirect(login_url)

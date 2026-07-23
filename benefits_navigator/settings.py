@@ -139,6 +139,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django_otp.middleware.OTPMiddleware",  # MFA/2FA support
     "django.contrib.messages.middleware.MessageMiddleware",
+    "core.middleware.IdleSessionTimeoutMiddleware",  # HIPAA automatic logoff
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "django_htmx.middleware.HtmxMiddleware",  # HTMX support
     "allauth.account.middleware.AccountMiddleware",  # Django-allauth
@@ -369,6 +370,13 @@ SESSION_COOKIE_AGE = 1209600  # 2 weeks
 SESSION_COOKIE_SECURE = not DEBUG  # True in production
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
+
+# Automatic logoff (HIPAA Security Rule §164.312(a)(2)(iii)): log out an
+# authenticated session after this many seconds of inactivity. SESSION_COOKIE_AGE
+# above is the absolute cap; this is the idle cap, which is the real protection
+# for an unattended workstation handling veteran PHI. Set to 0 to disable.
+# Enforced by core.middleware.IdleSessionTimeoutMiddleware.
+SESSION_IDLE_TIMEOUT = env.int("SESSION_IDLE_TIMEOUT", default=1800)  # 30 minutes
 
 # ==============================================================================
 # CSRF CONFIGURATION
