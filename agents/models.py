@@ -7,7 +7,7 @@ Models for storing agent interactions, analyses, and generated content.
 from django.db import models
 from django.conf import settings
 from core.models import TimeStampedModel
-from core.encryption import EncryptedCharField
+from core.encryption import EncryptedCharField, EncryptedTextField
 
 
 class AgentInteraction(TimeStampedModel):
@@ -277,22 +277,23 @@ class PersonalStatement(TimeStampedModel):
     condition = models.CharField(
         max_length=200, help_text="Condition this statement supports"
     )
-    in_service_event = models.TextField(help_text="What happened during service")
-    current_symptoms = models.TextField(help_text="Current symptoms and limitations")
-    daily_impact = models.TextField(help_text="How condition affects daily life")
-    work_impact = models.TextField(blank=True, help_text="How condition affects work")
-    treatment_history = models.TextField(blank=True, help_text="Treatment received")
-    worst_days = models.TextField(
+    # PHI: the veteran's own service/medical narrative. Encrypted at rest.
+    in_service_event = EncryptedTextField(help_text="What happened during service")
+    current_symptoms = EncryptedTextField(help_text="Current symptoms and limitations")
+    daily_impact = EncryptedTextField(help_text="How condition affects daily life")
+    work_impact = EncryptedTextField(blank=True, help_text="How condition affects work")
+    treatment_history = EncryptedTextField(blank=True, help_text="Treatment received")
+    worst_days = EncryptedTextField(
         blank=True, help_text="Description of worst days/flare-ups"
     )
 
     # Generated Output
-    generated_statement = models.TextField(
+    generated_statement = EncryptedTextField(
         blank=True, help_text="AI-generated statement"
     )
 
     # User Edits
-    final_statement = models.TextField(
+    final_statement = EncryptedTextField(
         blank=True, help_text="User-edited final version"
     )
     is_finalized = models.BooleanField(default=False)
@@ -900,11 +901,9 @@ class AssistantTurn(TimeStampedModel):
         related_name="assistant_turns",
     )
     role = models.CharField(max_length=16, choices=ROLE_CHOICES)
-    # PHI — see class docstring. Plain TextField, consistent with the app's other
-    # veteran-authored/model-output text (e.g. PersonalStatement); protected by
-    # user-scoping + at-rest storage encryption + account-deletion, not field-level
-    # encryption.
-    content = models.TextField(blank=True)
+    # PHI — see class docstring. Field-level encrypted at rest (Fernet), in
+    # addition to user-scoping and account-deletion.
+    content = EncryptedTextField(blank=True)
     # True when an assistant answer was interrupted by Stop (partial kept).
     stopped = models.BooleanField(default=False)
 

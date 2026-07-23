@@ -251,7 +251,8 @@ class CaseNote(TimeStampedModel):
         "Type", max_length=20, choices=NOTE_TYPE_CHOICES, default="general"
     )
     subject = models.CharField("Subject", max_length=200)
-    content = models.TextField("Content")
+    # PHI: caseworker notes about a veteran's case. Encrypted at rest.
+    content = EncryptedTextField("Content")
 
     # For action items
     is_action_item = models.BooleanField("Is action item", default=False)
