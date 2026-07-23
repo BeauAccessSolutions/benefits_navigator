@@ -1,0 +1,25 @@
+{% extends "allauth/layouts/entrance.html" %}
+{% load i18n %}
+
+{% block head_title %}{% trans "Verify Your Email" %}{% endblock head_title %}
+
+{% block content %}
+<div class="text-center mb-8">
+    <h1 class="text-3xl font-bold text-gray-900">{% trans "Verify Your Email" %}</h1>
+    <p class="mt-2 text-gray-600">
+        {% trans "One more step before you're in." %}
+    </p>
+</div>
+
+<div class="p-4 bg-blue-50 border border-blue-200 rounded-md" role="status" aria-live="polite">
+    <p class="text-sm text-blue-800">
+        {% blocktrans %}We've sent you a verification email. Follow the link inside it to finish setting up your account. If it isn't in your inbox within a few minutes, check your spam folder.{% endblocktrans %}
+    </p>
+</div>
+
+<p class="mt-6 text-center text-sm text-gray-600">
+    <a href="{% url 'account_login' %}" class="text-blue-700 hover:text-blue-800 underline font-medium">
+        {% trans "Back to sign in" %}
+    </a>
+</p>
+{% endblock content %}
