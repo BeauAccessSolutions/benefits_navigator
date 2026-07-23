@@ -538,6 +538,137 @@ class TestDocumentDetailView:
 
 
 @pytest.mark.django_db
+class TestDocumentFileAffordances:
+    """
+    The protected file routes must be reachable from the UI.
+
+    These views were correct and fully tested but no template ever linked to
+    them, so users could upload, tag, share and delete a document without ever
+    being able to open it. These tests pin the link, not just the route.
+    """
+
+    def test_detail_page_links_to_protected_view_and_download(
+        self, authenticated_client, document
+    ):
+        """The detail page exposes both file routes."""
+        response = authenticated_client.get(
+            reverse("claims:document_detail", kwargs={"pk": document.pk})
+        )
+        html = response.content.decode()
+
+        assert reverse("claims:document_view", kwargs={"pk": document.pk}) in html
+        assert reverse("claims:document_download", kwargs={"pk": document.pk}) in html
+
+    def test_detail_page_never_links_to_media_url(self, authenticated_client, document):
+        """/media/ is not served, so a raw file URL would be a guaranteed 404."""
+        response = authenticated_client.get(
+            reverse("claims:document_detail", kwargs={"pk": document.pk})
+        )
+        assert document.file.url not in response.content.decode()
+
+    def test_file_links_are_not_blank_targeted(self, authenticated_client, document):
+        """
+        The file links must not use target="_blank": the Capacitor iOS wrapper
+        sends _blank to Safari, which has no session cookie and would show a
+        login page instead of the document.
+        """
+        response = authenticated_client.get(
+            reverse("claims:document_detail", kwargs={"pk": document.pk})
+        )
+        html = response.content.decode()
+
+        for name in ("claims:document_view", "claims:document_download"):
+            url = reverse(name, kwargs={"pk": document.pk})
+            start = html.index(f'href="{url}"')
+            anchor = html[html.rindex("<a ", 0, start) : html.index(">", start)]
+            assert "_blank" not in anchor, f"{name} anchor is _blank targeted"
+
+    def test_no_template_comment_leaks_into_page(self, authenticated_client, document):
+        """
+        Django's {# #} comment syntax is single-line only; a multi-line one is
+        not parsed as a comment and renders as visible text to the user.
+        """
+        response = authenticated_client.get(
+            reverse("claims:document_detail", kwargs={"pk": document.pk})
+        )
+        html = response.content.decode()
+
+        assert "{#" not in html
+        assert "{% comment" not in html
+
+    def test_file_links_shown_even_when_processing_incomplete(
+        self, authenticated_client, document
+    ):
+        """
+        Opening the file is gated on the file existing, not on AI processing
+        having finished -- a user most needs the original when processing failed.
+        """
+        document.status = "failed"
+        document.save()
+
+        response = authenticated_client.get(
+            reverse("claims:document_detail", kwargs={"pk": document.pk})
+        )
+        html = response.content.decode()
+
+        assert not document.is_complete
+        assert reverse("claims:document_view", kwargs={"pk": document.pk}) in html
+        assert reverse("claims:document_download", kwargs={"pk": document.pk}) in html
+
+
+@pytest.mark.django_db
+class TestDocumentFileAccessControl:
+    """
+    Ownership and auth gates on the protected file routes.
+
+    The views enforced this already but nothing tested it, and until now the
+    routes were unreachable from the UI so the gate was never exercised in
+    practice. These pin it.
+    """
+
+    @pytest.mark.parametrize(
+        "route", ["claims:document_view", "claims:document_download"]
+    )
+    def test_owner_gets_file(self, authenticated_client, document, route):
+        """The owning user receives the file bytes."""
+        response = authenticated_client.get(reverse(route, kwargs={"pk": document.pk}))
+        assert response.status_code == 200
+
+    @pytest.mark.parametrize(
+        "route", ["claims:document_view", "claims:document_download"]
+    )
+    def test_other_user_gets_404(
+        self, client, document, other_user, user_password, route
+    ):
+        """A second user cannot fetch someone else's document."""
+        client.login(email=other_user.email, password=user_password)
+
+        response = client.get(reverse(route, kwargs={"pk": document.pk}))
+
+        assert response.status_code == 404
+
+    @pytest.mark.parametrize(
+        "route", ["claims:document_view", "claims:document_download"]
+    )
+    def test_anonymous_is_redirected(self, client, document, route):
+        """Anonymous users are sent to login, never served the file."""
+        response = client.get(reverse(route, kwargs={"pk": document.pk}))
+        assert response.status_code == 302
+
+    @pytest.mark.parametrize(
+        "route", ["claims:document_view", "claims:document_download"]
+    )
+    def test_soft_deleted_document_is_404(self, authenticated_client, document, route):
+        """Soft-deleted documents are not retrievable."""
+        document.is_deleted = True
+        document.save()
+
+        response = authenticated_client.get(reverse(route, kwargs={"pk": document.pk}))
+
+        assert response.status_code == 404
+
+
+@pytest.mark.django_db
 class TestDocumentStatusView:
     """Tests for the document status polling view."""
 
