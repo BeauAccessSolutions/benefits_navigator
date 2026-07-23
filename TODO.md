@@ -13,11 +13,11 @@ by the auditor: deletion/export lifecycle → VSO authorization scoping → invi
 protected media & storage → appeal-rule correction → encryption/AI/config hardening.
 
 ### P0 — CRITICAL
-- [ ] **Account deletion is a no-op** — `accounts/views.py:262` promises permanent deletion in 30
-  days but only writes an `AuditLog` entry and logs the user out. No `deletion_scheduled_at` field
-  exists anywhere on the User model (verified by grep), no Celery task, no disablement, no cancel
-  mechanism — the user can log back in and all data remains. `AssistantTurn`'s PHI docstring
-  explicitly relies on account deletion existing. GDPR/stated-policy violation.
+- [x] **Account deletion is a no-op** — Fixed & merged (PR #40, `feat/account-deletion-lifecycle`).
+  `User.deletion_requested_at` + migration 0012, `core.tasks.purge_user_account` +
+  `process_scheduled_account_deletions` (daily Beat, 30-day grace, cancel-by-login), and
+  `account_delete_purge` / `_cancel` audit actions. 14 tests pass. This checkbox was stale — the
+  work landed but the box was never ticked.
 
 ### P1 — HIGH
 - [ ] **VSO: restricted caseworkers can act on other workers' cases** — `scope_cases_for_member`
@@ -30,10 +30,16 @@ protected media & storage → appeal-rule correction → encryption/AI/config ha
   `case_list`'s `archived=1` branch (:355-360) rebuilds the queryset without re-applying the scope.
   Only bites when `restrict_caseworker_visibility` is on. *Distinct from the cross-org IDOR fixed
   2026-02-11 — that fix (analysis queries in `shared_document_review`) is still in place.*
-- [ ] **Org invitations not bound to invited email** — `accounts/views.py:1145`: email mismatch
-  shows a warning on GET, but POST accepts anyway; `OrganizationInvitation.accept()`
-  (`accounts/models.py:686`) never checks email. Anyone with a forwarded/leaked admin or caseworker
-  invitation link can claim that role from any authenticated account.
+- [x] **Org invitations not bound to invited email** — Fixed 2026-07-23 (branch
+  `claude/bind-invitation-email`). `OrganizationInvitation.accept()` now raises unless
+  `user.email == invitation.email` (case-insensitive) **and** the address is verified via allauth
+  `EmailAddress` — the single enforcement point for both accept flows (`org_invite_accept` for staff
+  and `vso.accept_invitation` for veterans). Removed the accept-anyway POST path in
+  `org_invite_accept`; the mismatch page now offers "log in as the invited account" only.
+  *Gotcha found & documented:* django-otp's `OTPMiddleware` replaces `request.user.is_verified` with
+  a truthy 2FA-status method, so the model checks allauth `EmailAddress.verified` (collision-free),
+  not the `User.is_verified` field. Tests: `TestInvitationEmailBinding`, `TestOrgInviteAcceptView`
+  (mismatch/unverified/verified/allauth/case-insensitive).
 - [ ] **"Export my data" crashes for real users** — `accounts/views.py:150-182` reads
   `claim.condition` / `claim.filed_date` (Claim has `title` / `submission_date` —
   `claims/models.py:299`) and `appeal.condition` / `appeal.appeal_lane` (Appeal has

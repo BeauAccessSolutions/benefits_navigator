@@ -1151,11 +1151,14 @@ def org_invite_accept(request, token):
         signup_url = reverse("account_signup")
         return redirect(f"{signup_url}?email={invitation.email}")
 
-    # User is logged in - check if email matches
+    # User is logged in - check if email matches. Invitations are bound to the
+    # invited address (remediation 0.3): a mismatched account can NEVER accept,
+    # even by POSTing the form directly — the only remedy is to log in as the
+    # invitee. (OrganizationInvitation.accept() enforces this again as a
+    # backstop, so the guarantee holds even if a future caller forgets.)
     email_mismatch = request.user.email.lower() != invitation.email.lower()
 
-    if email_mismatch and request.method != "POST":
-        # Show mismatch warning, let user decide
+    if email_mismatch:
         context = {
             "invitation": invitation,
             "email_mismatch": True,

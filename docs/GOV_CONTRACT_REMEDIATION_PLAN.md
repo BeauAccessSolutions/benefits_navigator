@@ -74,15 +74,24 @@ logged out.
       contains each category.
 - **Acceptance:** export succeeds for a fully-populated account and describes itself accurately.
 
-### 0.3 Bind invitations to the invited email (P1)
-`accounts/views.py:1145` + `OrganizationInvitation.accept()` — POST accepts from any account.
+### 0.3 Bind invitations to the invited email (P1) — ✅ DONE 2026-07-23
+`accounts/views.py` `org_invite_accept` + `OrganizationInvitation.accept()` previously let a POST
+accept from any logged-in account. Now closed:
 
-- [ ] `accept()` raises unless `user.email.lower() == invitation.email.lower()` **and** the
-      address is verified (allauth `EmailAddress.verified`).
-- [ ] Remove the accept-anyway POST path; mismatch page offers "log in with the invited
-      account" only.
-- [ ] Tests: mismatched-email POST rejected; unverified-email POST rejected; happy path.
-- **Acceptance:** a forwarded invitation link is useless to any account but the invited one.
+- [x] `accept()` raises unless `user.email.lower() == invitation.email.lower()` **and** the
+      address is verified. Verification is checked via allauth `EmailAddress.verified` — NOT
+      `User.is_verified`, because django-otp's `OTPMiddleware` shadows `request.user.is_verified`
+      with a truthy 2FA-status method in every request context (documented in `_email_is_verified`).
+- [x] Removed the accept-anyway POST path in `org_invite_accept`; the mismatch page (and template)
+      now offer "log in as the invited account" only — no accept button.
+- [x] Enforcement lives in the model, so BOTH accept flows are covered: `org_invite_accept` (staff)
+      and `vso.views.accept_invitation` (veterans).
+- [x] Tests (`accounts/tests.py`): `TestInvitationEmailBinding` (mismatch → ValueError, unverified →
+      ValueError, invited+verified → membership, verified-via-allauth, case-insensitive) and
+      `TestOrgInviteAcceptView` (foreign-account POST grants nothing, invited+verified POST accepts,
+      invited-but-unverified POST rejected). Full accounts/vso/core/api suites: 315 passed.
+- **Acceptance met:** a forwarded invitation link is useless to any account but the invited,
+  email-verified one.
 
 ### 0.4 Rotate exposed credentials (manual, from 2026-02 audit — still open)
 - [ ] Rotate `SECRET_KEY`, `FIELD_ENCRYPTION_KEY` (via `rotate_encryption_key`), `DATABASE_URL`,

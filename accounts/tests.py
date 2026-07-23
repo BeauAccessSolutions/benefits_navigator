@@ -1136,3 +1136,183 @@ class TestPilotModeUpgradePage(TestCase):
 
             self.assertEqual(response.status_code, 200)
             self.assertTrue(response.context["is_pilot_user"])
+
+
+# =============================================================================
+# INVITATION EMAIL-BINDING TESTS (remediation 0.3)
+# =============================================================================
+# An organization invitation carries a role (veteran / caseworker / admin) and
+# is sent to a specific address. A forwarded or leaked link must be useless to
+# any account other than the invited, email-verified one — otherwise anyone
+# could claim a caseworker/admin role by opening the link.
+
+
+def _verify_email(user):
+    """Mark ``user``'s email verified the way allauth does on confirmation."""
+    from allauth.account.models import EmailAddress
+
+    return EmailAddress.objects.create(
+        user=user, email=user.email, verified=True, primary=True
+    )
+
+
+@pytest.mark.django_db
+class TestInvitationEmailBinding:
+    """OrganizationInvitation.accept() is the single enforcement point."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self, db):
+        from accounts.models import Organization, OrganizationInvitation
+
+        self.org = Organization.objects.create(
+            name="Bind Org", slug="bind-org", org_type="vso"
+        )
+        self.inviter = User.objects.create_user(
+            email="admin@bind-org.example.com",
+            password="TestPass123!",
+            is_verified=True,
+        )
+        # A privileged (caseworker) invitation — the dangerous case.
+        self.invitation = OrganizationInvitation.objects.create(
+            organization=self.org,
+            email="invited@example.com",
+            role="caseworker",
+            invited_by=self.inviter,
+        )
+
+    def _make_user(self, email, verified):
+        user = User.objects.create_user(email=email, password="TestPass123!")
+        if verified:
+            _verify_email(user)
+        return user
+
+    def test_accept_rejects_mismatched_email(self):
+        from accounts.models import OrganizationMembership
+
+        attacker = self._make_user("attacker@evil.example.com", verified=True)
+        with pytest.raises(ValueError, match="sent to invited@example.com"):
+            self.invitation.accept(attacker)
+
+        self.invitation.refresh_from_db()
+        assert self.invitation.accepted_at is None
+        assert not OrganizationMembership.objects.filter(user=attacker).exists()
+
+    def test_accept_rejects_unverified_invited_user(self):
+        from accounts.models import OrganizationMembership
+
+        invited = self._make_user("invited@example.com", verified=False)
+        with pytest.raises(ValueError, match="verify your email"):
+            self.invitation.accept(invited)
+
+        assert not OrganizationMembership.objects.filter(user=invited).exists()
+
+    def test_accept_allows_invited_verified_user(self):
+        from accounts.models import OrganizationMembership
+
+        invited = self._make_user("invited@example.com", verified=True)
+        membership = self.invitation.accept(invited)
+
+        assert membership.role == "caseworker"
+        self.invitation.refresh_from_db()
+        assert self.invitation.accepted_at is not None
+        assert OrganizationMembership.objects.filter(
+            user=invited, organization=self.org, role="caseworker"
+        ).exists()
+
+    def test_accept_allows_verified_via_allauth_emailaddress(self):
+        """`User.is_verified` False but a verified allauth EmailAddress → OK."""
+        from allauth.account.models import EmailAddress
+        from accounts.models import OrganizationMembership
+
+        invited = self._make_user("invited@example.com", verified=False)
+        EmailAddress.objects.create(
+            user=invited, email=invited.email, verified=True, primary=True
+        )
+        membership = self.invitation.accept(invited)
+        assert OrganizationMembership.objects.filter(
+            user=invited, organization=self.org
+        ).exists()
+        assert membership.role == "caseworker"
+
+    def test_case_insensitive_email_match(self):
+        invited = self._make_user("Invited@Example.com", verified=True)
+        # Should not raise despite case differences.
+        self.invitation.accept(invited)
+        self.invitation.refresh_from_db()
+        assert self.invitation.accepted_at is not None
+
+
+@pytest.mark.django_db
+class TestOrgInviteAcceptView:
+    """The staff-invitation accept view must never accept from a foreign account."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self, db):
+        from accounts.models import Organization, OrganizationInvitation
+
+        self.org = Organization.objects.create(
+            name="View Org", slug="view-org", org_type="vso"
+        )
+        self.inviter = User.objects.create_user(
+            email="admin@view-org.example.com",
+            password="TestPass123!",
+            is_verified=True,
+        )
+        self.invitation = OrganizationInvitation.objects.create(
+            organization=self.org,
+            email="invited@example.com",
+            role="caseworker",
+            invited_by=self.inviter,
+        )
+        self.url = reverse("accounts:org_invite_accept", args=[self.invitation.token])
+
+    def test_mismatched_account_post_does_not_grant_role(self, client):
+        """A logged-in foreign account POSTing the form gains nothing."""
+        from accounts.models import OrganizationMembership
+
+        attacker = User.objects.create_user(
+            email="attacker@evil.example.com", password="TestPass123!"
+        )
+        _verify_email(attacker)
+        client.force_login(attacker)
+        response = client.post(self.url)
+
+        # Renders the mismatch page rather than accepting.
+        assert response.status_code == 200
+        self.invitation.refresh_from_db()
+        assert self.invitation.accepted_at is None
+        assert not OrganizationMembership.objects.filter(user=attacker).exists()
+
+    def test_invited_verified_account_post_accepts(self, client):
+        from accounts.models import OrganizationMembership
+
+        invited = User.objects.create_user(
+            email="invited@example.com", password="TestPass123!"
+        )
+        _verify_email(invited)
+        client.force_login(invited)
+        response = client.post(self.url)
+
+        assert response.status_code == 302
+        self.invitation.refresh_from_db()
+        assert self.invitation.accepted_at is not None
+        assert OrganizationMembership.objects.filter(
+            user=invited, organization=self.org, role="caseworker"
+        ).exists()
+
+    def test_invited_unverified_account_post_rejected(self, client):
+        """Emails match but address unproven → model backstop blocks it."""
+        from accounts.models import OrganizationMembership
+
+        # No verified EmailAddress created → email unproven.
+        invited = User.objects.create_user(
+            email="invited@example.com", password="TestPass123!"
+        )
+        client.force_login(invited)
+        response = client.post(self.url, follow=False)
+
+        # accept() raises ValueError; view catches → redirect, no membership.
+        assert response.status_code == 302
+        self.invitation.refresh_from_db()
+        assert self.invitation.accepted_at is None
+        assert not OrganizationMembership.objects.filter(user=invited).exists()
