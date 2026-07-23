@@ -7,7 +7,11 @@ Models for storing agent interactions, analyses, and generated content.
 from django.db import models
 from django.conf import settings
 from core.models import TimeStampedModel
-from core.encryption import EncryptedCharField, EncryptedTextField
+from core.encryption import (
+    EncryptedCharField,
+    EncryptedTextField,
+    EncryptedJSONField,
+)
 
 
 class AgentInteraction(TimeStampedModel):
@@ -85,26 +89,26 @@ class DecisionLetterAnalysis(TimeStampedModel):
     # Raw text is no longer persisted - only structured analysis is stored
     decision_date = models.DateField(null=True, blank=True)
 
-    # Parsed Results (stored as JSON)
-    conditions_granted = models.JSONField(
+    # Parsed Results (stored as JSON) — PHI (veteran conditions), encrypted at rest.
+    conditions_granted = EncryptedJSONField(
         default=list, help_text="List of granted conditions with ratings"
     )
-    conditions_denied = models.JSONField(
+    conditions_denied = EncryptedJSONField(
         default=list, help_text="List of denied conditions with reasons"
     )
-    conditions_deferred = models.JSONField(
+    conditions_deferred = EncryptedJSONField(
         default=list, help_text="List of deferred conditions"
     )
 
-    # Analysis
-    summary = models.TextField(blank=True, help_text="Plain-English summary")
-    appeal_options = models.JSONField(
+    # Analysis — PHI, encrypted at rest.
+    summary = EncryptedTextField(blank=True, help_text="Plain-English summary")
+    appeal_options = EncryptedJSONField(
         default=list, help_text="Available appeal paths with deadlines"
     )
-    evidence_issues = models.JSONField(
+    evidence_issues = EncryptedJSONField(
         default=list, help_text="Evidence problems identified"
     )
-    action_items = models.JSONField(default=list, help_text="Recommended next steps")
+    action_items = EncryptedJSONField(default=list, help_text="Recommended next steps")
 
     # Deadlines
     appeal_deadline = models.DateField(null=True, blank=True)
@@ -152,21 +156,22 @@ class DenialDecoding(TimeStampedModel):
     #         "common_mistakes": ["Using unqualified medical opinion", "..."]
     #     }
     # ]
-    denial_mappings = models.JSONField(
+    # PHI (veteran denials + evidence guidance), encrypted at rest.
+    denial_mappings = EncryptedJSONField(
         "Denial Mappings",
         default=list,
         help_text="Denials with M21 matches and evidence requirements",
     )
 
     # AI-generated overall strategy for addressing all denials
-    evidence_strategy = models.TextField(
+    evidence_strategy = EncryptedTextField(
         "Evidence Strategy",
         blank=True,
         help_text="AI-generated overall strategy for addressing denials",
     )
 
     # Priority ranking of which denial to address first
-    priority_order = models.JSONField(
+    priority_order = EncryptedJSONField(
         "Priority Order",
         default=list,
         blank=True,
