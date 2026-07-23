@@ -1326,3 +1326,76 @@ class TestAgentPHIEncryptionAtRest(TestCase):
             # work_impact left blank
         )
         self.assertEqual(PersonalStatement.objects.get(pk=stmt.pk).work_impact, "")
+
+
+class TestAgentAnalysisJSONEncryptionAtRest(TestCase):
+    """DecisionLetterAnalysis / DenialDecoding PHI JSON encrypted at rest."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="vet2@example.com", password="TestPass123!"
+        )
+        self.interaction = AgentInteraction.objects.create(
+            user=self.user, agent_type="decision_analyzer"
+        )
+
+    def _raw(self, table, column, pk):
+        from django.db import connection
+
+        with connection.cursor() as cursor:
+            cursor.execute(f"SELECT {column} FROM {table} WHERE id = %s", [pk])
+            return cursor.fetchone()[0]
+
+    def test_decision_analysis_json_roundtrip_and_at_rest(self):
+        from core.encryption import FieldEncryption
+
+        granted = [{"condition": "Tinnitus", "rating": 10}]
+        denied = [{"condition": "PTSD", "reason": "No nexus to service"}]
+        analysis = DecisionLetterAnalysis.objects.create(
+            interaction=self.interaction,
+            user=self.user,
+            conditions_granted=granted,
+            conditions_denied=denied,
+            summary="You were granted tinnitus and denied PTSD.",
+        )
+
+        reloaded = DecisionLetterAnalysis.objects.get(pk=analysis.pk)
+        self.assertEqual(reloaded.conditions_granted, granted)
+        self.assertEqual(reloaded.conditions_denied[0]["condition"], "PTSD")
+        self.assertEqual(reloaded.summary, "You were granted tinnitus and denied PTSD.")
+
+        raw = self._raw(
+            "agents_decisionletteranalysis", "conditions_denied", analysis.pk
+        )
+        self.assertNotIn("PTSD", raw)
+        self.assertNotIn("nexus", raw)
+        self.assertEqual(FieldEncryption.decrypt(raw), FieldEncryption.decrypt(raw))
+
+    def test_denial_decoding_json_roundtrip_and_at_rest(self):
+        analysis = DecisionLetterAnalysis.objects.create(
+            interaction=self.interaction, user=self.user
+        )
+        mappings = [{"condition": "PTSD", "denial_reason": "No nexus", "priority": 1}]
+        decoding = DenialDecoding.objects.create(
+            analysis=analysis,
+            denial_mappings=mappings,
+            evidence_strategy="Get an IMO from a treating psychiatrist.",
+        )
+
+        reloaded = DenialDecoding.objects.get(pk=decoding.pk)
+        self.assertEqual(reloaded.denial_mappings, mappings)
+        self.assertEqual(reloaded.denial_count, 1)  # property iterates the JSON
+        self.assertEqual(
+            reloaded.evidence_strategy, "Get an IMO from a treating psychiatrist."
+        )
+
+        raw = self._raw("agents_denialdecoding", "denial_mappings", decoding.pk)
+        self.assertNotIn("nexus", raw)
+
+    def test_empty_json_defaults_roundtrip(self):
+        analysis = DecisionLetterAnalysis.objects.create(
+            interaction=self.interaction, user=self.user
+        )
+        reloaded = DecisionLetterAnalysis.objects.get(pk=analysis.pk)
+        self.assertEqual(reloaded.conditions_granted, [])
+        self.assertEqual(reloaded.action_items, [])
