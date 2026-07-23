@@ -1095,7 +1095,11 @@ def purge_user_account(user):
         f"Account purge complete for user id={user_id} "
         f"({files_removed} file(s) removed)"
     )
-    return {"user_id": user_id, "user_email": user_email, "files_removed": files_removed}
+    return {
+        "user_id": user_id,
+        "user_email": user_email,
+        "files_removed": files_removed,
+    }
 
 
 @shared_task(bind=True, max_retries=3, acks_late=True)
@@ -1130,7 +1134,5 @@ def process_scheduled_account_deletions(self):
             logger.error(f"Failed to purge account id={user.id}: {e}")
             errors.append(user.id)
 
-    logger.info(
-        f"Scheduled account deletions: purged {purged}, {len(errors)} error(s)"
-    )
+    logger.info(f"Scheduled account deletions: purged {purged}, {len(errors)} error(s)")
     return {"purged": purged, "errors": errors}

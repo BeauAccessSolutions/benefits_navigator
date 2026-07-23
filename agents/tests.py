@@ -1244,6 +1244,7 @@ class TestM21TaskAcksLate(TestCase):
                 f"job per run) and must NOT set acks_late",
             )
 
+
 # =============================================================================
 # PHI ENCRYPTION-AT-REST TESTS (HIPAA §164.312(a)(2)(iv))
 # =============================================================================
