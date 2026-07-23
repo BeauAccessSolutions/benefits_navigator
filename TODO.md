@@ -50,11 +50,14 @@ protected media & storage → appeal-rule correction → encryption/AI/config ha
   and `STATICFILES_STORAGE`, both removed in Django ≥5.1 (project pins `Django>=5.2.13`); with
   `USE_S3=True` Django still uses local `FileSystemStorage`. Must migrate to the `STORAGES` dict.
   Additionally `claims/tasks.py:97` uses `document.file.path`, which remote storage doesn't support.
-- [ ] **Appeal eligibility wrongly blocks valid Supplemental Claims** — `appeals/forms.py:60`
-  (`clean_original_decision_date`) rejects any decision >1 year old before the user picks a lane,
-  but Supplemental Claims have no time limit (the model-level fix from 2026-02-11 covered
-  `Appeal.save()` only, not the intake form). The AI analyzer also stamps a blanket 1-year
-  `appeal_deadline` (`agents/services.py:314-323`).
+- [x] **Appeal eligibility wrongly blocks valid Supplemental Claims** — Fixed 2026-07-23 (branch
+  `claude/appeal-supplemental-deadline`). `clean_original_decision_date` no longer rejects
+  >1-year-old decisions (it ran before the lane is chosen; Supplemental has no deadline per 38 CFR
+  § 20.204); the future-date guard stays. The AI analyzer keeps the 1-year date (the real HLR/Board
+  deadline, § 20.202) but now attaches `appeal_deadline_note` clarifying Supplemental can be filed
+  anytime with new evidence; the decision-analyzer template was reframed from a red "no options after
+  a year" alert to an amber lane-aware note. Tests: `TestAppealStartFormDeadline`,
+  `TestAppealStartOldDecisionView`, `TestDecisionLetterDeadlineNote`.
 - [ ] **Sensitive narratives inconsistently encrypted** — `VeteranCase` narrative fields ARE
   encrypted, but: `CaseNote.content` is plain `TextField` (`vso/models.py:254`), agent analyses
   store conditions granted/denied as plain `JSONField` (`agents/models.py:88+`), and

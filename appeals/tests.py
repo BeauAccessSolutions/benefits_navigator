@@ -1283,3 +1283,96 @@ class TestDecisionTreeToAppealFlow(TestCase):
         self.assertIsNotNone(appeal)
         self.assertEqual(appeal.appeal_type, "")  # Not set yet
         self.assertEqual(appeal.status, "deciding")
+
+
+# =============================================================================
+# SUPPLEMENTAL-CLAIM DEADLINE TESTS (remediation: appeal-rule correction)
+# =============================================================================
+# The intake form ran BEFORE the appeal lane is chosen and used to reject any
+# decision older than one year — but a Supplemental Claim has no filing deadline
+# (38 CFR § 20.204). The form must not block; the model sets the lane-specific
+# deadline once the lane is known.
+
+
+class TestAppealStartFormDeadline:
+    """AppealStartForm no longer blocks old decisions (supplemental has no deadline)."""
+
+    def _data(self, decision_date):
+        return {
+            "original_decision_date": decision_date.isoformat(),
+            "conditions_appealed": "PTSD (denied)",
+            "denial_reasons": "No nexus provided",
+        }
+
+    def test_decision_older_than_one_year_is_allowed(self):
+        from appeals.forms import AppealStartForm
+
+        old = date.today() - timedelta(days=800)  # ~2.2 years
+        form = AppealStartForm(self._data(old))
+        assert form.is_valid(), form.errors
+
+    def test_recent_decision_is_allowed(self):
+        from appeals.forms import AppealStartForm
+
+        recent = date.today() - timedelta(days=30)
+        form = AppealStartForm(self._data(recent))
+        assert form.is_valid(), form.errors
+
+    def test_future_decision_is_rejected(self):
+        from appeals.forms import AppealStartForm
+
+        future = date.today() + timedelta(days=5)
+        form = AppealStartForm(self._data(future))
+        assert not form.is_valid()
+        assert "original_decision_date" in form.errors
+
+
+@pytest.mark.django_db
+class TestAppealStartOldDecisionView:
+    """End-to-end: an old decision can still start a Supplemental Claim."""
+
+    def test_old_decision_supplemental_creates_appeal_without_deadline(
+        self, authenticated_client, user
+    ):
+        # Decision-tree step recommended a supplemental claim.
+        session = authenticated_client.session
+        session["appeal_recommendation"] = {"type": "supplemental"}
+        session.save()
+
+        old = date.today() - timedelta(days=800)
+        response = authenticated_client.post(
+            reverse("appeals:appeal_start"),
+            {
+                "original_decision_date": old.isoformat(),
+                "conditions_appealed": "PTSD (denied)",
+                "denial_reasons": "No nexus provided",
+            },
+        )
+
+        assert response.status_code == 302
+        appeal = Appeal.objects.get(user=user)
+        assert appeal.appeal_type == "supplemental"
+        # Supplemental claims have no filing deadline (38 CFR § 20.204).
+        assert appeal.deadline is None
+
+    def test_old_decision_hlr_still_gets_one_year_deadline(
+        self, authenticated_client, user
+    ):
+        """Regression: HLR/Board deadline logic is unchanged (38 CFR § 20.202)."""
+        session = authenticated_client.session
+        session["appeal_recommendation"] = {"type": "hlr"}
+        session.save()
+
+        old = date.today() - timedelta(days=800)
+        authenticated_client.post(
+            reverse("appeals:appeal_start"),
+            {
+                "original_decision_date": old.isoformat(),
+                "conditions_appealed": "PTSD (denied)",
+                "denial_reasons": "VA overlooked evidence",
+            },
+        )
+
+        appeal = Appeal.objects.get(user=user)
+        assert appeal.appeal_type == "hlr"
+        assert appeal.deadline == old + timedelta(days=365)

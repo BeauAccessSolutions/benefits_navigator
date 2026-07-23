@@ -4,7 +4,7 @@ Appeals app forms - Forms for appeal creation, decision tree, and management.
 
 from django import forms
 from django.core.exceptions import ValidationError
-from datetime import date, timedelta
+from datetime import date
 
 from .models import Appeal, AppealDocument, AppealNote
 
@@ -59,18 +59,16 @@ class AppealStartForm(forms.ModelForm):
 
     def clean_original_decision_date(self):
         decision_date = self.cleaned_data.get("original_decision_date")
-        if decision_date:
-            # Check if more than 1 year ago (deadline passed)
-            deadline = decision_date + timedelta(days=365)
-            if deadline < date.today():
-                raise ValidationError(
-                    f"This decision is more than 1 year old. The standard appeal deadline "
-                    f'was {deadline.strftime("%B %d, %Y")}. You may still have options - '
-                    f"contact a VSO for guidance."
-                )
-            # Check if in the future
-            if decision_date > date.today():
-                raise ValidationError("Decision date cannot be in the future.")
+        if decision_date and decision_date > date.today():
+            raise ValidationError("Decision date cannot be in the future.")
+        # We intentionally do NOT reject decisions older than one year here.
+        # This intake form runs BEFORE the appeal lane is chosen, and a
+        # Supplemental Claim has no filing deadline (38 CFR § 20.204) — blocking
+        # old decisions wrongly turned away veterans who can still file one.
+        # Lane-specific deadline handling happens once the lane is known: the
+        # model's save() sets Appeal.deadline per lane (None for supplemental,
+        # decision + 1 year for HLR/Board per 38 CFR § 20.202), and the appeal
+        # detail page surfaces urgency/overdue status from there.
         return decision_date
 
 
