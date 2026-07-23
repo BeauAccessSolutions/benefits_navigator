@@ -415,6 +415,24 @@ class TestAuthenticationViews:
         response = client.get(reverse("account_signup"))
         assert response.status_code == 200
 
+    def test_signup_uses_custom_styled_template(self, client):
+        """
+        Signup must render the project's own styled template — not allauth's
+        unstyled default, which rendered as raw, borderless inputs on mobile
+        (the "signup/signin look merged" report). Mirrors account/login.html.
+        """
+        response = client.get(reverse("account_signup"))
+        assert response.status_code == 200
+        templates = {t.name for t in response.templates if t.name}
+        assert "account/signup.html" in templates
+        html = response.content.decode()
+        # Styled form markers copied from the login template.
+        assert 'class="space-y-6"' in html
+        assert 'name="password1"' in html
+        assert 'name="password2"' in html
+        # The Tailwind input styling that was missing on the default template.
+        assert "px-4 py-3 border" in html
+
     def test_login_with_valid_credentials(self, client, user, user_password):
         """User can log in with valid credentials."""
         response = client.post(
