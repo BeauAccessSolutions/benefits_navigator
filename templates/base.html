@@ -53,6 +53,10 @@
     <!-- HTMX for dynamic interactions -->
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
 
+    <!-- Mobile nav toggle. External (not inline) so the page needs no
+         'unsafe-inline' in the CSP; unit-tested in tests/js/nav.a11y.test.mjs. -->
+    <script src="{% static 'js/nav.js' %}" defer></script>
+
     {% block extra_css %}{% endblock %}
 </head>
 <body class="min-h-screen flex flex-col bg-gray-50">
@@ -60,85 +64,49 @@
     <a href="#main-content" class="skip-link">Skip to main content</a>
 
     <!-- Header with navigation -->
-    <header role="banner" class="bg-blue-900 text-white shadow-md">
+    {# The link list lives in core/partials/nav_links.html and is rendered twice: #}
+    {# the xl+ horizontal bar and the collapsible mobile panel. Toggle behaviour is #}
+    {# in static/js/nav.js (external, so the page needs no inline <script>). #}
+    <header role="banner" class="bg-blue-900 text-white shadow-md" data-nav-root>
         <div class="container mx-auto px-4 py-4">
-            <div class="flex justify-between items-center">
-                <div class="flex items-center space-x-3">
-                    <svg class="w-8 h-8" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+            <div class="flex justify-between items-center gap-4">
+                <div class="flex items-center space-x-3 min-w-0">
+                    <svg class="w-8 h-8 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                         <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"/>
                     </svg>
-                    <h1 class="text-2xl font-bold">
+                    <h1 class="text-xl xl:text-2xl font-bold truncate">
                         <a href="/" class="hover:underline focus:underline">{{ SITE_NAME }}</a>
                     </h1>
                 </div>
 
-                <nav role="navigation" aria-label="Main navigation">
-                    <ul class="flex space-x-6">
-                        <li>
-                            <a href="/claims/" class="hover:underline focus:underline"
-                               {% if request.resolver_match.app_name == 'claims' %}aria-current="page"{% endif %}>
-                                Claims Assistant
-                            </a>
-                        </li>
-                        <li>
-                            <a href="/exam-prep/" class="hover:underline focus:underline"
-                               {% if request.resolver_match.app_name == 'examprep' %}aria-current="page"{% endif %}>
-                                C&P Exam Prep
-                            </a>
-                        </li>
-                        <li>
-                            <a href="/appeals/" class="hover:underline focus:underline"
-                               {% if request.resolver_match.app_name == 'appeals' %}aria-current="page"{% endif %}>
-                                Appeals Guidance
-                            </a>
-                        </li>
-                        <li>
-                            <a href="/docs/" class="hover:underline focus:underline"
-                               {% if request.resolver_match.app_name == 'documentation' %}aria-current="page"{% endif %}>
-                                Documentation
-                            </a>
-                        </li>
-                        {% if user.is_authenticated %}
-                        <li>
-                            <a href="/journey/" class="hover:underline focus:underline"
-                               {% if request.resolver_match.url_name == 'journey_dashboard' %}aria-current="page"{% endif %}>
-                                My Journey
-                            </a>
-                        </li>
-                        <li>
-                            <a href="/dashboard/" class="hover:underline focus:underline"
-                               {% if request.resolver_match.url_name == 'dashboard' %}aria-current="page"{% endif %}>
-                                Dashboard
-                            </a>
-                        </li>
-                        {% if is_vso_staff %}
-                        <li>
-                            <a href="{% url 'vso:dashboard' %}" class="hover:underline focus:underline bg-green-700 px-3 py-1 rounded"
-                               {% if request.resolver_match.app_name == 'vso' %}aria-current="page"{% endif %}>
-                                VSO Portal
-                            </a>
-                        </li>
-                        {% endif %}
-                        <li>
-                            <a href="/accounts/logout/" class="hover:underline focus:underline">
-                                Logout
-                            </a>
-                        </li>
-                        {% else %}
-                        <li>
-                            <a href="/accounts/login/" class="hover:underline focus:underline">
-                                Login
-                            </a>
-                        </li>
-                        <li>
-                            <a href="/accounts/signup/" class="bg-white text-blue-900 px-4 py-2 rounded hover:bg-gray-100 focus:bg-gray-100">
-                                Sign Up
-                            </a>
-                        </li>
-                        {% endif %}
+                <nav role="navigation" aria-label="Main navigation" class="hidden xl:block">
+                    <ul class="flex items-center gap-x-5">
+                        {% include "core/partials/nav_links.html" with link_class="hover:underline focus:underline whitespace-nowrap" cta_class="bg-white text-blue-900 px-4 py-2 rounded hover:bg-gray-100 focus:bg-gray-100 whitespace-nowrap" vso_class="hover:underline focus:underline bg-green-700 px-3 py-1 rounded whitespace-nowrap" %}
                     </ul>
                 </nav>
+
+                <button type="button"
+                        class="xl:hidden inline-flex items-center justify-center p-2 min-w-[44px] min-h-[44px] rounded hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-white"
+                        aria-controls="mobile-menu"
+                        aria-expanded="false"
+                        data-nav-toggle
+                        data-label-open="Open main menu"
+                        data-label-close="Close main menu">
+                    <span class="sr-only" data-nav-label>Open main menu</span>
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true" data-nav-icon-open>
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/>
+                    </svg>
+                    <svg class="w-6 h-6 hidden" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true" data-nav-icon-close>
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
             </div>
+
+            <nav role="navigation" aria-label="Main navigation" id="mobile-menu" class="hidden xl:hidden mt-4" data-nav-panel>
+                <ul class="flex flex-col space-y-1 pb-2">
+                    {% include "core/partials/nav_links.html" with link_class="flex items-center min-h-[44px] px-3 rounded hover:bg-blue-800 focus:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-white" cta_class="flex items-center min-h-[44px] px-3 rounded bg-white text-blue-900 font-medium hover:bg-gray-100 focus:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-white" vso_class="flex items-center min-h-[44px] px-3 rounded bg-green-700 hover:bg-green-600 focus:bg-green-600 focus:outline-none focus:ring-2 focus:ring-white" %}
+                </ul>
+            </nav>
         </div>
     </header>
 

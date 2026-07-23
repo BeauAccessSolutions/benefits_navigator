@@ -1,0 +1,73 @@
+{% comment %}
+Main-nav links, rendered twice by base.html: once in the desktop bar and once
+in the mobile panel. One copy means a new nav item cannot drift between the
+two — the failure mode of hand-duplicating the list.
+
+The caller supplies the styling so the same markup can be a horizontal bar or a
+stacked touch-target list:
+  link_class — every ordinary link
+  cta_class  — the Sign Up call to action
+  vso_class  — the VSO Portal badge (staff only)
+{% endcomment %}
+<li>
+    <a href="/claims/" class="{{ link_class }}"
+       {% if request.resolver_match.app_name == 'claims' %}aria-current="page"{% endif %}>
+        Claims Assistant
+    </a>
+</li>
+<li>
+    <a href="/exam-prep/" class="{{ link_class }}"
+       {% if request.resolver_match.app_name == 'examprep' %}aria-current="page"{% endif %}>
+        C&P Exam Prep
+    </a>
+</li>
+<li>
+    <a href="/appeals/" class="{{ link_class }}"
+       {% if request.resolver_match.app_name == 'appeals' %}aria-current="page"{% endif %}>
+        Appeals Guidance
+    </a>
+</li>
+<li>
+    <a href="/docs/" class="{{ link_class }}"
+       {% if request.resolver_match.app_name == 'documentation' %}aria-current="page"{% endif %}>
+        Documentation
+    </a>
+</li>
+{% if user.is_authenticated %}
+<li>
+    <a href="/journey/" class="{{ link_class }}"
+       {% if request.resolver_match.url_name == 'journey_dashboard' %}aria-current="page"{% endif %}>
+        My Journey
+    </a>
+</li>
+<li>
+    <a href="/dashboard/" class="{{ link_class }}"
+       {% if request.resolver_match.url_name == 'dashboard' %}aria-current="page"{% endif %}>
+        Dashboard
+    </a>
+</li>
+{% if is_vso_staff %}
+<li>
+    <a href="{% url 'vso:dashboard' %}" class="{{ vso_class }}"
+       {% if request.resolver_match.app_name == 'vso' %}aria-current="page"{% endif %}>
+        VSO Portal
+    </a>
+</li>
+{% endif %}
+<li>
+    <a href="/accounts/logout/" class="{{ link_class }}">
+        Logout
+    </a>
+</li>
+{% else %}
+<li>
+    <a href="/accounts/login/" class="{{ link_class }}">
+        Login
+    </a>
+</li>
+<li>
+    <a href="/accounts/signup/" class="{{ cta_class }}">
+        Sign Up
+    </a>
+</li>
+{% endif %}
