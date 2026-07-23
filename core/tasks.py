@@ -986,3 +986,151 @@ The {settings.SITE_NAME} Team
         "notifications_sent": notifications_sent,
         "errors": errors,
     }
+
+
+# =============================================================================
+# ACCOUNT DELETION (GDPR / right-to-erasure)
+# =============================================================================
+
+
+def _delete_user_files(user):
+    """
+    Delete a user's uploaded files from storage before the DB rows cascade away.
+
+    Database cascade removes the rows but NOT the underlying files in the storage
+    backend, so those must be deleted explicitly. Covers claims Documents and
+    appeal AppealDocuments. Returns the number of files removed.
+    """
+    from claims.models import Document
+    from appeals.models import AppealDocument
+
+    removed = 0
+
+    # Claims documents (include soft-deleted — everything the user owns goes)
+    for doc in Document.all_objects.filter(user=user):
+        try:
+            if doc.file:
+                doc.file.delete(save=False)
+                removed += 1
+        except Exception as e:
+            logger.error(f"Account purge: failed to delete document file {doc.id}: {e}")
+
+    # Appeal documents (reached through the user's appeals)
+    for appeal_doc in AppealDocument.objects.filter(appeal__user=user):
+        try:
+            if appeal_doc.file:
+                appeal_doc.file.delete(save=False)
+                removed += 1
+        except Exception as e:
+            logger.error(
+                f"Account purge: failed to delete appeal document file "
+                f"{appeal_doc.id}: {e}"
+            )
+
+    return removed
+
+
+def _detach_stripe_customer(user):
+    """Best-effort deletion of the user's Stripe customer record. Non-blocking."""
+    customer_id = getattr(user, "stripe_customer_id", "")
+    if not customer_id:
+        return
+    api_key = getattr(settings, "STRIPE_SECRET_KEY", "")
+    if not api_key:
+        return
+    try:
+        import stripe
+
+        stripe.api_key = api_key
+        stripe.Customer.delete(customer_id)
+    except Exception as e:
+        # Don't block account deletion on a Stripe hiccup — log for follow-up.
+        logger.error(
+            f"Account purge: failed to delete Stripe customer for user {user.id}: {e}"
+        )
+
+
+def purge_user_account(user):
+    """
+    Permanently and completely erase a single user account and all its data.
+
+    Order matters:
+      1. Record the purge in the audit log while the user still exists (the
+         AuditLog FK is SET_NULL and preserves user_email, so the entry
+         survives the deletion as the erasure record).
+      2. Delete files from storage (DB cascade won't touch the storage backend).
+      3. Best-effort detach the Stripe customer.
+      4. Delete the User row — Django cascades every owned record (profile,
+         documents, claims, appeals, agent analyses, assistant transcripts,
+         VSO cases where the user is the veteran, journey data, etc.).
+
+    Deleting a veteran cascades their VeteranCase and its notes/shared
+    documents/analyses — deletion stays complete rather than leaving VSO copies
+    of the veteran's data behind. Where the user is instead a VSO caseworker,
+    VeteranCase.assigned_to is SET_NULL, so colleagues' cases are preserved and
+    merely unassigned.
+    """
+    from .models import AuditLog
+
+    user_id = user.id
+    user_email = user.email
+
+    AuditLog.log(
+        action="account_delete_purge",
+        user=user,
+        details={
+            "requested_at": (
+                user.deletion_requested_at.isoformat()
+                if user.deletion_requested_at
+                else None
+            ),
+        },
+    )
+
+    files_removed = _delete_user_files(user)
+    _detach_stripe_customer(user)
+    user.delete()
+
+    logger.info(
+        f"Account purge complete for user id={user_id} "
+        f"({files_removed} file(s) removed)"
+    )
+    return {"user_id": user_id, "user_email": user_email, "files_removed": files_removed}
+
+
+@shared_task(bind=True, max_retries=3, acks_late=True)
+def process_scheduled_account_deletions(self):
+    """
+    Permanently purge accounts whose 30-day deletion grace period has elapsed.
+
+    Scheduled daily via Celery Beat. Idempotent: purged users no longer match
+    the query, so redelivery after a crash simply reprocesses whatever remains
+    due. Each account is purged in its own transaction so one failure doesn't
+    strand the rest.
+    """
+    from django.contrib.auth import get_user_model
+    from django.db import transaction
+
+    User = get_user_model()
+
+    now = timezone.now()
+    purged = 0
+    errors = []
+
+    due_users = User.objects.filter(deletion_requested_at__isnull=False).filter(
+        deletion_requested_at__lte=now - timedelta(days=User.DELETION_GRACE_DAYS)
+    )
+
+    for user in due_users:
+        try:
+            with transaction.atomic():
+                purge_user_account(user)
+            purged += 1
+        except Exception as e:
+            logger.error(f"Failed to purge account id={user.id}: {e}")
+            errors.append(user.id)
+
+    logger.info(
+        f"Scheduled account deletions: purged {purged}, {len(errors)} error(s)"
+    )
+    return {"purged": purged, "errors": errors}

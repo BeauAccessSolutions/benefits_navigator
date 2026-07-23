@@ -5,7 +5,7 @@ Accounts app models - User authentication, profiles, and subscriptions
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
 from django.utils import timezone
-from datetime import date
+from datetime import date, timedelta
 
 from core.models import TimeStampedModel
 from core.encryption import EncryptedCharField, EncryptedDateField
@@ -50,6 +50,15 @@ class User(AbstractUser):
     is_verified = models.BooleanField("Email verified", default=False)
     stripe_customer_id = models.CharField(
         "Stripe customer ID", max_length=255, blank=True
+    )
+
+    # Account deletion: when a user confirms deletion, this is set to now(). The
+    # account stays usable during a 30-day grace period so the user can cancel by
+    # logging back in; a daily Celery Beat task
+    # (core.tasks.process_scheduled_account_deletions) permanently purges accounts
+    # whose grace period has elapsed. Null means no deletion is pending.
+    deletion_requested_at = models.DateTimeField(
+        "Deletion requested at", null=True, blank=True
     )
 
     # Make username optional since we're using email
@@ -141,6 +150,16 @@ class User(AbstractUser):
         if self.first_name and self.last_name:
             return f"{self.first_name} {self.last_name}"
         return self.email
+
+    # Days a user has to cancel account deletion before the purge runs.
+    DELETION_GRACE_DAYS = 30
+
+    @property
+    def scheduled_deletion_date(self):
+        """Date the account will be permanently purged, or None if not scheduled."""
+        if not self.deletion_requested_at:
+            return None
+        return self.deletion_requested_at + timedelta(days=self.DELETION_GRACE_DAYS)
 
 
 class UserProfile(TimeStampedModel):

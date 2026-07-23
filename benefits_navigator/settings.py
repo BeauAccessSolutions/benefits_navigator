@@ -311,6 +311,11 @@ CELERY_BEAT_SCHEDULE = {
         "task": "core.tasks.notify_pilot_users_before_retention",
         "schedule": crontab(hour=1, minute=0),  # 1 AM daily (before enforcement)
     },
+    # Account deletion — purge accounts past their 30-day grace period
+    "process-scheduled-account-deletions": {
+        "task": "core.tasks.process_scheduled_account_deletions",
+        "schedule": crontab(hour=4, minute=0),  # 4 AM daily
+    },
     # Monitoring and alerting
     "run-monitoring-checks": {
         "task": "core.tasks.run_monitoring_checks",

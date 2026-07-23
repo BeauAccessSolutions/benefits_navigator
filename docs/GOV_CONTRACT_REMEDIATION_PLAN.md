@@ -32,27 +32,31 @@ does with a veteran's data?**" Every phase below either closes a gap between wha
 Defects where the app tells users something untrue. These are disqualifying in any
 government due-diligence review because they're *integrity* failures, not just bugs.
 
-### 0.1 Real account deletion (P0) — the single most important item
-`accounts/views.py:262` promises permanent deletion in 30 days but only audit-logs and logs out.
+### 0.1 Real account deletion (P0) — the single most important item — ✅ DONE (this PR)
+`accounts/views.py` previously promised permanent deletion in 30 days but only audit-logged and
+logged out.
 
-- [ ] Add `deletion_requested_at` (nullable datetime) to `User`; migration.
-- [ ] On confirmed request: set the field, deactivate the account (`is_active=False`), log out.
-- [ ] Cancel path: logging in within 30 days is impossible once `is_active=False`, so build an
-      explicit reactivation flow (signed email link) or a "cancel deletion" pre-logout window —
-      decide and document in an ADR; the current copy promises cancel-by-login, so either
-      implement that (deactivate at day 30, purge at day 37) or fix the copy.
-- [ ] Celery Beat task (daily, `acks_late=True`, idempotent): purge accounts past the grace
-      period — cascade through Documents (including stored files), analyses, assistant
-      transcripts, appeals, journey data, Stripe customer detach. Reuse
-      `enforce_data_retention`'s patterns.
-- [ ] VSO entanglement: define what happens to `VeteranCase`/`SharedDocument` rows pointing at a
-      deleted veteran (platform invariant: deletion must stay *complete*; VSO copies of shared
-      analyses are the veteran's data → delete or irreversibly de-identify; record in the ADR).
-- [ ] Audit log the request, the cancellation, and the purge (already partially there).
-- [ ] Tests: request → deactivation; grace-period arithmetic; purge cascade actually removes
-      files from storage (not just rows); cancel path; VSO-shared data outcome.
-- **Acceptance:** a deleted user's email returns nothing across every table + storage backend;
-  `AssistantTurn`'s "account-deletable" PHI docstring becomes true.
+- [x] Add `deletion_requested_at` (nullable datetime) to `User`; migration
+      (`accounts/migrations/0012`).
+- [x] On confirmed request: set the field; **keep the account active** during the grace period.
+      Decided against immediate `is_active=False` precisely so "cancel by logging in" (the
+      existing UX promise) works — the account stays usable, a prominent banner shows the
+      scheduled date, and a Cancel button clears the field. No ADR needed; the copy and behavior
+      now agree.
+- [x] Celery Beat task (daily 4 AM, `acks_late=True`, idempotent, per-account transaction):
+      `process_scheduled_account_deletions` purges accounts past the 30-day grace period —
+      deletes Document + AppealDocument files from storage, best-effort Stripe customer detach,
+      then `user.delete()` cascades every owned record.
+- [x] VSO entanglement: `VeteranCase.veteran` is `CASCADE`, so deleting a veteran removes their
+      case and its notes/shared docs/analyses — deletion stays *complete*. Where the user is a
+      VSO caseworker instead, `assigned_to` is `SET_NULL`, so colleagues' cases survive
+      unassigned. Documented in `purge_user_account`'s docstring + covered by a test.
+- [x] Audit log the request, the cancellation, and the purge (new `account_delete_cancel` /
+      `account_delete_purge` actions; purge entry preserves `user_email` with the FK nulled).
+- [x] Tests (14 view + purge): schedule/cancel/idempotency, grace-period arithmetic, purge
+      cascade, file-removed-from-storage, past-grace-only selection, veteran→VSO cascade.
+- **Acceptance met:** a purged user's email returns nothing across tables + storage; the purge
+  leaves an audit record; `AssistantTurn`'s "account-deletable" docstring is now true.
 
 ### 0.2 Honest, working data export (P1)
 `accounts/views.py:150` crashes on nonexistent fields for any user with a claim or appeal.
