@@ -74,11 +74,10 @@ class PersonalStatementAdmin(admin.ModelAdmin):
         "created_at",
     ]
     list_filter = ["statement_type", "is_finalized", "created_at"]
+    # generated_statement / final_statement are encrypted at rest, not searchable.
     search_fields = [
         "user__email",
         "condition",
-        "generated_statement",
-        "final_statement",
     ]
     readonly_fields = ["created_at", "updated_at", "word_count"]
     date_hierarchy = "created_at"
