@@ -617,7 +617,10 @@ class TestAppealWorkflowViews:
         """
         Supplemental claims have no filing deadline by design (38 CFR
         § 20.204) — the deadline cell must say so, not show the generic
-        "—" used for genuinely missing data.
+        "—" used for genuinely missing data. It must also warn that
+        filing within 1 year preserves the effective date (back pay),
+        per VA decision-review guidance — omitting that can cost
+        veterans retroactive compensation.
         """
         supplemental_appeal = Appeal.objects.create(
             user=user,
@@ -627,7 +630,9 @@ class TestAppealWorkflowViews:
             reverse("appeals:appeal_detail", kwargs={"pk": supplemental_appeal.pk})
         )
         html = response.content.decode()
-        assert "No deadline (can file anytime)" in html
+        assert "No deadline" in html
+        assert "within 1 year" in html
+        assert "effective date" in html
 
     def test_appeal_detail_checklist_section_is_the_live_region(
         self, authenticated_client, appeal

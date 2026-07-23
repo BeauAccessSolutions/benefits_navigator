@@ -98,7 +98,7 @@
                     <div>
                         <dt class="text-sm text-gray-500">Deadline</dt>
                         <dd class="font-medium">
-                            {% if appeal.appeal_type == 'supplemental' %}No deadline (can file anytime){% else %}{{ appeal.deadline|date:"F d, Y"|default:"—" }}{% endif %}
+                            {% if appeal.appeal_type == 'supplemental' %}No deadline — but filing within 1 year of the decision protects your effective date (back pay){% else %}{{ appeal.deadline|date:"F d, Y"|default:"—" }}{% endif %}
                         </dd>
                     </div>
                     <div>

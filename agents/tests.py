@@ -1208,26 +1208,38 @@ class TestStatementGeneratorDisclaimer(TestCase):
 
 class TestM21TaskAcksLate(TestCase):
     """
-    M21 scraper tasks (scrape_m21_section/_bulk/_all_known,
-    update_stale_m21_sections, build_m21_topic_indices) previously had no
-    acks_late, so a worker crash mid-scrape would drop the task entirely
-    instead of requeuing it — per CLAUDE.md's Celery best practices.
+    Celery requires late-ack tasks to be idempotent, because redelivery
+    after a worker crash re-runs them from the top. Only the M21 tasks
+    whose writes are keyed upserts (update_or_create / get_or_create) may
+    set acks_late; scrape_m21_bulk creates and incrementally mutates a
+    fresh M21ScrapeJob per run, so it — and the tasks that call it
+    synchronously — must ack early or redelivery would strand the original
+    job in "running" and duplicate scrapes.
     """
 
-    def test_all_m21_tasks_have_acks_late(self):
+    def test_idempotent_m21_tasks_have_acks_late(self):
+        from agents.tasks import scrape_m21_section, build_m21_topic_indices
+
+        for task in (scrape_m21_section, build_m21_topic_indices):
+            self.assertTrue(
+                task.acks_late,
+                f"{task.name} is idempotent and must set acks_late=True",
+            )
+
+    def test_non_idempotent_m21_tasks_ack_early(self):
         from agents.tasks import (
-            scrape_m21_section,
             scrape_m21_bulk,
             scrape_m21_all_known,
             update_stale_m21_sections,
-            build_m21_topic_indices,
         )
 
         for task in (
-            scrape_m21_section,
             scrape_m21_bulk,
             scrape_m21_all_known,
             update_stale_m21_sections,
-            build_m21_topic_indices,
         ):
-            self.assertTrue(task.acks_late, f"{task.name} must set acks_late=True")
+            self.assertFalse(
+                task.acks_late,
+                f"{task.name} is not idempotent (creates/mutates a scrape "
+                f"job per run) and must NOT set acks_late",
+            )
