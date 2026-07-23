@@ -12,6 +12,7 @@ from django.contrib import messages
 from django.http import FileResponse, Http404, HttpResponse
 from django.views.decorators.http import require_http_methods
 
+from core.file_access import local_path_or_none
 from core.models import AuditLog
 
 from .models import Appeal, AppealGuidance, AppealDocument, AppealNote
@@ -565,11 +566,13 @@ def _serve_appeal_document(request, pk, doc_pk, *, disposition, audit_action):
     use_sendfile = getattr(settings, "USE_X_SENDFILE", False)
     sendfile_root = getattr(settings, "SENDFILE_ROOT", "")
 
-    if use_sendfile and sendfile_root:
+    # X-Accel-Redirect can only serve a file nginx can see on disk, so it is
+    # unavailable on remote storage (S3) — fall through to streaming there.
+    local_path = local_path_or_none(document.file)
+
+    if use_sendfile and sendfile_root and local_path:
         response = HttpResponse(content_type=content_type)
-        internal_path = document.file.path.replace(
-            str(settings.MEDIA_ROOT), "/protected-media"
-        )
+        internal_path = local_path.replace(str(settings.MEDIA_ROOT), "/protected-media")
         response["X-Accel-Redirect"] = internal_path
         response["Content-Disposition"] = f'{disposition}; filename="{file_name}"'
         return response

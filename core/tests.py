@@ -2162,3 +2162,99 @@ class TestStorageConfiguration(TestCase):
             type(storages["staticfiles"]).__name__,
             "CompressedManifestStaticFilesStorage",
         )
+
+
+# =============================================================================
+# STORAGE-AGNOSTIC FILE ACCESS TESTS
+# =============================================================================
+
+
+class _FakeRemoteFieldFile:
+    """
+    Mimics a FieldFile on a backend with no local paths (S3/Spaces), where
+    ``.path`` raises NotImplementedError.
+    """
+
+    def __init__(self, name, content):
+        self.name = name
+        self._content = content
+        self._buf = None
+
+    @property
+    def path(self):
+        raise NotImplementedError("This backend doesn't support absolute paths.")
+
+    def open(self, mode="rb"):
+        import io
+
+        self._buf = io.BytesIO(self._content)
+        return self._buf
+
+    def read(self, size=-1):
+        return self._buf.read(size)
+
+    def close(self):
+        if self._buf:
+            self._buf.close()
+
+
+class TestFileAccessHelpers(TestCase):
+    """
+    FieldFile.path raises on remote storage, so path-only tools (Tesseract OCR)
+    need a temp copy and serving code must stream through the backend.
+    """
+
+    def test_local_path_or_none_returns_none_without_local_path(self):
+        from core.file_access import local_path_or_none
+
+        remote = _FakeRemoteFieldFile("documents/x.pdf", b"data")
+        self.assertIsNone(local_path_or_none(remote))
+
+    def test_as_local_path_materializes_remote_file(self):
+        """A remote file is downloaded to a real path with intact contents."""
+        import os
+        from core.file_access import as_local_path
+
+        remote = _FakeRemoteFieldFile("documents/scan.pdf", b"%PDF-1.4 remote bytes")
+
+        with as_local_path(remote) as path:
+            self.assertTrue(os.path.exists(path))
+            self.assertTrue(path.endswith(".pdf"))  # suffix preserved for OCR
+            with open(path, "rb") as fh:
+                self.assertEqual(fh.read(), b"%PDF-1.4 remote bytes")
+            captured = path
+
+        # Temp copy must not leak.
+        self.assertFalse(os.path.exists(captured))
+
+    def test_as_local_path_cleans_up_on_exception(self):
+        import os
+        from core.file_access import as_local_path
+
+        remote = _FakeRemoteFieldFile("documents/scan.pdf", b"bytes")
+        captured = None
+        with self.assertRaises(RuntimeError):
+            with as_local_path(remote) as path:
+                captured = path
+                raise RuntimeError("boom")
+        self.assertIsNotNone(captured)
+        self.assertFalse(os.path.exists(captured))
+
+    def test_as_local_path_uses_real_path_for_local_storage(self):
+        """Local storage yields the real path — no copy is made."""
+        import os
+        import tempfile
+        from core.file_access import as_local_path
+
+        class _LocalFieldFile:
+            def __init__(self, p):
+                self.name = "documents/local.pdf"
+                self.path = p
+
+        with tempfile.NamedTemporaryFile(suffix=".pdf") as real:
+            real.write(b"local")
+            real.flush()
+            with as_local_path(_LocalFieldFile(real.name)) as path:
+                self.assertEqual(path, real.name)
+            # The real file is untouched by the helper.
+            self.assertTrue(os.path.exists(real.name))
