@@ -73,15 +73,21 @@
                 </div>
 
                 <!-- Desktop navigation -->
-                <nav role="navigation" aria-label="Main navigation" class="hidden md:block">
+                {# xl, not md: signed in with the VSO badge the bar needs ~930px #}
+                {# beside a 250px logo. At md (768px) it overflowed the viewport #}
+                {# — the bug this nav exists to fix — and stayed cramped at lg. #}
+                <nav role="navigation" aria-label="Main navigation" class="hidden xl:block">
                     <ul class="flex items-center space-x-6">
                         {% include "partials/nav_links.html" %}
                     </ul>
                 </nav>
 
                 <!-- Mobile navigation: CSS-only <details> disclosure (no JS, CSP-safe) -->
-                <details class="md:hidden">
-                    <summary class="list-none flex items-center cursor-pointer p-2 -mr-2 rounded hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-white"
+                <details class="xl:hidden">
+                    {# No -mr-2: the negative margin pushed the 44px summary 8px #}
+                    {# past the header's content box, so the row reported an     #}
+                    {# overflow and the <details> box measured 36px, not 44px.   #}
+                    <summary class="list-none flex items-center justify-center cursor-pointer p-2 min-w-[44px] min-h-[44px] rounded hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-white"
                              aria-label="Toggle navigation menu">
                         <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>

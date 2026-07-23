@@ -2154,3 +2154,41 @@ class TestResponsiveNav:
         html = authenticated_client.get(reverse("home")).content.decode()
         assert html.count('href="/dashboard/"') >= 2
         assert html.count('href="/accounts/logout/"') >= 2
+
+    def test_bar_and_hamburger_swap_at_xl(self, client):
+        """
+        The breakpoint must be xl, and both halves must use the same one.
+
+        Signed in with the VSO badge the bar needs ~960px beside a 250px logo.
+        At md (768px) the bar was shown anyway and the page overflowed
+        horizontally — "VSO Portal" clipped, "Logout" off-screen — which is the
+        bug the hamburger exists to fix. lg (1024px) is still too narrow.
+
+        Mismatched halves are the other failure: at any width where both
+        `hidden <bp>:block` and `<bp>:hidden` are false the user gets no nav at
+        all, and where both are true they get two.
+        """
+        html = client.get(reverse("home")).content.decode()
+
+        assert 'class="hidden xl:block"' in html, "desktop bar must appear at xl"
+        assert 'class="xl:hidden"' in html, "hamburger must hide at xl"
+        for too_narrow in (
+            "hidden md:block",
+            "hidden lg:block",
+            "md:hidden",
+            "lg:hidden",
+        ):
+            assert (
+                too_narrow not in html
+            ), f"{too_narrow!r} puts the full nav in a viewport it does not fit"
+
+    def test_nav_links_are_touch_sized_and_do_not_wrap(self, client):
+        """
+        Without min-h-[44px] the dropdown's rows were 40px. Without
+        whitespace-nowrap the desktop bar does not overflow — it wraps
+        "C&P Exam Prep" onto three ragged lines, which reads as broken.
+        """
+        html = client.get(reverse("home")).content.decode()
+
+        assert "min-h-[44px]" in html
+        assert "whitespace-nowrap" in html
