@@ -102,7 +102,11 @@ class AuditLogAdmin(admin.ModelAdmin):
         return False
 
     def has_delete_permission(self, request, obj=None):
-        return request.user.is_superuser
+        # Append-only: nobody deletes audit history through the admin, superuser
+        # included. An admin who can erase the record of their own access is the
+        # gap HIPAA 164.312(b) audit controls exist to close. Retention pruning
+        # belongs in a reviewed management command, not a row-select and a button.
+        return False
 
 
 @admin.register(DataRetentionPolicy)

@@ -511,14 +511,14 @@ def _export_cases_csv(cases, request=None, org=None):
 
     # Audit log the export
     if request and request.user.is_authenticated:
-        AuditLog.objects.create(
-            user=request.user,
+        # AuditLog.log (not objects.create) so the IP goes through
+        # _get_client_ip: behind the App Platform load balancer REMOTE_ADDR is
+        # the proxy, and a bulk pull of veteran data is the last event whose
+        # source IP should be a constant.
+        AuditLog.log(
             action="vso_case_export",
+            request=request,
             resource_type="VeteranCase",
-            ip_address=request.META.get("REMOTE_ADDR"),
-            user_agent=request.META.get("HTTP_USER_AGENT", "")[:500],
-            request_path=request.path,
-            request_method=request.method,
             details={
                 "case_count": len(case_ids),
                 "case_ids": case_ids[:100],  # Limit to first 100 for storage
@@ -1670,15 +1670,11 @@ def _export_reports_csv(org, data, request=None):
 
     # Audit log the export
     if request and request.user.is_authenticated:
-        AuditLog.objects.create(
-            user=request.user,
+        AuditLog.log(
             action="vso_report_export",
+            request=request,
             resource_type="Organization",
             resource_id=org.pk,
-            ip_address=request.META.get("REMOTE_ADDR"),
-            user_agent=request.META.get("HTTP_USER_AGENT", "")[:500],
-            request_path=request.path,
-            request_method=request.method,
             details={
                 "organization": org.slug,
                 "format": "csv",
@@ -1747,15 +1743,11 @@ def _export_reports_pdf(org, data, request=None):
     """Export reports data to PDF format for board presentations with audit logging."""
     # Audit log the export
     if request and request.user.is_authenticated:
-        AuditLog.objects.create(
-            user=request.user,
+        AuditLog.log(
             action="vso_report_export",
+            request=request,
             resource_type="Organization",
             resource_id=org.pk,
-            ip_address=request.META.get("REMOTE_ADDR"),
-            user_agent=request.META.get("HTTP_USER_AGENT", "")[:500],
-            request_path=request.path,
-            request_method=request.method,
             details={
                 "organization": org.slug,
                 "format": "pdf",
