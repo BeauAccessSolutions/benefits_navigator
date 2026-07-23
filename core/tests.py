@@ -2154,11 +2154,30 @@ class TestStorageConfiguration(TestCase):
 
         self.assertEqual(type(storages["default"]).__name__, "FileSystemStorage")
 
-    def test_staticfiles_uses_whitenoise_manifest_storage(self):
-        """Whitenoise's compressed-manifest storage must actually be active."""
-        from django.core.files.storage import storages
+    def test_staticfiles_uses_whitenoise_manifest_storage_when_deployed(self):
+        """
+        Whitenoise's compressed-manifest storage must be what deployed
+        environments serve.
+
+        It cannot be the *active* backend under the test runner: it resolves
+        {% static %} through a manifest that `collectstatic` writes, and neither
+        pytest nor runserver writes one. Asserting it was active here is what
+        took the suite down — every page render raised "Missing staticfiles
+        manifest entry". So assert the deployed half of the selection instead.
+        """
+        from django.conf import settings
 
         self.assertEqual(
-            type(storages["staticfiles"]).__name__,
-            "CompressedManifestStaticFilesStorage",
+            settings.MANIFEST_STATICFILES_BACKEND,
+            "whitenoise.storage.CompressedManifestStaticFilesStorage",
+        )
+
+    def test_test_runs_fall_back_to_manifest_free_storage(self):
+        """The other half: tests must not require a collectstatic manifest."""
+        from django.conf import settings
+
+        self.assertTrue(settings.TESTING)
+        self.assertEqual(
+            settings.STORAGES["staticfiles"]["BACKEND"],
+            settings.LOCAL_STATICFILES_BACKEND,
         )
