@@ -1,0 +1,30 @@
+{% extends "allauth/layouts/entrance.html" %}
+{% load i18n %}
+
+{% block head_title %}{% trans "Sign Out" %}{% endblock head_title %}
+
+{% block content %}
+<div class="text-center mb-8">
+    <h1 class="text-3xl font-bold text-gray-900">{% trans "Sign Out" %}</h1>
+    <p class="mt-2 text-gray-600">
+        {% trans "Are you sure you want to sign out?" %}
+    </p>
+</div>
+
+<form method="post" action="{% url 'account_logout' %}" class="space-y-6">
+    {% csrf_token %}
+    {% if redirect_field_value %}
+        <input type="hidden" name="{{ redirect_field_name }}" value="{{ redirect_field_value }}">
+    {% endif %}
+
+    <button type="submit"
+            class="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-base font-medium text-white bg-blue-700 hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 min-h-[48px]">
+        {% trans "Sign Out" %}
+    </button>
+
+    <a href="{% url 'dashboard' %}"
+       class="w-full flex items-center justify-center py-3 px-4 border border-gray-300 rounded-md shadow-sm text-base font-medium text-gray-800 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 min-h-[48px]">
+        {% trans "Cancel" %}
+    </a>
+</form>
+{% endblock content %}

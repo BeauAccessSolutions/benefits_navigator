@@ -452,6 +452,88 @@ class TestAuthenticationViews:
         assert User.objects.filter(email="newuser@example.com").exists()
 
 
+@pytest.mark.django_db
+class TestStyledAllauthTemplates:
+    """
+    Every allauth account page must render the project's own styled template —
+    not allauth's unstyled bundled default, which renders as raw, borderless
+    inputs on mobile (the "signup/signin look merged" report). Each test mirrors
+    test_signup_uses_custom_styled_template: GET the page and assert the custom
+    template under templates/account/ is the one that rendered, so a regression
+    back to the unstyled default fails the suite.
+    """
+
+    def _templates(self, response):
+        return {t.name for t in response.templates if t.name}
+
+    def test_password_reset_uses_custom_styled_template(self, client):
+        response = client.get(reverse("account_reset_password"))
+        assert response.status_code == 200
+        assert "account/password_reset.html" in self._templates(response)
+        html = response.content.decode()
+        assert 'class="space-y-6"' in html
+        assert 'name="email"' in html
+        assert "px-4 py-3 border" in html
+
+    def test_password_reset_done_uses_custom_styled_template(self, client):
+        response = client.get(reverse("account_reset_password_done"))
+        assert response.status_code == 200
+        assert "account/password_reset_done.html" in self._templates(response)
+
+    def test_password_reset_from_key_uses_custom_styled_template(self, client):
+        # A bogus key drives the token_fail branch; allauth stashes the key in
+        # session and redirects once, so follow the redirect to the rendered page.
+        url = reverse(
+            "account_reset_password_from_key",
+            kwargs={"uidb36": "abc", "key": "invalid-key"},
+        )
+        response = client.get(url, follow=True)
+        assert response.status_code == 200
+        assert "account/password_reset_from_key.html" in self._templates(response)
+
+    def test_password_reset_from_key_done_uses_custom_styled_template(self, client):
+        response = client.get(reverse("account_reset_password_from_key_done"))
+        assert response.status_code == 200
+        assert "account/password_reset_from_key_done.html" in self._templates(response)
+
+    def test_verification_sent_uses_custom_styled_template(self, client):
+        response = client.get(reverse("account_email_verification_sent"))
+        assert response.status_code == 200
+        assert "account/verification_sent.html" in self._templates(response)
+
+    def test_email_confirm_uses_custom_styled_template(self, client):
+        # An invalid key renders the "expired or invalid" branch of the page.
+        response = client.get(
+            reverse("account_confirm_email", kwargs={"key": "invalid-key"})
+        )
+        assert response.status_code == 200
+        assert "account/email_confirm.html" in self._templates(response)
+
+    def test_manage_email_uses_custom_styled_template(self, authenticated_client):
+        response = authenticated_client.get(reverse("account_email"))
+        assert response.status_code == 200
+        assert "account/email.html" in self._templates(response)
+        html = response.content.decode()
+        assert 'name="email"' in html
+        assert "px-4 py-3 border" in html
+
+    def test_password_change_uses_custom_styled_template(self, authenticated_client):
+        response = authenticated_client.get(reverse("account_change_password"))
+        assert response.status_code == 200
+        assert "account/password_change.html" in self._templates(response)
+        html = response.content.decode()
+        assert 'class="space-y-6"' in html
+        assert 'name="oldpassword"' in html
+        assert 'name="password1"' in html
+        assert 'name="password2"' in html
+        assert "px-4 py-3 border" in html
+
+    def test_logout_uses_custom_styled_template(self, authenticated_client):
+        response = authenticated_client.get(reverse("account_logout"))
+        assert response.status_code == 200
+        assert "account/logout.html" in self._templates(response)
+
+
 # =============================================================================
 # DATA EXPORT VIEW TESTS
 # =============================================================================
