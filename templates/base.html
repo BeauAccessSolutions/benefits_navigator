@@ -60,7 +60,7 @@
     <a href="#main-content" class="skip-link">Skip to main content</a>
 
     <!-- Header with navigation -->
-    <header role="banner" class="bg-blue-900 text-white shadow-md">
+    <header role="banner" class="relative bg-blue-900 text-white shadow-md">
         <div class="container mx-auto px-4 py-4">
             <div class="flex justify-between items-center">
                 <div class="flex items-center space-x-3">
@@ -72,72 +72,28 @@
                     </h1>
                 </div>
 
-                <nav role="navigation" aria-label="Main navigation">
-                    <ul class="flex space-x-6">
-                        <li>
-                            <a href="/claims/" class="hover:underline focus:underline"
-                               {% if request.resolver_match.app_name == 'claims' %}aria-current="page"{% endif %}>
-                                Claims Assistant
-                            </a>
-                        </li>
-                        <li>
-                            <a href="/exam-prep/" class="hover:underline focus:underline"
-                               {% if request.resolver_match.app_name == 'examprep' %}aria-current="page"{% endif %}>
-                                C&P Exam Prep
-                            </a>
-                        </li>
-                        <li>
-                            <a href="/appeals/" class="hover:underline focus:underline"
-                               {% if request.resolver_match.app_name == 'appeals' %}aria-current="page"{% endif %}>
-                                Appeals Guidance
-                            </a>
-                        </li>
-                        <li>
-                            <a href="/docs/" class="hover:underline focus:underline"
-                               {% if request.resolver_match.app_name == 'documentation' %}aria-current="page"{% endif %}>
-                                Documentation
-                            </a>
-                        </li>
-                        {% if user.is_authenticated %}
-                        <li>
-                            <a href="/journey/" class="hover:underline focus:underline"
-                               {% if request.resolver_match.url_name == 'journey_dashboard' %}aria-current="page"{% endif %}>
-                                My Journey
-                            </a>
-                        </li>
-                        <li>
-                            <a href="/dashboard/" class="hover:underline focus:underline"
-                               {% if request.resolver_match.url_name == 'dashboard' %}aria-current="page"{% endif %}>
-                                Dashboard
-                            </a>
-                        </li>
-                        {% if is_vso_staff %}
-                        <li>
-                            <a href="{% url 'vso:dashboard' %}" class="hover:underline focus:underline bg-green-700 px-3 py-1 rounded"
-                               {% if request.resolver_match.app_name == 'vso' %}aria-current="page"{% endif %}>
-                                VSO Portal
-                            </a>
-                        </li>
-                        {% endif %}
-                        <li>
-                            <a href="/accounts/logout/" class="hover:underline focus:underline">
-                                Logout
-                            </a>
-                        </li>
-                        {% else %}
-                        <li>
-                            <a href="/accounts/login/" class="hover:underline focus:underline">
-                                Login
-                            </a>
-                        </li>
-                        <li>
-                            <a href="/accounts/signup/" class="bg-white text-blue-900 px-4 py-2 rounded hover:bg-gray-100 focus:bg-gray-100">
-                                Sign Up
-                            </a>
-                        </li>
-                        {% endif %}
+                <!-- Desktop navigation -->
+                <nav role="navigation" aria-label="Main navigation" class="hidden md:block">
+                    <ul class="flex items-center space-x-6">
+                        {% include "partials/nav_links.html" %}
                     </ul>
                 </nav>
+
+                <!-- Mobile navigation: CSS-only <details> disclosure (no JS, CSP-safe) -->
+                <details class="md:hidden">
+                    <summary class="list-none flex items-center cursor-pointer p-2 -mr-2 rounded hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-white"
+                             aria-label="Toggle navigation menu">
+                        <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                        </svg>
+                    </summary>
+                    <nav role="navigation" aria-label="Mobile navigation"
+                         class="absolute left-0 right-0 top-full z-50 bg-blue-900 border-t border-blue-800 shadow-lg">
+                        <ul class="flex flex-col px-4 py-3 space-y-1">
+                            {% include "partials/nav_links.html" %}
+                        </ul>
+                    </nav>
+                </details>
             </div>
         </div>
     </header>
