@@ -233,7 +233,8 @@ class CaseNoteAdmin(admin.ModelAdmin):
         "visible_to_veteran",
         "created_at",
     )
-    search_fields = ("subject", "content", "case__title", "author__email")
+    # 'content' is encrypted at rest and not SQL-searchable.
+    search_fields = ("subject", "case__title", "author__email")
     readonly_fields = ("created_at", "updated_at", "action_completed_at")
     date_hierarchy = "created_at"
 

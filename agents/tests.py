@@ -1155,3 +1155,87 @@ class TestAIConsentEnforcement(TestCase):
         # Should return False, not raise exception
         result = check_ai_consent(new_user)
         self.assertFalse(result)
+
+
+# =============================================================================
+# PHI ENCRYPTION-AT-REST TESTS (HIPAA §164.312(a)(2)(iv))
+# =============================================================================
+
+
+class TestAgentPHIEncryptionAtRest(TestCase):
+    """Veteran-narrative fields must be encrypted in the database, not plaintext."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="vet@example.com", password="TestPass123!"
+        )
+
+    def _raw_column(self, table, column, pk):
+        from django.db import connection
+
+        with connection.cursor() as cursor:
+            cursor.execute(f"SELECT {column} FROM {table} WHERE id = %s", [pk])
+            return cursor.fetchone()[0]
+
+    def test_assistant_turn_content_encrypted_at_rest(self):
+        from agents.models import AssistantThread, AssistantTurn
+        from core.encryption import FieldEncryption
+
+        thread = AssistantThread.objects.create(user=self.user)
+        secret = "My PTSD symptoms include nightmares and hypervigilance."
+        turn = AssistantTurn.objects.create(
+            thread=thread, user=self.user, role="user", content=secret
+        )
+
+        # Round-trips transparently through the ORM.
+        self.assertEqual(AssistantTurn.objects.get(pk=turn.pk).content, secret)
+
+        # Ciphertext at rest: raw column is neither the plaintext nor readable.
+        raw = self._raw_column("agents_assistantturn", "content", turn.pk)
+        self.assertNotEqual(raw, secret)
+        self.assertNotIn("nightmares", raw)
+        self.assertEqual(FieldEncryption.decrypt(raw), secret)
+
+    def test_personal_statement_narratives_encrypted_at_rest(self):
+        from agents.models import AgentInteraction, PersonalStatement
+        from core.encryption import FieldEncryption
+
+        interaction = AgentInteraction.objects.create(
+            user=self.user, agent_type="statement_generator"
+        )
+        story = "During deployment I was exposed to an IED blast in 2011."
+        stmt = PersonalStatement.objects.create(
+            interaction=interaction,
+            user=self.user,
+            condition="PTSD",
+            in_service_event=story,
+            current_symptoms="Anxiety, insomnia",
+            daily_impact="Cannot hold a job",
+            final_statement="Final edited version of my statement.",
+        )
+
+        reloaded = PersonalStatement.objects.get(pk=stmt.pk)
+        self.assertEqual(reloaded.in_service_event, story)
+        self.assertEqual(reloaded.current_symptoms, "Anxiety, insomnia")
+
+        raw = self._raw_column("agents_personalstatement", "in_service_event", stmt.pk)
+        self.assertNotIn("IED", raw)
+        self.assertEqual(FieldEncryption.decrypt(raw), story)
+
+    def test_blank_narrative_stays_empty(self):
+        """Blank narrative fields are not encrypted into non-empty ciphertext."""
+        from agents.models import AgentInteraction, PersonalStatement
+
+        interaction = AgentInteraction.objects.create(
+            user=self.user, agent_type="statement_generator"
+        )
+        stmt = PersonalStatement.objects.create(
+            interaction=interaction,
+            user=self.user,
+            condition="Tinnitus",
+            in_service_event="event",
+            current_symptoms="symptoms",
+            daily_impact="impact",
+            # work_impact left blank
+        )
+        self.assertEqual(PersonalStatement.objects.get(pk=stmt.pk).work_impact, "")

@@ -888,3 +888,38 @@ class TestCrossOrgSecurity:
             assert b"Org B Case" not in response.content
             # Org A case title SHOULD appear
             assert b"Org A Case" in response.content
+
+
+class TestCaseNotePHIEncryptionAtRest(TestCase):
+    """CaseNote.content is caseworker PHI — must be encrypted at rest."""
+
+    def test_case_note_content_encrypted_at_rest(self):
+        from django.db import connection
+        from vso.models import VeteranCase, CaseNote
+        from core.encryption import FieldEncryption
+
+        User = get_user_model()
+        veteran = User.objects.create_user(
+            email="vet@example.com", password="TestPass123!"
+        )
+        author = User.objects.create_user(
+            email="cw@example.com", password="TestPass123!"
+        )
+        org = Organization.objects.create(
+            name="Enc Org", slug="enc-org", org_type="vso"
+        )
+        case = VeteranCase.objects.create(
+            organization=org, veteran=veteran, title="Case"
+        )
+        secret = "Veteran disclosed suicidal ideation during intake call."
+        note = CaseNote.objects.create(
+            case=case, author=author, subject="Intake", content=secret
+        )
+
+        self.assertEqual(CaseNote.objects.get(pk=note.pk).content, secret)
+
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT content FROM vso_casenote WHERE id = %s", [note.pk])
+            raw = cursor.fetchone()[0]
+        self.assertNotIn("suicidal", raw)
+        self.assertEqual(FieldEncryption.decrypt(raw), secret)
