@@ -497,6 +497,30 @@ class TestDataExportView:
         assert data["profile"]["branch_of_service"] == "army"
         assert data["profile"]["disability_rating"] == 50
 
+    def test_export_succeeds_with_claims_and_appeals(
+        self, authenticated_client, user, claim, appeal
+    ):
+        """
+        Regression: the export previously read nonexistent Claim/Appeal fields
+        (condition, filed_date, appeal_lane) and 500'd for any user who had a
+        claim or appeal. It must succeed and carry the real model fields.
+        """
+        response = authenticated_client.post(reverse("accounts:data_export"))
+        assert response.status_code == 200
+
+        data = json.loads(response.content)
+
+        assert data["claims"][0]["title"] == claim.title
+        assert data["claims"][0]["claim_type"] == claim.claim_type
+        assert "submission_date" in data["claims"][0]
+
+        assert data["appeals"][0]["conditions_appealed"] == appeal.conditions_appealed
+        assert data["appeals"][0]["appeal_type"] == appeal.appeal_type
+
+        # The nonexistent fields from the old buggy code must not reappear.
+        assert "condition" not in data["claims"][0]
+        assert "appeal_lane" not in data["appeals"][0]
+
 
 # =============================================================================
 # ACCOUNT DELETION VIEW TESTS
