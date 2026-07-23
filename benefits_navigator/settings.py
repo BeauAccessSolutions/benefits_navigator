@@ -47,6 +47,12 @@ if not SECRET_KEY or SECRET_KEY.startswith("django-insecure"):
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env("DEBUG")
 
+# Detect test runs (CI runs with DEBUG=False, and Django forces DEBUG=False
+# under the test runner regardless of the environment). Defined here, above
+# first use, because both STORAGES and the production-only security block below
+# branch on it.
+TESTING = "pytest" in sys.modules or "test" in sys.argv
+
 # Field-level encryption key for PII (VA file numbers, DOB, etc.)
 # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 # MUST be set in staging/production - no fallback allowed for defense in depth
@@ -239,12 +245,27 @@ MEDIA_ROOT = BASE_DIR / "media"
 # STATICFILES_STORAGE settings — they are silently ignored, so they must be
 # expressed here or the configured backend never takes effect. The S3 block
 # below overrides these entries when USE_S3 is on.
+
+# What deployed environments serve: hashed, compressed, far-future-cacheable
+# assets. It resolves {% static %} through a manifest that `collectstatic`
+# writes.
+MANIFEST_STATICFILES_BACKEND = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+# What runserver and the test suite use. Neither runs collectstatic, so there is
+# no manifest for the backend above to read, and every {% static %} render
+# raises "Missing staticfiles manifest entry" — which takes down any test that
+# renders a page, not just static-file tests.
+LOCAL_STATICFILES_BACKEND = "django.contrib.staticfiles.storage.StaticFilesStorage"
+
 STORAGES = {
     "default": {
         "BACKEND": "django.core.files.storage.FileSystemStorage",
     },
     "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+        "BACKEND": (
+            LOCAL_STATICFILES_BACKEND
+            if DEBUG or TESTING
+            else MANIFEST_STATICFILES_BACKEND
+        ),
     },
 }
 
@@ -427,9 +448,9 @@ CSP_CONNECT_SRC = ("'self'",)
 CSP_FRAME_ANCESTORS = ("'none'",)
 CSP_FORM_ACTION = ("'self'",)
 
-# Detect test runs (CI runs with DEBUG=False) so production-only HTTP->HTTPS
-# redirects don't turn every test-client request into a 301.
-TESTING = "pytest" in sys.modules or "test" in sys.argv
+# TESTING is defined near DEBUG at the top of this file — it is needed earlier,
+# by STORAGES. It also keeps production-only HTTP->HTTPS redirects from turning
+# every test-client request into a 301.
 
 # Production-only settings (skip SSL redirect in staging - DO handles SSL at edge)
 if not DEBUG and not TESTING:
