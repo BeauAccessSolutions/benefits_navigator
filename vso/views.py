@@ -24,6 +24,7 @@ from .permissions import (
     vso_staff_required,
     member_is_org_admin,
     scope_cases_for_member,
+    get_scoped_case_or_404,
 )
 from .services import GapCheckerService
 from appeals.models import Appeal
@@ -232,7 +233,7 @@ def dashboard(request):
 
     # Recent activity (notes and shared documents)
     recent_notes = (
-        CaseNote.objects.filter(case__organization=org)
+        CaseNote.objects.filter(case__in=cases)
         .select_related("case", "author")
         .order_by("-created_at")[:10]
     )
@@ -358,6 +359,8 @@ def case_list(request):
             .select_related("veteran", "assigned_to")
             .prefetch_related("case_conditions")
         )
+        # Rebuilt from scratch — must re-apply least-privilege scoping.
+        cases = scope_cases_for_member(request.user, org, cases)
 
     if status_filter:
         cases = cases.filter(status=status_filter)
@@ -565,10 +568,17 @@ def bulk_case_action(request):
         messages.error(request, "No cases selected.")
         return redirect("vso:case_list")
 
-    # Get cases within organization
-    cases = VeteranCase.objects.filter(
-        pk__in=case_ids, organization=org, is_archived=False
-    ).prefetch_related("case_conditions")
+    # Get cases within organization, honoring least-privilege scoping so a
+    # restricted caseworker cannot bulk-act on a colleague's case by id.
+    cases = (
+        scope_cases_for_member(
+            request.user,
+            org,
+            VeteranCase.objects.filter(organization=org, is_archived=False),
+        )
+        .filter(pk__in=case_ids)
+        .prefetch_related("case_conditions")
+    )
 
     count = cases.count()
     if count == 0:
@@ -659,16 +669,13 @@ def case_detail(request, pk):
     if not org:
         return redirect("vso:dashboard")
 
-    case = get_object_or_404(
-        scope_cases_for_member(
-            request.user,
-            org,
-            VeteranCase.objects.select_related(
-                "veteran", "assigned_to", "organization"
-            ),
+    case = get_scoped_case_or_404(
+        request.user,
+        org,
+        pk,
+        queryset=VeteranCase.objects.select_related(
+            "veteran", "assigned_to", "organization"
         ),
-        pk=pk,
-        organization=org,
     )
 
     # Surfaced to the veteran on their data-activity page
@@ -741,7 +748,7 @@ def case_update_status(request, pk):
     HTMX endpoint to update case status
     """
     org = get_user_organization(request.user, request=request)
-    case = get_object_or_404(VeteranCase, pk=pk, organization=org)
+    case = get_scoped_case_or_404(request.user, org, pk)
 
     # Archived cases are read-only
     if is_case_read_only(case):
@@ -785,7 +792,7 @@ def case_archive(request, pk):
     the default case list but can still be accessed.
     """
     org = get_user_organization(request.user, request=request)
-    case = get_object_or_404(VeteranCase, pk=pk, organization=org)
+    case = get_scoped_case_or_404(request.user, org, pk)
 
     if case.status.startswith("closed"):
         case.is_archived = True
@@ -830,7 +837,7 @@ def add_case_note(request, pk):
     Add a note to a case
     """
     org = get_user_organization(request.user, request=request)
-    case = get_object_or_404(VeteranCase, pk=pk, organization=org)
+    case = get_scoped_case_or_404(request.user, org, pk)
 
     # Archived cases are read-only
     if is_case_read_only(case):
@@ -869,7 +876,7 @@ def complete_action_item(request, pk, note_pk):
     Mark an action item as complete
     """
     org = get_user_organization(request.user, request=request)
-    case = get_object_or_404(VeteranCase, pk=pk, organization=org)
+    case = get_scoped_case_or_404(request.user, org, pk)
 
     # Archived cases are read-only
     if is_case_read_only(case):
@@ -973,7 +980,7 @@ def shared_document_review(request, pk, doc_pk):
     Review a shared document with comprehensive AI analysis for VSO prep.
     """
     org = get_user_organization(request.user, request=request)
-    case = get_object_or_404(VeteranCase, pk=pk, organization=org)
+    case = get_scoped_case_or_404(request.user, org, pk)
     shared_doc = get_object_or_404(SharedDocument, pk=doc_pk, case=case)
 
     # Surfaced to the veteran on their data-activity page
@@ -1072,7 +1079,7 @@ def case_notes_partial(request, pk):
     HTMX partial for case notes list
     """
     org = get_user_organization(request.user, request=request)
-    case = get_object_or_404(VeteranCase, pk=pk, organization=org)
+    case = get_scoped_case_or_404(request.user, org, pk)
     notes = case.notes.select_related("author").order_by("-created_at")
 
     return render(
@@ -1091,7 +1098,7 @@ def case_documents_partial(request, pk):
     HTMX partial for shared documents list
     """
     org = get_user_organization(request.user, request=request)
-    case = get_object_or_404(VeteranCase, pk=pk, organization=org)
+    case = get_scoped_case_or_404(request.user, org, pk)
     shared_docs = case.shared_documents.select_related("document", "shared_by")
 
     return render(
@@ -1448,7 +1455,7 @@ def start_appeal_from_case(request, pk):
         messages.error(request, "Please select an organization to continue.")
         return redirect("vso:select_organization")
 
-    case = get_object_or_404(VeteranCase, pk=pk, organization=org)
+    case = get_scoped_case_or_404(request.user, org, pk)
 
     # Only allow starting appeals for denied cases or cases in appeal status
     if case.status not in ["closed_denied", "appeal_in_progress"]:
@@ -2207,10 +2214,11 @@ def evidence_packet_builder(request, pk):
     if not org:
         return redirect("vso:dashboard")
 
-    case = get_object_or_404(
-        VeteranCase.objects.select_related("veteran", "organization"),
-        pk=pk,
-        organization=org,
+    case = get_scoped_case_or_404(
+        request.user,
+        org,
+        pk,
+        queryset=VeteranCase.objects.select_related("veteran", "organization"),
     )
 
     # Get case conditions

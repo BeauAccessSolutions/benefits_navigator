@@ -104,23 +104,26 @@ accept from any logged-in account. Now closed:
 
 ## Phase 1 — Authorization & data protection (~2 weeks)
 
-### 1.1 VSO least-privilege scoping, everywhere (P1)
-`scope_cases_for_member` is applied in 4 of ~13 endpoints; 9 org-only lookups let restricted
-caseworkers act on colleagues' cases by ID.
+### 1.1 VSO least-privilege scoping, everywhere (P1) — ✅ DONE 2026-07-23
+`scope_cases_for_member` was applied in 4 of ~13 endpoints; org-only lookups let restricted
+caseworkers act on colleagues' cases by ID. Now closed:
 
-- [ ] Add one helper — `get_scoped_case_or_404(user, org, pk, for_write=False)` — that applies
-      org filter **and** `scope_cases_for_member`; convert every case endpoint to it:
-      `case_update_status`, `case_archive`, `add_case_note`, `complete_action_item`,
-      `shared_document_review`, `case_notes_partial`, `case_documents_partial`,
-      `start_appeal_from_case`, and `bulk_case_action`'s queryset.
-- [ ] Fix dashboard `recent_notes` (filter through scoped cases, not raw org).
-- [ ] Fix `case_list` `archived=1` branch to re-apply scoping.
-- [ ] Regression tests: for a `restrict_caseworker_visibility` org, a restricted worker probing
-      another worker's case ID gets 404 on **every** endpoint (parameterized over the URL list —
-      so a future endpoint that forgets the helper fails the test only if added to the list;
-      also add a meta-test that greps `vso/views.py` for raw `VeteranCase.objects` lookups to
-      catch new bypasses).
-- **Acceptance:** one enforced code path for case access; the parameterized 404 suite passes.
+- [x] Added `get_scoped_case_or_404(user, organization, pk, queryset=None)` (`vso/permissions.py`)
+      applying the org filter **and** `scope_cases_for_member`; every case-by-pk endpoint routes
+      through it: `case_detail`, `case_update_status`, `case_archive`, `add_case_note`,
+      `complete_action_item`, `shared_document_review`, `case_notes_partial`,
+      `case_documents_partial`, `start_appeal_from_case`, `evidence_packet_builder`.
+      `bulk_case_action`'s `pk__in` queryset is built from the scoped queryset.
+- [x] Fixed dashboard `recent_notes` (filters through scoped cases via `case__in`, not raw org).
+- [x] Fixed `case_list` `archived=1` branch to re-apply scoping.
+- [x] Regression tests: for a `restrict_caseworker_visibility` org, a restricted worker probing
+      another worker's case ID gets 404 on **every** endpoint — parameterized over the URL list
+      (`TestIntraOrgCaseworkerIsolation`) — plus an AST meta-test
+      (`test_no_unscoped_case_by_pk_lookups_in_views`) that fails on any raw
+      `get_object_or_404(VeteranCase)` / `VeteranCase.objects` pk lookup in `vso/views.py`, and
+      unit tests for the helper (`TestScopedCaseHelper`). Admin + unrestricted-org regressions
+      confirmed. Full `vso/` suite: 68 passed.
+- **Acceptance:** one enforced code path for case access; the parameterized 404 suite passes. ✅
 
 ### 1.2 Protected appeal-document lifecycle (P1)
 - [ ] Land/merge the protected-media work already open (PR #36 for appeals, PR #37 for the
