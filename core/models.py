@@ -393,6 +393,8 @@ class AuditLog(models.Model):
         # Profile changes
         ("profile_update", "Profile Update"),
         ("account_delete", "Account Delete Request"),
+        ("account_delete_cancel", "Account Delete Cancelled"),
+        ("account_delete_purge", "Account Permanently Purged"),
         ("ai_consent_grant", "AI Consent Granted"),
         ("ai_consent_revoke", "AI Consent Revoked"),
         # Admin actions

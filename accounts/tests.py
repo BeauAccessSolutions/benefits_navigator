@@ -525,13 +525,164 @@ class TestAccountDeletionView:
         # Should stay on page with error
         assert response.status_code == 200
 
-    def test_account_deletion_with_confirmation(self, authenticated_client, user):
-        """Deletion proceeds with correct confirmation."""
+    def test_account_deletion_with_confirmation_schedules(
+        self, authenticated_client, user
+    ):
+        """Confirming sets deletion_requested_at and schedules the purge."""
         response = authenticated_client.post(
             reverse("accounts:account_deletion"), {"confirm": "DELETE"}
         )
-        # Should redirect to home after logout
         assert response.status_code == 302
+        user.refresh_from_db()
+        assert user.deletion_requested_at is not None
+
+    def test_scheduling_keeps_account_active_for_cancellation(
+        self, authenticated_client, user
+    ):
+        """
+        The account must stay usable during the grace period — the whole point
+        of 'cancel by logging in'. A scheduled user is still active.
+        """
+        authenticated_client.post(
+            reverse("accounts:account_deletion"), {"confirm": "DELETE"}
+        )
+        user.refresh_from_db()
+        assert user.is_active is True
+
+    def test_wrong_confirmation_does_not_schedule(self, authenticated_client, user):
+        """A wrong confirmation string must not set the deletion field."""
+        authenticated_client.post(
+            reverse("accounts:account_deletion"), {"confirm": "nope"}
+        )
+        user.refresh_from_db()
+        assert user.deletion_requested_at is None
+
+    def test_confirmation_is_idempotent(self, authenticated_client, user):
+        """A second confirm must not reset the grace-period clock."""
+        url = reverse("accounts:account_deletion")
+        authenticated_client.post(url, {"confirm": "DELETE"})
+        user.refresh_from_db()
+        first = user.deletion_requested_at
+        authenticated_client.post(url, {"confirm": "DELETE"})
+        user.refresh_from_db()
+        assert user.deletion_requested_at == first
+
+    def test_cancel_clears_scheduled_deletion(self, authenticated_client, user):
+        """The cancel intent clears deletion_requested_at."""
+        url = reverse("accounts:account_deletion")
+        authenticated_client.post(url, {"confirm": "DELETE"})
+        user.refresh_from_db()
+        assert user.deletion_requested_at is not None
+
+        authenticated_client.post(url, {"intent": "cancel"})
+        user.refresh_from_db()
+        assert user.deletion_requested_at is None
+
+    def test_scheduled_deletion_date_property(self, user):
+        """scheduled_deletion_date is grace-days after the request, else None."""
+        assert user.scheduled_deletion_date is None
+        now = timezone.now()
+        user.deletion_requested_at = now
+        assert user.scheduled_deletion_date == now + timedelta(
+            days=user.DELETION_GRACE_DAYS
+        )
+
+
+# =============================================================================
+# ACCOUNT DELETION PURGE (Celery task) TESTS
+# =============================================================================
+
+
+@pytest.mark.django_db
+class TestAccountDeletionPurge:
+    """Tests for the account-purge task that runs after the grace period."""
+
+    def test_purge_deletes_user_and_owned_data(self, user, document):
+        """Purging a user removes the User row and cascades their data."""
+        from core.tasks import purge_user_account
+        from claims.models import Document
+
+        user_id = user.id
+        purge_user_account(user)
+
+        assert not User.objects.filter(id=user_id).exists()
+        assert not Document.all_objects.filter(user_id=user_id).exists()
+
+    def test_purge_preserves_audit_record(self, user):
+        """
+        The purge must leave an audit trail: an account_delete_purge entry with
+        the email preserved and the user FK nulled (erasure evidence).
+        """
+        from core.tasks import purge_user_account
+        from core.models import AuditLog
+
+        email = user.email
+        purge_user_account(user)
+
+        entry = AuditLog.objects.filter(
+            action="account_delete_purge", user_email=email
+        ).first()
+        assert entry is not None
+        assert entry.user is None
+
+    def test_purge_deletes_file_from_storage(self, document_with_file):
+        """DB cascade doesn't touch storage — the purge must delete the file."""
+        from core.tasks import purge_user_account
+
+        doc = document_with_file
+        storage, name = doc.file.storage, doc.file.name
+        assert storage.exists(name)
+
+        purge_user_account(doc.user)
+        assert not storage.exists(name)
+
+    def test_scheduled_task_only_purges_past_grace(self, db, user_password):
+        """Only accounts past the 30-day grace window are purged."""
+        from core.tasks import process_scheduled_account_deletions
+
+        past = User.objects.create_user(
+            email="past@example.com", password=user_password
+        )
+        past.deletion_requested_at = timezone.now() - timedelta(days=31)
+        past.save(update_fields=["deletion_requested_at"])
+
+        within = User.objects.create_user(
+            email="within@example.com", password=user_password
+        )
+        within.deletion_requested_at = timezone.now() - timedelta(days=5)
+        within.save(update_fields=["deletion_requested_at"])
+
+        not_scheduled = User.objects.create_user(
+            email="keep@example.com", password=user_password
+        )
+
+        result = process_scheduled_account_deletions()
+
+        assert not User.objects.filter(id=past.id).exists()
+        assert User.objects.filter(id=within.id).exists()
+        assert User.objects.filter(id=not_scheduled.id).exists()
+        assert result["purged"] == 1
+
+    def test_deleting_veteran_cascades_vso_case(self, db, user_password):
+        """
+        Deleting a veteran removes their VSO case and its notes/shared data —
+        deletion stays complete, no VSO copies of the veteran's data survive.
+        """
+        from core.tasks import purge_user_account
+        from accounts.models import Organization
+        from vso.models import VeteranCase
+
+        veteran = User.objects.create_user(
+            email="vet@example.com", password=user_password
+        )
+        org = Organization.objects.create(name="Test VSO", slug="test-vso")
+        case = VeteranCase.objects.create(
+            organization=org, veteran=veteran, title="Test case"
+        )
+        case_id = case.id
+
+        purge_user_account(veteran)
+        assert not VeteranCase.objects.filter(id=case_id).exists()
 
 
 # =============================================================================

@@ -4,7 +4,6 @@ Custom authentication views with rate limiting and data management
 
 import json
 import logging
-from datetime import timedelta
 
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
@@ -262,49 +261,59 @@ def _generate_user_export(user):
 @login_required
 def account_deletion(request):
     """
-    Request account deletion (GDPR compliance).
-    Implements 30-day grace period before actual deletion.
+    Request (or cancel) account deletion (GDPR compliance).
+
+    Confirming sets ``User.deletion_requested_at``. The account stays usable
+    during a 30-day grace period so the user can cancel by logging back in and
+    returning here; a daily Celery Beat task
+    (``core.tasks.process_scheduled_account_deletions``) permanently purges
+    accounts whose grace period has elapsed.
     """
     user = request.user
 
-    # Check if deletion already scheduled
-    deletion_scheduled = getattr(user, "deletion_scheduled_at", None)
-
     if request.method == "POST":
-        confirm = request.POST.get("confirm")
+        intent = request.POST.get("intent", "delete")
 
+        if intent == "cancel":
+            if user.deletion_requested_at:
+                user.deletion_requested_at = None
+                user.save(update_fields=["deletion_requested_at"])
+                AuditLog.log(action="account_delete_cancel", request=request)
+                messages.success(
+                    request,
+                    "Your account deletion has been cancelled. Your account and "
+                    "data will be kept.",
+                )
+            return redirect("accounts:account_deletion")
+
+        confirm = request.POST.get("confirm")
         if confirm == "DELETE":
-            # Log the deletion request
+            # Idempotent: don't reset the clock if a request is already pending.
+            if not user.deletion_requested_at:
+                user.deletion_requested_at = timezone.now()
+                user.save(update_fields=["deletion_requested_at"])
+
             AuditLog.log(
                 action="account_delete",
                 request=request,
                 details={
-                    "scheduled_for": (timezone.now() + timedelta(days=30)).isoformat()
+                    "scheduled_for": user.scheduled_deletion_date.isoformat(),
                 },
             )
-
-            # Schedule deletion (30-day grace period)
-            # In a production system, you'd add a field to User model
-            # and a Celery beat task to process deletions
             messages.success(
                 request,
-                "Your account deletion has been scheduled. Your account and all data "
-                "will be permanently deleted in 30 days. You can cancel this by logging "
-                "in and visiting this page again.",
+                "Your account deletion has been scheduled. Your account and all "
+                "data will be permanently deleted in 30 days. You can cancel any "
+                "time before then by logging in and returning to this page.",
             )
-
-            # For now, just log out the user
-            from django.contrib.auth import logout
-
-            logout(request)
-
-            return redirect("home")
+            return redirect("accounts:account_deletion")
         else:
             messages.error(request, "Please type DELETE to confirm account deletion.")
 
     context = {
         "page_title": "Delete My Account",
-        "deletion_scheduled": deletion_scheduled,
+        "deletion_requested_at": user.deletion_requested_at,
+        "scheduled_deletion_date": user.scheduled_deletion_date,
     }
     return render(request, "accounts/account_deletion.html", context)
 
