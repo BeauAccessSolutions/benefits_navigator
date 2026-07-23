@@ -3,7 +3,6 @@ Django settings for benefits_navigator project.
 """
 
 import os
-import ssl
 import sys
 from pathlib import Path
 import environ
@@ -259,15 +258,25 @@ CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = (
 )
 CELERY_RESULT_EXPIRES = 3600  # Task results expire after 1 hour (frees Redis memory)
 
-# SSL configuration for Celery when using rediss:// (SSL) connections
-# Use CERT_NONE for cloud Redis providers (Upstash, etc.) that may not have verifiable certs
+# TLS verification for rediss:// connections — HIPAA §164.312(e) transmission
+# security. rediss:// already encrypts; verifying the server cert additionally
+# prevents MITM. Defaults to CERT_REQUIRED (verified).
+#
+# IMPORTANT for managed Redis/Valkey: if the provider's cert chain isn't in the
+# system trust store, a verified connection fails. Point REDIS_SSL_CA_CERTS at
+# the provider's CA bundle (DigitalOcean Managed Valkey publishes one), or —
+# only if you must — set REDIS_SSL_CERT_REQS=none to fall back to
+# encrypt-without-verify (the prior behavior). Verify on staging before prod.
+from core.redis_ssl import redis_ssl_options
+
+REDIS_SSL_CERT_REQS = env("REDIS_SSL_CERT_REQS", default="required")
+REDIS_SSL_CA_CERTS = env("REDIS_SSL_CA_CERTS", default="") or None
+
 if CELERY_BROKER_URL.startswith("rediss://"):
-    CELERY_BROKER_USE_SSL = {
-        "ssl_cert_reqs": ssl.CERT_NONE,
-    }
-    CELERY_REDIS_BACKEND_USE_SSL = {
-        "ssl_cert_reqs": ssl.CERT_NONE,
-    }
+    CELERY_BROKER_USE_SSL = redis_ssl_options(REDIS_SSL_CERT_REQS, REDIS_SSL_CA_CERTS)
+    CELERY_REDIS_BACKEND_USE_SSL = redis_ssl_options(
+        REDIS_SSL_CERT_REQS, REDIS_SSL_CA_CERTS
+    )
 
 # Celery Beat Schedule for periodic tasks
 # DEPLOYMENT NOTE: Beat scheduler runs on the "worker" process in DigitalOcean App Platform
@@ -338,13 +347,13 @@ REDIS_URL = env("REDIS_URL", default="") or "redis://localhost:6379/0"
 USE_REDIS_CACHE = env.bool("USE_REDIS_CACHE", default=not DEBUG)
 
 if USE_REDIS_CACHE:
-    # Configure Redis cache with SSL support for rediss:// connections
-    # Use CERT_NONE for cloud Redis providers (Upstash, etc.)
+    # Verified TLS for rediss:// cache connections (see the Celery SSL note
+    # above — same REDIS_SSL_CERT_REQS / REDIS_SSL_CA_CERTS knobs).
     _redis_cache_options = {}
     if REDIS_URL.startswith("rediss://"):
-        _redis_cache_options = {
-            "ssl_cert_reqs": ssl.CERT_NONE,
-        }
+        _redis_cache_options = redis_ssl_options(
+            REDIS_SSL_CERT_REQS, REDIS_SSL_CA_CERTS
+        )
 
     CACHES = {
         "default": {
