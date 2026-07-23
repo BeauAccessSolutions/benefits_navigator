@@ -702,12 +702,50 @@ class OrganizationInvitation(TimeStampedModel):
         """Check if invitation is still pending."""
         return not self.accepted_at and not self.is_expired
 
+    @staticmethod
+    def _email_is_verified(user):
+        """
+        True if ``user`` has confirmed control of their email address via
+        allauth (``EmailAddress.verified``) — the authoritative signal that a
+        confirmation link sent to the inbox was actually followed.
+
+        We deliberately do NOT consult ``User.is_verified`` here: django-otp's
+        OTPMiddleware replaces ``request.user.is_verified`` with a 2FA-status
+        *method* (always truthy), so that attribute is unsafe to read in any
+        request context. allauth's EmailAddress is collision-free and is what
+        gates login in production (ACCOUNT_EMAIL_VERIFICATION="mandatory").
+        """
+        from allauth.account.models import EmailAddress
+
+        return EmailAddress.objects.filter(
+            user=user, email__iexact=user.email, verified=True
+        ).exists()
+
     def accept(self, user):
-        """Accept the invitation and create membership."""
+        """
+        Accept the invitation and create membership.
+
+        SECURITY (remediation 0.3): an invitation is bound to the address it was
+        sent to. This is the single enforcement point for BOTH accept flows
+        (``accounts.views.org_invite_accept`` for staff and
+        ``vso.views.accept_invitation`` for veterans), so a forwarded or leaked
+        link cannot grant a role — admin or caseworker included — to any account
+        other than the invited, email-verified one. Callers that reach this
+        method with a mismatched or unverified user get a ``ValueError``.
+        """
         if self.is_expired:
             raise ValueError("Invitation has expired")
         if self.accepted_at:
             raise ValueError("Invitation already accepted")
+        if user.email.lower() != self.email.lower():
+            raise ValueError(
+                f"This invitation was sent to {self.email}. Please log in with "
+                "that account to accept it."
+            )
+        if not self._email_is_verified(user):
+            raise ValueError(
+                "Please verify your email address before accepting this " "invitation."
+            )
         if self.organization.is_at_seat_limit:
             raise ValueError("Organization has reached seat limit")
 

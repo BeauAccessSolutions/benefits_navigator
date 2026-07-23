@@ -723,8 +723,18 @@ class TestAcceptInvitationAtomicity(TestCase):
         self.caseworker = User.objects.create_user(
             email="atomic_caseworker@example.com", password="TestPass123!"
         )
+        # Invitations can only be accepted by the invited, email-verified
+        # account (remediation 0.3). allauth's EmailAddress is the signal.
+        from allauth.account.models import EmailAddress
+
         self.veteran = User.objects.create_user(
             email="atomic_veteran@example.com", password="TestPass123!"
+        )
+        EmailAddress.objects.create(
+            user=self.veteran,
+            email=self.veteran.email,
+            verified=True,
+            primary=True,
         )
         self.invitation = OrganizationInvitation.objects.create(
             organization=self.org,
