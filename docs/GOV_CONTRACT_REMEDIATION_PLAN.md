@@ -217,69 +217,136 @@ findings-report line item.
 
 ---
 
-## Phase 4 — Compliance & procurement readiness (parallel track, start now)
+## Phase 4 — Compliance & procurement readiness (VSO / non-profit market)
 
-Engineering fixes alone don't win contracts. Two **strategic decisions** gate everything else
-here — make them first, they change the infrastructure work above:
+**Target market (decided 2026-07-23): DAV, county VSOs (CVSOs), state veterans departments, and
+accredited veteran non-profits — NOT the federal VA directly.** This is the entry market the app's
+Path B (Organizations, caseworkers, `VeteranCase`, shared documents) is already built for, and it
+**sidesteps FedRAMP entirely** — FedRAMP is triggered by a *federal agency* consuming a cloud
+service; a county office or non-profit buying SaaS is ordinary B2B procurement. That drops the
+authorization cost from ~$250k–$500k (federal ATO) to a SOC 2 program in the ~$15k–50k/yr range,
+and keeps hosting on commercial infrastructure (~$150–300/mo on AWS or current DigitalOcean).
 
-### Decision A — Hosting: DigitalOcean is not FedRAMP-authorized
-- Federal (VA direct): requires FedRAMP-authorized infrastructure → plan a migration path to
-  AWS GovCloud / Azure Government, or partner through a FedRAMP-authorized reseller platform.
-- State/county veterans agencies (often the realistic first contract): **StateRAMP** or plain
-  SOC 2 + contract security terms may suffice — dramatically cheaper.
-- [ ] **Decide the target market first** (federal vs state/local vs VSO-org B2B with government
-      funding). Everything in this phase scales to that choice. Record as ADR-006.
+> **Consequence for engineering priority:** in this market, tenant isolation *is* the product.
+> A DAV/CVSO security reviewer's first questions are role-based access and cross-org data
+> separation — so **Phase 1.1 (VSO scoping) and 0.3 (invitation binding) are promoted to
+> top-tier priority, alongside the Phase 0 integrity items.** See the reordered sequencing below.
+
+### Decision A — Hosting (RESOLVED for the VSO market)
+- Commercial AWS or staying on DigitalOcean is fine; **no GovCloud / FedRAMP needed** unless/until
+  a *direct federal VA* contract is pursued (a later, separate decision — keep the option open but
+  don't pay for it now).
+- [ ] Confirm the hosting provider will sign a **BAA** (Business Associate Agreement) — see the
+      HIPAA section; this is the one hosting item that can force a move (AWS signs a BAA at no
+      extra cost; DigitalOcean's BAA availability must be confirmed and may be the deciding factor).
+- [ ] Record the market + hosting decision as ADR-006.
 
 ### Decision B — The AI data boundary
-- Current posture ("Not HIPAA compliant — educational use only", TODO.md) is incompatible with
-  a government pitch involving real veteran records.
-- [ ] Anthropic offers zero-data-retention and BAA options, and Claude is available through
-      FedRAMP-High-authorized channels (AWS Bedrock in GovCloud). Pick the channel that matches
-      Decision A; get the DPA/BAA in writing.
+- Current posture ("Not HIPAA compliant — educational use only") must be replaced with a real,
+  documented boundary before handling live veteran records for a paying VSO.
+- [ ] Get a **BAA / zero-data-retention agreement from Anthropic** (offered) so AI processing of
+      PHI is contractually covered. Commercial Claude API with a BAA is sufficient for this market
+      — no GovCloud/Bedrock required.
 - [ ] Update `docs/PHI_DATA_FLOW.md` and the user-facing consent copy to match reality.
 
-### Artifacts to produce (checklist for the pitch binder)
-- [ ] **System Security Plan (SSP) lite** — NIST 800-53 rev5 moderate-baseline control mapping;
-      most technical controls map to work in Phases 0–3 (AC → 1.1/3.1, AU → existing AuditLog,
-      SC → 1.3/1.4/3.2, IR → INCIDENT_RESPONSE.md, CP → 3.3).
-- [ ] **Privacy Impact Assessment (PIA)** — data inventory exists in PHI_DATA_FLOW.md; extend to
-      full PIA format (what's collected, why, retention, sharing, deletion — Phase 0.1 makes the
-      deletion answer honest).
-- [ ] **Section 508 / WCAG 2.2 AA conformance**: run a full audit (axe + manual AT pass — the
-      `bas-design-review` skill's checklist), fix findings, and produce a **VPAT/ACR** document.
-      The a11y work already done (aria-live fixes, target sizes) feeds straight in.
-- [ ] **Third-party penetration test** — schedule after Phase 1 lands (testing before the known
-      authz fixes wastes the engagement); remediate; keep the letter.
-- [ ] **SOC 2 Type I → II path** (if pursuing state/B2B): controls largely = Phases 0–3 outputs;
-      engage an auditor for readiness assessment.
-- [ ] **SBOM** (CycloneDX via `pip-audit`/`cyclonedx-bom`) generated in CI — increasingly a
-      federal solicitation requirement (EO 14028).
-- [ ] **Data-retention & deletion policy** doc — written from the Phase 0.1 implementation, not
-      aspiration.
-- [ ] **Incident response**: existing INCIDENT_RESPONSE.md + a tabletop exercise log (do one,
-      date it).
+### Artifacts to produce (VSO pitch binder)
+- [ ] **SOC 2 Type I → II** — the anchor credential for this market. Controls are largely the
+      Phases 0–3 outputs; start with a readiness self-assessment (compliance-automation tooling
+      ~$10–25k/yr), then a Type I audit, then Type II over an observation window.
+- [ ] **Security questionnaire pack** — pre-answer a SIG-lite / CAIQ so each buyer's questionnaire
+      is a copy-paste, not a fire drill. Tenant isolation and RBAC answers come straight from
+      Phase 1.1.
+- [ ] **Data Processing Agreement (DPA) + BAA template** — what a VSO signs; covers PHI handling,
+      subprocessors (hosting, Anthropic), breach notification, deletion/export (Phase 0.1/0.2).
+- [ ] **Section 508 / WCAG 2.2 AA conformance + VPAT/ACR** — these orgs serve disabled veterans;
+      accessibility is a differentiator and sometimes a requirement. Existing a11y work feeds in.
+- [ ] **Cyber-liability insurance** — routinely required by procurement; get a quote early (a real
+      recurring cost, but modest for a small vendor).
+- [ ] **Third-party penetration test** — schedule *after* Phase 1 authz fixes land; keep the
+      letter for the binder. (Smaller/cheaper scope than a federal assessment.)
+- [ ] **Privacy Impact Assessment (PIA)** — extend `PHI_DATA_FLOW.md`; the deletion/export answers
+      are now honest (Phase 0.1 done, 0.2 pending).
+- [ ] **Data-retention & deletion policy** doc — written from the Phase 0.1 implementation.
+- [ ] **Incident response** — existing `INCIDENT_RESPONSE.md` + a dated tabletop exercise log.
 - [ ] **Accessibility, privacy, and security statements** on the public site.
-- [ ] Complete the two open security-invariant items: git-history secrets are scrubbed (done
-      2026-02-12) but **AGENTS.md still says otherwise — fix the doc**; credential rotation is
-      Phase 0.4.
+- [ ] Fix `AGENTS.md` — it still says git-history scrub is pending; it was done 2026-02-12.
+
+### Positioning notes (VSO market)
+- The app is a **tool used by** VA-accredited reps, not the accredited entity — reps keep their VA
+  obligations; the product's job is to be secure and auditable. Keep the "assists, not legal
+  advice, doesn't replace professional judgment" framing.
+- **Entry point:** land a single **county VSO or state DVA pilot** first (light procurement), use
+  it as a reference to approach **DAV national** (bigger enterprise deal, real security review).
+- VSOs generally aren't HIPAA *covered entities*, so HIPAA may not strictly bind the app — but the
+  data is veteran medical narratives, so we adopt the HIPAA Security Rule as the best-practice
+  framework anyway (below). It also future-proofs against a covered-entity buyer.
 
 ---
 
-## Sequencing & effort summary
+## HIPAA Security Rule — safeguards baseline (do the free parts now)
 
-| Phase | Content | Effort (focused) | Blocks |
+Goal: get **as close to HIPAA Security Rule conformance as possible using code + config + policy
+docs**, deferring only the items that genuinely cost money. Honest framing: "HIPAA compliant" is a
+legal status that ultimately requires **signed BAAs with every entity that touches PHI** (hosting,
+AI) plus a documented risk analysis — so the accurate near-term claim is *"we implement the HIPAA
+Security Rule technical and administrative safeguards,"* not *"we are HIPAA compliant."* The BAAs
+themselves are typically **free** (AWS, Anthropic); the paid part is SOC 2 and insurance above.
+
+### Technical safeguards (§164.312) — mostly free, do these first
+- [ ] **Automatic logoff** §164.312(a)(2)(iii) — idle-session timeout + shorter absolute session
+      lifetime. *(Currently sessions last 2 weeks with no idle timeout — the clearest gap.)*
+      **← starting here.**
+- [ ] **Encryption at rest** §164.312(a)(2)(iv) — finish the Phase 1.4 encryption sweep
+      (`CaseNote.content`, `AssistantTurn.content`, agent analysis JSON). Partially done.
+- [ ] **Transmission security** §164.312(e) — Redis/Celery TLS `CERT_NONE` → verified (Phase 3.2);
+      HSTS/secure-cookies already in place. Make cert-reqs env-configurable so prod can flip once
+      the managed-Valkey cert chain is confirmed.
+- [ ] **Person/entity authentication** §164.312(d) — MFA on by default for VSO staff + admin
+      (Phase 3.1); unique per-user accounts already enforced (email is `USERNAME_FIELD`).
+- [ ] **Access control** §164.312(a)(1) — Phase 1.1 VSO least-privilege scoping is the core control.
+- [x] **Audit controls** §164.312(b) — `core.models.AuditLog` already logs PHI access, AI runs,
+      VSO actions, auth events; account-purge writes an erasure record (Phase 0.1).
+- [ ] **Integrity** §164.312(c) — input validation + the upload content-type/size checks (Phase 1.2).
+
+### Administrative safeguards (§164.308) — free to write (docs, not code)
+- [ ] **Risk analysis & risk management** §164.308(a)(1) — a written risk assessment (this plan +
+      the audit findings are 80% of the raw material).
+- [ ] **Sanction policy**, **information-access management**, **security-awareness training**
+      outline, **contingency plan** (backup + DR from Phase 3.3), **breach-notification procedure**
+      — short policy docs under `docs/compliance/`.
+- [ ] **Workforce clearance / termination procedures** — how staff access is granted/revoked
+      (ties to `OrganizationMembership.is_active`).
+
+### Physical safeguards (§164.310)
+- [ ] Largely **inherited from the hosting provider** — documented via their SOC 2 / BAA, not
+      something we implement. Note the inheritance in the SSP.
+
+### The honest gaps (what still costs money or a signature)
+- BAAs with hosting + Anthropic (usually free, but require signing and may constrain hosting).
+- SOC 2 audit + compliance tooling (~$15–50k/yr) — the real recurring spend.
+- Cyber-liability insurance.
+- A formal, signed-off risk assessment (we can *draft* it free; a review adds cost).
+
+---
+
+## Sequencing & effort summary (reordered for the VSO market)
+
+| Priority | Content | Effort (focused) | Why this order |
 |---|---|---|---|
-| 0 | Deletion, export, invitations, credential rotation | ~1 week | Everything — these are the integrity items |
-| 1 | VSO scoping, protected media, storage, encryption | ~2 weeks | Pen test, SSP technical controls |
-| 2 | Appeal rules, structured AI, regulatory process | ~1 week | — |
-| 3 | MFA/lockout, TLS/CSP, backups/DR, CI gates | ~1–2 weeks | SOC 2 readiness |
-| 4 | Decisions A & B now; artifacts alongside 1–3 | rolling | The pitch itself |
+| **0** | Account deletion ✅, export fix, **invitation binding**, credential rotation | ~1 week | Integrity + the invitation authz gap a VSO reviewer checks first |
+| **1** | **VSO least-privilege scoping**, protected media, storage, encryption sweep | ~2 weeks | Tenant isolation *is* the product in this market; feeds SOC 2 + pen test |
+| **HIPAA baseline** | Automatic logoff (**starting now**), then encryption sweep, TLS, MFA, admin-safeguard docs | rolling, ~free | Overlaps Phases 1 & 3; cheap trust signal for VSO buyers |
+| **2** | Appeal rules, structured AI, regulatory process | ~1 week | Correctness |
+| **3** | MFA/lockout, TLS/CSP, backups/DR, CI gates | ~1–2 weeks | SOC 2 readiness, HIPAA transmission/auth |
+| **4** | Market = VSO/DAV (decided); BAAs + SOC 2 + VPAT + insurance | rolling | The pitch itself |
 
-**Order of operations:** Phase 0 first and alone (small, test-backed PRs per item — 0.1 is its
-own PR). Decisions A & B in parallel this week since they may redirect Phase 1.3 (storage
-choice) and the AI gateway config. Phases 1–3 as sequenced PRs. Third-party pen test after
-Phase 1. Pitch binder assembles as artifacts complete.
+**Order of operations:** Phase 0 first (0.1 done). **Invitation binding (0.3) and VSO scoping
+(1.1) next** — tenant isolation is the VSO product and the first thing a buyer probes. The HIPAA
+technical safeguards run in parallel and mostly overlap Phases 1 & 3 (starting with automatic
+logoff). Get the free **BAAs** (hosting, Anthropic) in flight early — they gate the honest HIPAA
+claim and can influence hosting. Pen test after Phase 1. SOC 2 readiness once Phases 0–3 land.
 
-**Definition of done for "pitchable":** every TODO.md P0/P1 checked; pen-test letter with
-criticals remediated; VPAT; PIA; deletion/export demonstrably honest end-to-end; hosting + AI
-channel matched to the chosen market; and no doc in the repo that contradicts reality.
+**Definition of done for "pitchable" (VSO market):** every TODO.md P0/P1 checked; VSO tenant
+isolation proven (Phase 1.1 test suite); deletion/export demonstrably honest end-to-end; BAAs
+signed; SOC 2 Type I in hand (Type II underway); VPAT; pen-test letter with criticals remediated;
+cyber-liability insurance bound; and no doc in the repo that contradicts reality.
