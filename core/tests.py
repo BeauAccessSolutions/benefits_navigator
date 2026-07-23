@@ -2000,6 +2000,7 @@ class TestCheckCeleryHealthLogsRedisFailure(TestCase):
             any("queue length" in message.lower() for message in logs.output)
         )
 
+
 # =============================================================================
 # IDLE SESSION TIMEOUT MIDDLEWARE TESTS (HIPAA automatic logoff)
 # =============================================================================
@@ -2072,6 +2073,7 @@ class TestIdleSessionTimeoutMiddleware:
     def test_anonymous_request_unaffected(self, client):
         """Unauthenticated requests pass through the middleware untouched."""
         assert client.get(reverse("home")).status_code == 200
+
 
 # =============================================================================
 # REDIS TLS OPTIONS HELPER TESTS (HIPAA §164.312(e) transmission security)
