@@ -154,11 +154,11 @@ def _generate_user_export(user):
         export["claims"] = [
             {
                 "id": claim.id,
-                "condition": claim.condition,
+                "title": claim.title,
                 "claim_type": claim.claim_type,
                 "status": claim.status,
-                "filed_date": (
-                    claim.filed_date.isoformat() if claim.filed_date else None
+                "submission_date": (
+                    claim.submission_date.isoformat() if claim.submission_date else None
                 ),
                 "created_at": claim.created_at.isoformat(),
             }
@@ -171,9 +171,8 @@ def _generate_user_export(user):
         export["appeals"] = [
             {
                 "id": appeal.id,
-                "condition": appeal.condition,
+                "conditions_appealed": appeal.conditions_appealed,
                 "appeal_type": appeal.appeal_type,
-                "appeal_lane": appeal.appeal_lane,
                 "status": appeal.status,
                 "created_at": appeal.created_at.isoformat(),
             }
