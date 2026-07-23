@@ -1268,6 +1268,19 @@ class TestSaveCalculationViews:
         assert response.status_code == 200
         assert saved_rating in response.context["calculations"]
 
+    def test_saved_calculations_list_is_a_live_region(
+        self, authenticated_client, saved_rating
+    ):
+        """
+        Deleting a calculation swaps #calc-<pk> with hx-swap="outerHTML",
+        which destroys that element entirely — aria-live has to live on the
+        persistent list wrapper, not the item being removed.
+        """
+        html = authenticated_client.get(
+            reverse("examprep:saved_calculations")
+        ).content.decode()
+        assert 'class="space-y-4" aria-live="polite"' in html
+
 
 # =============================================================================
 # EXAM CHECKLIST VIEW TESTS
@@ -1304,6 +1317,22 @@ class TestExamChecklistViews:
             reverse("examprep:checklist_detail", kwargs={"pk": exam_checklist.pk})
         )
         assert response.status_code == 200
+
+    def test_checklist_task_list_is_a_live_region(
+        self, authenticated_client, exam_checklist
+    ):
+        """
+        Task toggling swaps each <li> with hx-target="this" outerHTML, which
+        destroys the toggled item — aria-live must be on the persistent
+        #task-list wrapper for the completion state change to be announced.
+        """
+        html = authenticated_client.get(
+            reverse("examprep:checklist_detail", kwargs={"pk": exam_checklist.pk})
+        ).content.decode()
+        assert 'id="task-list"' in html
+        list_start = html.index('id="task-list"')
+        list_tag = html[list_start : list_start + 200]
+        assert 'aria-live="polite"' in list_tag
 
     def test_checklist_toggle_task(self, authenticated_client, exam_checklist):
         """Toggle task HTMX endpoint works."""

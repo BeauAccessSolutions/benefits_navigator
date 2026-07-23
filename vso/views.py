@@ -11,6 +11,7 @@ from django.contrib import messages
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.http import require_POST
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Q, Count
 from django.utils import timezone
 from django_ratelimit.decorators import ratelimit
@@ -335,9 +336,11 @@ def case_list(request):
         return redirect("vso:dashboard")
 
     # Base queryset - exclude archived by default
-    cases = VeteranCase.objects.filter(
-        organization=org, is_archived=False
-    ).select_related("veteran", "assigned_to")
+    cases = (
+        VeteranCase.objects.filter(organization=org, is_archived=False)
+        .select_related("veteran", "assigned_to")
+        .prefetch_related("case_conditions")
+    )
     cases = scope_cases_for_member(request.user, org, cases)
 
     # Filtering
@@ -350,9 +353,11 @@ def case_list(request):
 
     # Allow showing archived cases
     if show_archived:
-        cases = VeteranCase.objects.filter(
-            organization=org, is_archived=True
-        ).select_related("veteran", "assigned_to")
+        cases = (
+            VeteranCase.objects.filter(organization=org, is_archived=True)
+            .select_related("veteran", "assigned_to")
+            .prefetch_related("case_conditions")
+        )
 
     if status_filter:
         cases = cases.filter(status=status_filter)
@@ -563,7 +568,7 @@ def bulk_case_action(request):
     # Get cases within organization
     cases = VeteranCase.objects.filter(
         pk__in=case_ids, organization=org, is_archived=False
-    )
+    ).prefetch_related("case_conditions")
 
     count = cases.count()
     if count == 0:
@@ -1360,43 +1365,49 @@ def accept_invitation(request, token):
 
     if request.method == "POST":
         try:
-            # Accept the invitation
-            invitation.accept(request.user)
+            # Accept the invitation, create the case, and log the milestone
+            # note as one unit — a failure partway through must not leave an
+            # accepted invitation with no case, or a case with no note.
+            with transaction.atomic():
+                invitation.accept(request.user)
 
-            # Create case if details were stored
-            case_info = request.session.get(f"pending_case_{token}", {})
+                # Create case if details were stored
+                case_info = request.session.get(f"pending_case_{token}", {})
+                if case_info:
+                    from django.contrib.auth import get_user_model
+
+                    User = get_user_model()
+
+                    invited_by = User.objects.filter(
+                        id=case_info.get("invited_by_id")
+                    ).first()
+
+                    case = VeteranCase.objects.create(
+                        organization=invitation.organization,
+                        veteran=request.user,
+                        assigned_to=invited_by,
+                        title=case_info.get("title", f"Case for {request.user.email}"),
+                        description=case_info.get("description", ""),
+                        priority=case_info.get("priority", "normal"),
+                        status="intake",
+                        intake_date=timezone.now().date(),
+                        veteran_consent_date=timezone.now(),
+                    )
+
+                    # Create initial note
+                    CaseNote.objects.create(
+                        case=case,
+                        author=invited_by,
+                        note_type="milestone",
+                        subject="Veteran accepted invitation",
+                        content=f"{request.user.email} accepted the invitation and joined the case.",
+                        visible_to_veteran=True,
+                    )
+
+            # Clean up session (outside the DB transaction — session storage
+            # isn't part of it, and this should only happen once the writes
+            # above have actually committed).
             if case_info:
-                from django.contrib.auth import get_user_model
-
-                User = get_user_model()
-
-                invited_by = User.objects.filter(
-                    id=case_info.get("invited_by_id")
-                ).first()
-
-                case = VeteranCase.objects.create(
-                    organization=invitation.organization,
-                    veteran=request.user,
-                    assigned_to=invited_by,
-                    title=case_info.get("title", f"Case for {request.user.email}"),
-                    description=case_info.get("description", ""),
-                    priority=case_info.get("priority", "normal"),
-                    status="intake",
-                    intake_date=timezone.now().date(),
-                    veteran_consent_date=timezone.now(),
-                )
-
-                # Create initial note
-                CaseNote.objects.create(
-                    case=case,
-                    author=invited_by,
-                    note_type="milestone",
-                    subject="Veteran accepted invitation",
-                    content=f"{request.user.email} accepted the invitation and joined the case.",
-                    visible_to_veteran=True,
-                )
-
-                # Clean up session
                 del request.session[f"pending_case_{token}"]
 
             messages.success(
@@ -1559,6 +1570,9 @@ def reports(request):
         )
 
     # --- Caseworker Workload ---
+    # Urgent/overdue counts are computed as conditional aggregates in the same
+    # query as open_cases, instead of a separate pair of .count() queries per
+    # caseworker (that scaled as O(caseworkers) query count).
     caseworker_workload = list(
         cases.exclude(status__startswith="closed")
         .values(
@@ -1566,6 +1580,10 @@ def reports(request):
         )
         .annotate(
             open_cases=Count("id"),
+            urgent_count=Count("id", filter=Q(priority="urgent")),
+            overdue_count=Count(
+                "id", filter=Q(next_action_date__lt=timezone.now().date())
+            ),
         )
         .order_by("-open_cases")
     )
@@ -1579,28 +1597,6 @@ def reports(request):
             item["name"] = item["assigned_to__email"]
         else:
             item["name"] = "Unassigned"
-
-    # Add urgent/overdue count per caseworker
-    for item in caseworker_workload:
-        email = item["assigned_to__email"]
-        if email:
-            urgent_count = (
-                cases.filter(assigned_to__email=email, priority="urgent")
-                .exclude(status__startswith="closed")
-                .count()
-            )
-            overdue_count = (
-                cases.filter(
-                    assigned_to__email=email, next_action_date__lt=timezone.now().date()
-                )
-                .exclude(status__startswith="closed")
-                .count()
-            )
-            item["urgent_count"] = urgent_count
-            item["overdue_count"] = overdue_count
-        else:
-            item["urgent_count"] = 0
-            item["overdue_count"] = 0
 
     # --- Win Rate by Month ---
     win_rate_by_month = []

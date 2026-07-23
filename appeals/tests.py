@@ -611,6 +611,56 @@ class TestAppealWorkflowViews:
         )
         assert response.status_code == 404
 
+    def test_appeal_detail_supplemental_shows_no_deadline_label(
+        self, authenticated_client, user
+    ):
+        """
+        Supplemental claims have no filing deadline by design (38 CFR
+        § 20.204) — the deadline cell must say so, not show the generic
+        "—" used for genuinely missing data.
+        """
+        supplemental_appeal = Appeal.objects.create(
+            user=user,
+            appeal_type="supplemental",
+        )
+        response = authenticated_client.get(
+            reverse("appeals:appeal_detail", kwargs={"pk": supplemental_appeal.pk})
+        )
+        html = response.content.decode()
+        assert "No deadline (can file anytime)" in html
+
+    def test_appeal_detail_checklist_section_is_the_live_region(
+        self, authenticated_client, appeal
+    ):
+        """
+        The checklist HTMX swap targets #checklist-section (not the inner
+        div the partial renders), so aria-live must live on that persistent
+        wrapper — putting it only on the inner div means it gets destroyed
+        and recreated on every swap and screen readers won't announce it.
+        """
+        AppealGuidance.objects.create(
+            title="HLR Guide",
+            slug="hlr-guide-a11y-test",
+            appeal_type=appeal.appeal_type,
+            va_form_number="VA Form 20-0996",
+            average_processing_days=141,
+            when_to_use="Use when VA made an error",
+            overview="HLR is a de novo review...",
+            is_published=True,
+            checklist_items=[
+                {"id": "step1", "task": "Gather evidence", "timing": "Now"},
+            ],
+        )
+
+        response = authenticated_client.get(
+            reverse("appeals:appeal_detail", kwargs={"pk": appeal.pk})
+        )
+        html = response.content.decode()
+        assert 'id="checklist-section"' in html
+        section_start = html.index('id="checklist-section"')
+        section_tag = html[max(0, section_start - 200) : section_start + 50]
+        assert 'aria-live="polite"' in section_tag
+
 
 # =============================================================================
 # APPEAL DECISION TREE TESTS

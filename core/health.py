@@ -75,8 +75,12 @@ def check_celery():
             if redis_url and "redis" in redis_url:
                 r = redis.from_url(redis_url)
                 queue_length = r.llen("celery")
-        except Exception:
-            pass
+        except Exception as e:
+            # Silently leaving queue_length as None here used to hide a down
+            # Redis entirely — the queue-length alert threshold (see
+            # CLAUDE.md monitoring table) can never fire if we never log
+            # that the check itself failed.
+            logger.warning(f"Celery queue length check failed: {e}")
 
         status = "healthy" if worker_count > 0 else "degraded"
 

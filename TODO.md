@@ -1,7 +1,7 @@
 # VA Benefits Navigator — TODO & Audit Tracker
 
-**Last Updated:** 2026-06-09
-**Updated By:** Claude Code Comprehensive Audit (see `audits/2026-06-09/comprehensive-audit.md`)
+**Last Updated:** 2026-07-22
+**Updated By:** Claude Code — worked through all P1 items and several P2 items from the 2026-06-09 audit (see checkmarks below; 1029 tests passing, ruff/black clean)
 
 ---
 
@@ -15,25 +15,25 @@ Tier 1 scans + 7-specialist review. Overall **3.4/5** (up from 2.9/5 on 2026-04-
 ### P1 — NEW (Fix within 1–2 weeks)
 - [x] **Rate-limit signed-URL endpoints** — 30/m per IP added 2026-06-09.
 - [x] **Encrypt `phone_number`** — EncryptedCharField + data migration 2026-06-09. Also encrypted: VeteranCase description/conditions/closure_notes/c_and_p_exam_notes, Document.condition_tags (privacy hardening Phase 0).
-- [ ] **Bump lxml to >=6.1.0** — 5.1.0 has PYSEC-2026-87; parses scraped M21 HTML.
-- [ ] **Disclaimers on remaining AI pages** — statement_generator, condition_discovery, evidence_gap_result templates (decision analyzer pattern exists).
-- [ ] **WCAG: 5 aria-required + 10+ aria-live gaps** — contact.html:47,60,89,102, decision_analyzer.html:38; HTMX targets in search/journey/appeals/claims partials.
-- [ ] **N+1 in VSO views** — `vso/views.py:365-370` (triage per case), `:430-445` (CSV export), `:1407-1468` (reports). select_related/prefetch/annotate.
-- [ ] **transaction.atomic on accept_invitation** — `vso/views.py:1245-1280` (3 writes, no boundary).
+- [x] **Bump lxml to >=6.1.0** — already at 6.1.0 in `requirements.txt` (verified 2026-07-22).
+- [x] **Disclaimers on remaining AI pages** — added to `statement_generator.html` and `statement_result.html`; `condition_discovery.html` and `evidence_gap_result.html` already had one (2026-07-22).
+- [x] **WCAG: aria-required + aria-live gaps** — `contact.html` (4 required fields), `decision_analyzer.html:38`; aria-live added to 9 HTMX swap targets across appeals/claims/core/examprep/documentation partials, placed on the actual persistent `hx-target` (not the fragment that gets destroyed on swap — `appeals/appeal_detail.html`'s `#checklist-section` was previously missing it entirely, with aria-live misplaced on the inner div that gets replaced) (2026-07-22).
+- [x] **N+1 in VSO views** — `GapCheckerService.get_triage_label` now filters in Python over `case_conditions.all()` (works with `prefetch_related`) instead of `.exclude()` on the manager; `prefetch_related("case_conditions")` added to case_list/bulk_case_action querysets; `reports()` caseworker urgent/overdue counts now one annotated query instead of 2 queries per caseworker. Also fixed a related template bug found via the regression test: `case.assigned_to.get_full_name|default:case.assigned_to.email` 500s when `assigned_to` is null (Django doesn't safely resolve filter *arguments* the way it does the base variable) — fixed in `case_list.html`, `case_detail.html`, `document_share.html` (2026-07-22).
+- [x] **transaction.atomic on accept_invitation** — wrapped invitation.accept() + case creation + milestone note in `transaction.atomic()` (2026-07-22).
 - [x] **Security tests: signed-URL expiry/tampering + encryption round-trip + GraphQL PII redaction** — `tests/test_security_controls.py` (18 tests) 2026-06-09.
 
 ### P2 — NEW (Fix before scaling)
-- [ ] M21 scraper tasks lack acks_late/retry config — `agents/tasks.py:23,86,186,197,222`
-- [ ] `core/health.py:77` except/pass hides Redis failure (queue alerts can't fire when Redis is down)
+- [x] M21 scraper tasks lack acks_late/retry config — `acks_late=True` added to all 5 tasks in `agents/tasks.py` (2026-07-22)
+- [x] `core/health.py` except/pass hides Redis failure — now logs a warning instead of silently swallowing (2026-07-22)
 - [x] Download-anomaly alerts include user email — fixed 2026-06-09 (user ID only)
 - [ ] No per-user token-spend cap — `accounts/models.py:895` counts analyses, not tokens
-- [ ] `exc_info=True` may leak PII into logs — `agents/ai_gateway.py:400`
-- [ ] Silent except/pass handlers — `core/views.py:711,719`, `api/views.py:65,165,177,230`, `claims/forms.py:83` (audit-log write failures swallowed)
-- [ ] `mark_safe` on DB content — `core/templatetags/supportive_tags.py:78` (use format_html/escape)
-- [ ] bandit High: use `hashlib.md5(key, usedforsecurity=False)` — `core/encryption.py:79`
+- [x] `exc_info=True` leaking PII — not present in `agents/ai_gateway.py` anymore; current error logging only logs `type(e).__name__`, already sanitized (verified 2026-07-22, appears already fixed in an earlier pass)
+- [x] Silent except/pass handlers — the two genuine audit-log-write swallows (`api/views.py` login/logout `AuditLog.objects.create()`) now `logger.exception()` instead of `pass`. The other referenced lines (`core/views.py`, `claims/forms.py`) turned out on inspection to be unrelated defensive `RelatedObjectDoesNotExist` guards, not audit-log writes — left as-is (2026-07-22)
+- [x] `mark_safe` on DB content — `core/templatetags/supportive_tags.py` now uses `format_html()`, so `message.message` is auto-escaped while the trusted hardcoded SVG stays unescaped (2026-07-22)
+- [x] bandit High: `hashlib.md5(key, usedforsecurity=False)` — `core/encryption.py:83` (2026-07-22)
 - [ ] Enforce bandit in CI (currently `continue-on-error: true`, security-checks.yml:141); ratchet coverage floor above 60
 - [ ] "(estimated)" label on rates table — `rating_calculator.html:170-180` (also verify year label isn't hardcoded "2024")
-- [ ] Supplemental appeal: render "No deadline (can file anytime)" instead of "—" — `appeal_detail.html:99-100`
+- [x] Supplemental appeal: render "No deadline (can file anytime)" instead of "—" — `appeal_detail.html` (2026-07-22)
 - [ ] HTMX focus management after swaps (carried over from 2026-04-10, still zero instances)
 - [ ] JWT refresh lifetime 7d → consider 24-48h — `settings.py:724`
 - [ ] CLAUDE.md drift: route table app attribution; FEATURES lists 6 of 14 flags; archive stale root docs to docs/archive/

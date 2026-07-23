@@ -140,7 +140,7 @@
             <h2 id="tasks-heading" class="text-xl font-semibold text-gray-900 mb-4">Preparation Tasks</h2>
             <p class="text-sm text-gray-600 mb-4">Check off tasks as you complete them to track your progress.</p>
 
-            <ul class="space-y-3" id="task-list" role="list" aria-label="Preparation tasks">
+            <ul class="space-y-3" id="task-list" role="list" aria-label="Preparation tasks" aria-live="polite" aria-atomic="false">
                 {% for task in checklist.guidance.checklist_items %}
                 <li id="task-item-{{ forloop.counter }}"
                     hx-target="this"

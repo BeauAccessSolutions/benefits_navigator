@@ -17,7 +17,7 @@
     </div>
 
     {% if calculations %}
-    <div class="space-y-4">
+    <div class="space-y-4" aria-live="polite" aria-atomic="false">
         {% for calc in calculations %}
         <div class="bg-white shadow-md rounded-lg p-6" id="calc-{{ calc.pk }}">
             <div class="flex items-start justify-between">

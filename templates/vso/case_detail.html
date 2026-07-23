@@ -479,7 +479,7 @@
                         </div>
                         <div>
                             <dt class="text-sm font-medium text-gray-500">Assigned To</dt>
-                            <dd class="text-gray-900">{{ case.assigned_to.get_full_name|default:case.assigned_to.email|default:"Unassigned" }}</dd>
+                            <dd class="text-gray-900">{% if case.assigned_to %}{{ case.assigned_to.get_full_name|default:case.assigned_to.email }}{% else %}Unassigned{% endif %}</dd>
                         </div>
                         <div>
                             <dt class="text-sm font-medium text-gray-500">Organization</dt>

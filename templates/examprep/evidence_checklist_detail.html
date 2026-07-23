@@ -78,7 +78,7 @@
             <h2 class="text-lg font-medium text-gray-900">{{ category }}</h2>
         </div>
 
-        <div class="divide-y divide-gray-200">
+        <div class="divide-y divide-gray-200" aria-live="polite" aria-atomic="false">
             {% for item in items %}
             <div id="item-{{ item.id }}"
                  class="p-4 hover:bg-gray-50 transition-colors"

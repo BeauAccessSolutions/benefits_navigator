@@ -606,6 +606,20 @@ class TestJourneyDashboardView:
         assert "deadlines" in response.context
         assert "milestones" in response.context
 
+    def test_journey_dashboard_htmx_targets_are_live_regions(
+        self, authenticated_client, journey_event, milestone, deadline
+    ):
+        """
+        #timeline-content and #deadline-<pk> are HTMX swap targets — both
+        must carry aria-live so screen readers hear about refreshes and
+        deadline-toggle updates.
+        """
+        html = authenticated_client.get(
+            reverse("core:journey_dashboard")
+        ).content.decode()
+        assert 'id="timeline-content" aria-live="polite"' in html
+        assert f'id="deadline-{deadline.pk}" class="p-4" aria-live="polite"' in html
+
 
 @pytest.mark.django_db
 class TestMilestoneViews:
@@ -1896,3 +1910,92 @@ class TestDocumentModelSignedURLMethods(TestCase):
 
         # URLs should be different due to different expiration timestamps
         self.assertNotEqual(url_5min, url_60min)
+
+
+# =============================================================================
+# SUPPORTIVE MESSAGE TEMPLATE TAG TESTS (TODO.md P2: mark_safe on DB content)
+# =============================================================================
+
+
+class TestSupportiveMessageTagEscaping(TestCase):
+    """
+    {% supportive_message %} used to build its HTML with an f-string and
+    mark_safe() the whole thing, which left message.message (admin-editable
+    DB content) completely unescaped — a stored-XSS vector if that field
+    ever contains markup. It must now come out auto-escaped.
+    """
+
+    def setUp(self):
+        from core.models import SupportiveMessage
+
+        self.SupportiveMessage = SupportiveMessage
+
+    def test_message_content_is_escaped(self):
+        from core.templatetags.supportive_tags import supportive_message
+
+        self.SupportiveMessage.objects.create(
+            context="dashboard_welcome",
+            message="<script>alert('xss')</script>",
+            tone="encouraging",
+            icon="heart",
+            is_active=True,
+        )
+
+        rendered = str(supportive_message("dashboard_welcome"))
+        self.assertNotIn("<script>alert('xss')</script>", rendered)
+        self.assertIn("&lt;script&gt;", rendered)
+
+    def test_trusted_icon_svg_still_renders_unescaped(self):
+        """The hardcoded ICON_MAP svg is trusted markup, not DB content."""
+        from core.templatetags.supportive_tags import supportive_message
+
+        self.SupportiveMessage.objects.create(
+            context="dashboard_welcome",
+            message="Welcome back!",
+            tone="encouraging",
+            icon="heart",
+            is_active=True,
+        )
+
+        rendered = str(supportive_message("dashboard_welcome"))
+        self.assertIn("<svg", rendered)
+        self.assertIn("Welcome back!", rendered)
+
+
+# =============================================================================
+# HEALTH CHECK TESTS (TODO.md P2: core/health.py Redis failure hidden)
+# =============================================================================
+
+
+class TestCheckCeleryHealthLogsRedisFailure(TestCase):
+    """
+    check_celery()'s queue-length lookup used to swallow a Redis failure
+    with a bare `except: pass` — status still came back "healthy" with
+    queue_length silently None, and nothing was logged, so the queue-length
+    alert (CLAUDE.md monitoring table) could never fire when Redis itself
+    was down. It must at least log the failure now.
+    """
+
+    def test_redis_failure_during_queue_length_check_is_logged(self):
+        from unittest import mock
+        from core.health import check_celery
+
+        mock_inspect = mock.MagicMock()
+        mock_inspect.active.return_value = {"worker1@host": []}
+
+        with mock.patch(
+            "benefits_navigator.celery.app.control.inspect",
+            return_value=mock_inspect,
+        ), mock.patch(
+            "django.conf.settings.CELERY_BROKER_URL", "redis://localhost:6379/0"
+        ), mock.patch(
+            "redis.from_url", side_effect=ConnectionError("simulated Redis outage")
+        ), self.assertLogs(
+            "core.health", level="WARNING"
+        ) as logs:
+            result = check_celery()
+
+        self.assertIsNone(result["queue_length"])
+        self.assertTrue(
+            any("queue length" in message.lower() for message in logs.output)
+        )
