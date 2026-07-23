@@ -17,11 +17,46 @@ django.setup()
 import pytest
 from datetime import date, datetime, timedelta
 from decimal import Decimal
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
+
+
+# =============================================================================
+# STATICFILES MANIFEST
+# =============================================================================
+
+
+@pytest.fixture(scope="session", autouse=True)
+def staticfiles_manifest():
+    """
+    Build the staticfiles manifest before any test renders a template.
+
+    STORAGES["staticfiles"] is whitenoise's CompressedManifestStaticFilesStorage,
+    which resolves every {% static %} tag through staticfiles.json. That file is
+    produced by collectstatic and lives in a gitignored STATIC_ROOT, so a fresh
+    checkout has no manifest and any test that renders a page raises
+    "Missing staticfiles manifest entry for 'css/tailwind.min.css'" — a 500 that
+    looks like a view bug and isn't.
+
+    Doing this here rather than as a CI step fixes local runs, every workflow,
+    and any runner added later, all at once. The source CSS is committed, so no
+    npm build is involved and this costs about a second.
+    """
+    from django.conf import settings
+    from django.core.management import call_command
+
+    backend = settings.STORAGES.get("staticfiles", {}).get("BACKEND", "")
+    if "Manifest" not in backend:
+        # Non-manifest backend resolves {% static %} without a manifest.
+        return
+
+    manifest = Path(settings.STATIC_ROOT) / "staticfiles.json"
+    if not manifest.exists():
+        call_command("collectstatic", "--noinput", verbosity=0)
 
 
 # =============================================================================
