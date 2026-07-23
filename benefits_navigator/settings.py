@@ -230,11 +230,23 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [BASE_DIR / "static"]
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 # Media files (User uploads)
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+
+# Storage backends. Django >= 5.1 REMOVED the old DEFAULT_FILE_STORAGE and
+# STATICFILES_STORAGE settings — they are silently ignored, so they must be
+# expressed here or the configured backend never takes effect. The S3 block
+# below overrides these entries when USE_S3 is on.
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
@@ -557,12 +569,17 @@ if USE_S3:
     AWS_DEFAULT_ACL = "private"
     AWS_S3_OBJECT_PARAMETERS = {"CacheControl": "max-age=86400"}
 
-    # S3 static files settings
-    STATICFILES_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
+    # Point both storage backends at S3 via the STORAGES dict defined above.
+    # (Assigning DEFAULT_FILE_STORAGE / STATICFILES_STORAGE here would be a
+    # no-op on Django >= 5.1 — that was the bug: USE_S3=True still wrote
+    # veteran documents to the local filesystem.)
+    STORAGES["default"] = {
+        "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
+    }
+    STORAGES["staticfiles"] = {
+        "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
+    }
     STATIC_URL = f"https://{AWS_S3_CUSTOM_DOMAIN}/static/"
-
-    # S3 media files settings
-    DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
     MEDIA_URL = f"https://{AWS_S3_CUSTOM_DOMAIN}/media/"
 
 # ==============================================================================

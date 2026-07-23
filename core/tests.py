@@ -2114,3 +2114,51 @@ class TestRedisSSLOptions(TestCase):
         self.assertNotIn("ssl_ca_certs", redis_ssl_options("required"))
         opts = redis_ssl_options("required", "/etc/ssl/do-valkey-ca.crt")
         self.assertEqual(opts["ssl_ca_certs"], "/etc/ssl/do-valkey-ca.crt")
+
+
+# =============================================================================
+# STORAGE CONFIGURATION TESTS (Django >= 5.1 STORAGES)
+# =============================================================================
+
+
+class TestStorageConfiguration(TestCase):
+    """
+    Django >= 5.1 REMOVED DEFAULT_FILE_STORAGE / STATICFILES_STORAGE. They are
+    silently ignored, so the backends must be declared via STORAGES or the
+    configured storage never takes effect — which is exactly why USE_S3=True
+    still wrote veteran documents to the local filesystem.
+    """
+
+    def test_storages_setting_is_defined(self):
+        from django.conf import settings
+
+        self.assertIn("default", settings.STORAGES)
+        self.assertIn("staticfiles", settings.STORAGES)
+
+    def test_legacy_storage_settings_are_not_reintroduced(self):
+        """
+        Guard: these names are dead on Django >= 5.1. If someone re-adds them,
+        the storage they name will be silently ignored again.
+        """
+        from django.conf import settings
+
+        for dead in ("DEFAULT_FILE_STORAGE", "STATICFILES_STORAGE"):
+            self.assertFalse(
+                hasattr(settings, dead),
+                f"{dead} is removed in Django >=5.1 and is silently ignored; "
+                "configure the backend in STORAGES instead.",
+            )
+
+    def test_default_storage_is_filesystem_without_s3(self):
+        from django.core.files.storage import storages
+
+        self.assertEqual(type(storages["default"]).__name__, "FileSystemStorage")
+
+    def test_staticfiles_uses_whitenoise_manifest_storage(self):
+        """Whitenoise's compressed-manifest storage must actually be active."""
+        from django.core.files.storage import storages
+
+        self.assertEqual(
+            type(storages["staticfiles"]).__name__,
+            "CompressedManifestStaticFilesStorage",
+        )
