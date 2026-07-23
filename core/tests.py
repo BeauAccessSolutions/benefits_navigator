@@ -2072,3 +2072,43 @@ class TestIdleSessionTimeoutMiddleware:
     def test_anonymous_request_unaffected(self, client):
         """Unauthenticated requests pass through the middleware untouched."""
         assert client.get(reverse("home")).status_code == 200
+
+# =============================================================================
+# REDIS TLS OPTIONS HELPER TESTS (HIPAA §164.312(e) transmission security)
+# =============================================================================
+
+
+class TestRedisSSLOptions(TestCase):
+    """core.redis_ssl resolves rediss:// TLS verification policy."""
+
+    def test_default_is_verified(self):
+        import ssl
+        from core.redis_ssl import redis_ssl_options, resolve_cert_reqs
+
+        self.assertEqual(resolve_cert_reqs("required"), ssl.CERT_REQUIRED)
+        self.assertEqual(
+            redis_ssl_options("required")["ssl_cert_reqs"], ssl.CERT_REQUIRED
+        )
+
+    def test_unknown_or_empty_falls_back_to_required(self):
+        import ssl
+        from core.redis_ssl import resolve_cert_reqs
+
+        self.assertEqual(resolve_cert_reqs(""), ssl.CERT_REQUIRED)
+        self.assertEqual(resolve_cert_reqs(None), ssl.CERT_REQUIRED)
+        self.assertEqual(resolve_cert_reqs("bogus"), ssl.CERT_REQUIRED)
+
+    def test_explicit_none_and_optional(self):
+        import ssl
+        from core.redis_ssl import resolve_cert_reqs
+
+        self.assertEqual(resolve_cert_reqs("none"), ssl.CERT_NONE)
+        self.assertEqual(resolve_cert_reqs("NONE"), ssl.CERT_NONE)
+        self.assertEqual(resolve_cert_reqs("optional"), ssl.CERT_OPTIONAL)
+
+    def test_ca_certs_included_only_when_provided(self):
+        from core.redis_ssl import redis_ssl_options
+
+        self.assertNotIn("ssl_ca_certs", redis_ssl_options("required"))
+        opts = redis_ssl_options("required", "/etc/ssl/do-valkey-ca.crt")
+        self.assertEqual(opts["ssl_ca_certs"], "/etc/ssl/do-valkey-ca.crt")
