@@ -1399,3 +1399,71 @@ class TestAgentAnalysisJSONEncryptionAtRest(TestCase):
         reloaded = DecisionLetterAnalysis.objects.get(pk=analysis.pk)
         self.assertEqual(reloaded.conditions_granted, [])
         self.assertEqual(reloaded.action_items, [])
+
+
+class TestEvidenceGapAndRatingEncryptionAtRest(TestCase):
+    """EvidenceGapAnalysis / RatingAnalysis PHI encrypted at rest."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="vet3@example.com", password="TestPass123!"
+        )
+        self.interaction = AgentInteraction.objects.create(
+            user=self.user, agent_type="evidence_gap"
+        )
+
+    def _raw(self, table, column, pk):
+        from django.db import connection
+
+        with connection.cursor() as cursor:
+            cursor.execute(f"SELECT {column} FROM {table} WHERE id = %s", [pk])
+            return cursor.fetchone()[0]
+
+    def test_evidence_gap_json_roundtrip_and_at_rest(self):
+        from agents.models import EvidenceGapAnalysis
+
+        claimed = [{"condition": "Lumbar strain", "claim_type": "increase"}]
+        gaps = [{"item": "Recent MRI", "priority": "high"}]
+        analysis = EvidenceGapAnalysis.objects.create(
+            interaction=self.interaction,
+            user=self.user,
+            claimed_conditions=claimed,
+            evidence_gaps=gaps,
+            readiness_score=60,
+        )
+        reloaded = EvidenceGapAnalysis.objects.get(pk=analysis.pk)
+        self.assertEqual(reloaded.claimed_conditions, claimed)
+        self.assertEqual(reloaded.evidence_gaps[0]["item"], "Recent MRI")
+        self.assertEqual(reloaded.readiness_score, 60)  # untouched numeric
+
+        raw = self._raw("agents_evidencegapanalysis", "claimed_conditions", analysis.pk)
+        self.assertNotIn("Lumbar", raw)
+
+    def test_rating_analysis_json_name_markdown_at_rest(self):
+        from agents.models import RatingAnalysis
+        from core.encryption import FieldEncryption
+
+        interaction = AgentInteraction.objects.create(
+            user=self.user, agent_type="rating_analyzer"
+        )
+        conditions = [{"name": "PTSD", "rating_percentage": 70}]
+        analysis = RatingAnalysis.objects.create(
+            interaction=interaction,
+            user=self.user,
+            veteran_name="John Q. Veteran",
+            conditions=conditions,
+            markdown_analysis="# Your rating\nPTSD at 70%.",
+            combined_rating=70,
+        )
+        reloaded = RatingAnalysis.objects.get(pk=analysis.pk)
+        self.assertEqual(reloaded.veteran_name, "John Q. Veteran")
+        self.assertEqual(reloaded.conditions, conditions)
+        self.assertEqual(reloaded.markdown_analysis, "# Your rating\nPTSD at 70%.")
+        self.assertEqual(reloaded.combined_rating, 70)  # untouched numeric
+
+        name_raw = self._raw("agents_ratinganalysis", "veteran_name", analysis.pk)
+        self.assertNotIn("Veteran", name_raw)
+        self.assertEqual(FieldEncryption.decrypt(name_raw), "John Q. Veteran")
+
+        cond_raw = self._raw("agents_ratinganalysis", "conditions", analysis.pk)
+        self.assertNotIn("PTSD", cond_raw)

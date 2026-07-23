@@ -225,25 +225,25 @@ class EvidenceGapAnalysis(TimeStampedModel):
         related_name="evidence_analyses",
     )
 
-    # Input
-    claimed_conditions = models.JSONField(
+    # Input — PHI (veteran conditions/evidence), encrypted at rest.
+    claimed_conditions = EncryptedJSONField(
         default=list, help_text="Conditions being claimed"
     )
-    existing_evidence = models.JSONField(
+    existing_evidence = EncryptedJSONField(
         default=list, help_text="Evidence already gathered"
     )
     service_dates = models.CharField(max_length=100, blank=True)
     service_branch = models.CharField(max_length=50, blank=True)
 
-    # Analysis Results
-    evidence_gaps = models.JSONField(default=list, help_text="Missing evidence items")
-    strength_assessment = models.JSONField(
+    # Analysis Results — PHI, encrypted at rest.
+    evidence_gaps = EncryptedJSONField(default=list, help_text="Missing evidence items")
+    strength_assessment = EncryptedJSONField(
         default=dict, help_text="Current evidence strength by condition"
     )
-    recommendations = models.JSONField(
+    recommendations = EncryptedJSONField(
         default=list, help_text="Prioritized recommendations"
     )
-    templates_suggested = models.JSONField(
+    templates_suggested = EncryptedJSONField(
         default=list, help_text="Relevant templates/forms"
     )
 
@@ -366,7 +366,8 @@ class RatingAnalysis(TimeStampedModel):
     decision_date = models.DateField(null=True, blank=True)
 
     # Extracted Data (from extraction phase)
-    veteran_name = models.CharField(max_length=200, blank=True)
+    # PHI: veteran name, encrypted at rest (larger max_length holds ciphertext).
+    veteran_name = EncryptedCharField(max_length=1000, blank=True)
     file_number = EncryptedCharField(
         max_length=255,  # Larger to accommodate encrypted data
         blank=True,
@@ -387,12 +388,12 @@ class RatingAnalysis(TimeStampedModel):
     # Format: [{"name": "...", "diagnostic_code": "DC XXXX", "rating_percentage": 30,
     #          "effective_date": "YYYY-MM-DD", "rating_criteria_cited": "...",
     #          "criteria_for_next_higher": "...", "service_connection_type": "direct|secondary|presumptive"}]
-    conditions = models.JSONField(
+    conditions = EncryptedJSONField(
         "Rated Conditions",
         default=list,
         help_text="List of conditions with ratings and diagnostic codes",
     )
-    evidence_list = models.JSONField(
+    evidence_list = EncryptedJSONField(
         "Evidence Reviewed", default=list, help_text="List of evidence VA reviewed"
     )
 
@@ -400,7 +401,7 @@ class RatingAnalysis(TimeStampedModel):
     # Format: [{"condition": "...", "current_rating": 10, "target_rating": 20,
     #          "strategy": "...", "key_symptoms_to_document": [...],
     #          "dual_rating_opportunity": "...", "evidence_needed": [...]}]
-    increase_opportunities = models.JSONField(
+    increase_opportunities = EncryptedJSONField(
         "Increase Opportunities",
         default=list,
         help_text="Opportunities to increase ratings for each condition",
@@ -408,7 +409,7 @@ class RatingAnalysis(TimeStampedModel):
 
     # Format: [{"potential_condition": "...", "connect_to": "...",
     #          "medical_rationale": "...", "evidence_needed": [...], "typical_rating_range": "..."}]
-    secondary_conditions = models.JSONField(
+    secondary_conditions = EncryptedJSONField(
         "Secondary Conditions",
         default=list,
         help_text="Potential secondary conditions to claim",
@@ -416,7 +417,7 @@ class RatingAnalysis(TimeStampedModel):
 
     # Format: [{"condition": "...", "error_type": "procedural|factual|legal",
     #          "description": "...", "remedy": "...", "strength": "strong|moderate|weak"}]
-    rating_errors = models.JSONField(
+    rating_errors = EncryptedJSONField(
         "Potential Rating Errors",
         default=list,
         help_text="Potential errors in the rating decision",
@@ -424,7 +425,7 @@ class RatingAnalysis(TimeStampedModel):
 
     # Format: [{"condition": "...", "current_effective_date": "...",
     #          "potential_earlier_date": "...", "basis": "...", "evidence_needed": [...]}]
-    effective_date_issues = models.JSONField(
+    effective_date_issues = EncryptedJSONField(
         "Effective Date Issues",
         default=list,
         help_text="Potential issues with effective dates",
@@ -433,12 +434,12 @@ class RatingAnalysis(TimeStampedModel):
     # Deadline tracking
     # Format: {"decision_date": "...", "appeal_deadline": "...", "appeal_deadline_passed": bool,
     #         "days_remaining": int, "hlr_available": bool, "supplemental_claim_note": "..."}
-    deadline_tracker = models.JSONField(
+    deadline_tracker = EncryptedJSONField(
         "Deadline Tracker", default=dict, help_text="Appeal deadlines and availability"
     )
 
     # Format: [{"benefit": "...", "eligibility_basis": "...", "how_to_claim": "...", "estimated_value": "..."}]
-    benefits_unlocked = models.JSONField(
+    benefits_unlocked = EncryptedJSONField(
         "Benefits Unlocked",
         default=list,
         help_text="Benefits veteran is eligible for at current rating",
@@ -446,19 +447,19 @@ class RatingAnalysis(TimeStampedModel):
 
     # Format: [{"condition": "...", "exam_type": "...", "what_examiner_looks_for": [...],
     #          "do_before_exam": [...], "common_mistakes": [...], "documentation_to_bring": [...]}]
-    exam_prep_tips = models.JSONField(
+    exam_prep_tips = EncryptedJSONField(
         "Exam Prep Tips", default=list, help_text="C&P exam preparation guidance"
     )
 
     # Format: [{"priority": 1, "action": "...", "why": "...", "deadline": "...", "difficulty": "easy|moderate|complex"}]
-    priority_actions = models.JSONField(
+    priority_actions = EncryptedJSONField(
         "Priority Actions",
         default=list,
         help_text="Prioritized list of recommended actions",
     )
 
     # Simple markdown analysis (alternative output format)
-    markdown_analysis = models.TextField(
+    markdown_analysis = EncryptedTextField(
         "Markdown Analysis",
         blank=True,
         help_text="Human-readable markdown-formatted analysis",
@@ -472,13 +473,13 @@ class RatingAnalysis(TimeStampedModel):
         help_text="AI confidence score for overall analysis quality (0-100)",
     )
     # Format: {"extraction_quality": 85, "document_completeness": 70, "analysis_reliability": 80}
-    confidence_breakdown = models.JSONField(
+    confidence_breakdown = EncryptedJSONField(
         "Confidence Breakdown",
         default=dict,
         help_text="Detailed confidence scores for different aspects",
     )
     # Factors that may affect analysis quality
-    confidence_factors = models.JSONField(
+    confidence_factors = EncryptedJSONField(
         "Confidence Factors",
         default=list,
         help_text="Factors that influenced confidence scoring",
