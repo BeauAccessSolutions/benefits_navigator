@@ -7,6 +7,13 @@
     <!-- Page title -->
     <title>{% block title %}{{ SITE_NAME }}{% endblock %}</title>
 
+    {# iOS home-screen label for the deployed site added via Safari "Add to Home
+       Screen". Without this it uses the <title> and iOS truncates to
+       "BenefitsNav…" (~12-char budget). The native TestFlight app's label is
+       separate — CFBundleDisplayName in mobile/ios/.../Info.plist, also shortened
+       here, which takes effect only on the next TestFlight build. #}
+    <meta name="apple-mobile-web-app-title" content="Benefits">
+
     <!-- Meta description - override in child templates -->
     <meta name="description" content="{% block meta_description %}{{ SITE_DESCRIPTION }}{% endblock %}">
 
