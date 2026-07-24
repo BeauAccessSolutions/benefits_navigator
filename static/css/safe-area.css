@@ -1,0 +1,40 @@
+/*
+ * iOS safe-area (notch / status bar) handling.
+ *
+ * In the Capacitor TestFlight wrapper and as a home-screen PWA on notched
+ * iPhones, scrolled page content renders unreadably beneath the translucent
+ * status bar, and fixed toasts can land there too.
+ *
+ * The header is not sticky, so padding the body cannot fix this: padding on the
+ * scroll container scrolls away with the content. A FIXED backdrop pinned over
+ * the top inset is the only thing that stays put between the status bar and the
+ * content, so it's painted in the header's blue (#1e3a8a = Tailwind bg-blue-900)
+ * to read as the header extending up under the clock. Body padding-top keeps the
+ * header itself clear of the strip at the top of the page.
+ *
+ * Delivered as a linked stylesheet (served from 'self'), NOT an inline <style>,
+ * because the CSP is style-src 'self' with no unsafe-inline and no nonce.
+ *
+ * Requires viewport-fit=cover in the viewport meta (base.html) for
+ * env(safe-area-inset-*) to be non-zero. On a non-notched device or desktop,
+ * env(safe-area-inset-top)=0 — the strip collapses to 0 height and this is
+ * completely inert, so there is no desktop or non-iOS impact.
+ *
+ * VERIFY on a real notched device before relying on it — a simulator's default
+ * device may not surface the inset. z-index 40 sits below modal overlays and
+ * above page chrome.
+ */
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: env(safe-area-inset-top, 0px);
+  background: #1e3a8a; /* bg-blue-900 — matches the header */
+  z-index: 40;
+  pointer-events: none;
+}
+
+body {
+  padding-top: env(safe-area-inset-top, 0px);
+}

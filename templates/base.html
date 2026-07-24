@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- viewport-fit=cover: required for env(safe-area-inset-*) to be non-zero
+         (see the safe-area <style> below). -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 
     <!-- Page title -->
     <title>{% block title %}{{ SITE_NAME }}{% endblock %}</title>
@@ -56,6 +58,11 @@
     <!-- Tailwind CSS (built from static/css/input.css — run `npm run build` to update) -->
     {% load static %}
     <link rel="stylesheet" href="{% static 'css/tailwind.min.css' %}">
+
+    {# iOS safe-area (notch / status bar) fix. A separate stylesheet served from
+       'self' — NOT an inline <style>, which the strict CSP (style-src 'self', no
+       unsafe-inline) would block. See safe-area.css for the rationale. #}
+    <link rel="stylesheet" href="{% static 'css/safe-area.css' %}">
 
     <!-- HTMX for dynamic interactions -->
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
