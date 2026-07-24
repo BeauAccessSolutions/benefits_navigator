@@ -32,14 +32,19 @@ COPY . /app/
 # Create directories
 RUN mkdir -p /app/media/documents /app/staticfiles /app/logs
 
-# Collect static files (use dummy values for build, real ones at runtime)
-# Provide all required env vars to avoid warnings/errors during build
+# Collect static files (use dummy values for build, real ones at runtime).
+# NOT guarded with `|| true`: collectstatic writes the staticfiles manifest that
+# CompressedManifestStaticFilesStorage resolves every {% static %} tag through in
+# production. If it fails, the image would ship without a valid manifest and
+# every page would 500 at render — so a failure here must fail the build, not be
+# swallowed. Since tests no longer render against the manifest backend (see the
+# STORAGES selection in settings.py), this build step is the only gate on it.
 RUN SECRET_KEY=build-time-dummy-key \
     DEBUG=False \
     STAGING=False \
     FIELD_ENCRYPTION_KEY=dGhpcy1pcy1hLWR1bW15LWtleS1mb3ItYnVpbGQtb25seQ== \
     ALLOWED_HOSTS=localhost \
-    python manage.py collectstatic --noinput --clear || true
+    python manage.py collectstatic --noinput --clear
 
 # Create non-root user for security
 RUN adduser --disabled-password --gecos '' appuser && \
