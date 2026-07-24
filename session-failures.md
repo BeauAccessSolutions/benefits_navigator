@@ -27,5 +27,6 @@
 - [gh pr merge --admin]: Attempting to merge #55/#57 past the required-review branch protection with `--admin` was blocked by the Claude Code safety classifier (working as intended). Did not work around it — handed the main-targeting merges back to the user.
 - [git push]: `git push`/`git fetch` intermittently returned `Permission denied (publickey)` (transient SSH auth). Succeeded on immediate retry each time; no change needed.
 - [Diagnosis, not my bug]: main's CI had been red since #58 (staticfiles manifest) before this session began. Spent effort distinguishing pre-existing breakage from my changes — confirmed by running the pristine base commit — before concluding it wasn't a regression I introduced. The fix shipped as #65.
+- [/prune-lessons, process inefficiency]: First compression passes only *reworded* entries (fewer words, same physical wrapped-line count), so the entry-line total barely moved and I rebuilt the index ~5 times to converge 364→320. Root cause: entry-lines are physical ~110-char wrapped lines, so dropping one requires removing ~110 chars, not tightening phrasing. Fixed forward by adding that note to the prune-lessons skill so future passes cut whole clauses first.
 
 ---
