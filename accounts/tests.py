@@ -452,6 +452,95 @@ class TestAuthenticationViews:
         assert User.objects.filter(email="newuser@example.com").exists()
 
 
+@pytest.mark.django_db
+class TestStyledAllauthTemplates:
+    """
+    Every allauth account page must render the project's own styled template —
+    not allauth's unstyled bundled default, which renders as raw, borderless
+    inputs on mobile (the "signup/signin look merged" report). Each row asserts
+    the custom template under templates/account/ is the one that rendered, so a
+    regression back to the unstyled default fails the suite.
+    """
+
+    # (url_name, args, needs_auth, template). One row per styled override; the
+    # table keeps a new page one line to cover rather than a copied method.
+    PAGES = [
+        (
+            "account_email_verification_sent",
+            [],
+            False,
+            "account/verification_sent.html",
+        ),
+        ("account_reset_password", [], False, "account/password_reset.html"),
+        ("account_reset_password_done", [], False, "account/password_reset_done.html"),
+        (
+            "account_reset_password_from_key_done",
+            [],
+            False,
+            "account/password_reset_from_key_done.html",
+        ),
+        # An invalid key renders the "expired or invalid" branch — still ours.
+        ("account_confirm_email", ["invalid-key"], False, "account/email_confirm.html"),
+        # account_email is the page #56 omitted; the expired-link branch of
+        # email_confirm links here, so leaving it unstyled dead-ends the flow.
+        ("account_email", [], True, "account/email.html"),
+        ("account_change_password", [], True, "account/password_change.html"),
+        ("account_logout", [], True, "account/logout.html"),
+    ]
+
+    def _templates(self, response):
+        return {t.name for t in response.templates if t.name}
+
+    @pytest.mark.parametrize("url_name,args,needs_auth,template", PAGES)
+    def test_page_uses_custom_styled_template(
+        self, client, user, url_name, args, needs_auth, template
+    ):
+        if needs_auth:
+            client.force_login(user)
+        response = client.get(reverse(url_name, args=args))
+        assert response.status_code == 200, f"{url_name} → {response.status_code}"
+        assert template in self._templates(
+            response
+        ), f"{url_name} did not render {template}"
+        # The Tailwind card marker the unstyled default lacks.
+        assert (
+            b"px-4 py-3 border" in response.content
+            or b"text-gray-900" in response.content
+        )
+
+    def test_password_reset_from_key_uses_custom_styled_template(self, client):
+        # Not table-driven: a bogus key drives the token-fail branch, and allauth
+        # stashes the key in session then redirects once, so the GET must follow.
+        url = reverse(
+            "account_reset_password_from_key",
+            args=["abc", "invalid-key"],
+        )
+        response = client.get(url, follow=True)
+        assert response.status_code == 200
+        assert "account/password_reset_from_key.html" in self._templates(response)
+
+    def test_password_reset_form_has_styled_email_field(self, client):
+        html = client.get(reverse("account_reset_password")).content.decode()
+        assert 'class="space-y-6"' in html
+        assert 'name="email"' in html
+        assert "px-4 py-3 border" in html
+
+    def test_password_change_form_has_all_styled_fields(self, client, user):
+        client.force_login(user)
+        html = client.get(reverse("account_change_password")).content.decode()
+        assert 'class="space-y-6"' in html
+        assert 'name="oldpassword"' in html
+        assert 'name="password1"' in html
+        assert 'name="password2"' in html
+        assert "px-4 py-3 border" in html
+
+    def test_manage_email_form_has_styled_add_field(self, client, user):
+        client.force_login(user)
+        html = client.get(reverse("account_email")).content.decode()
+        assert 'name="email"' in html
+        assert "px-4 py-3 border" in html
+
+
 # =============================================================================
 # DATA EXPORT VIEW TESTS
 # =============================================================================
