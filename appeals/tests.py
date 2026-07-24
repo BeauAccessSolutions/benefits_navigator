@@ -1283,3 +1283,67 @@ class TestDecisionTreeToAppealFlow(TestCase):
         self.assertIsNotNone(appeal)
         self.assertEqual(appeal.appeal_type, "")  # Not set yet
         self.assertEqual(appeal.status, "deciding")
+
+
+class TestAppealStartFormDecisionDate(TestCase):
+    """
+    Intake must not block an old decision: a Supplemental Claim can be filed at
+    any time (38 CFR § 20.204). Only HLR/Board are time-barred at one year, and
+    the lane isn't chosen until after this form.
+    """
+
+    def _form(self, decision_date):
+        from appeals.forms import AppealStartForm
+
+        return AppealStartForm(
+            data={
+                "original_decision_date": decision_date.isoformat(),
+                "conditions_appealed": "PTSD (denied)",
+                "denial_reasons": "No nexus",
+            }
+        )
+
+    def test_decision_over_a_year_old_is_accepted(self):
+        """The old hard-rejection is gone — the form validates."""
+        form = self._form(date.today() - timedelta(days=400))
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertTrue(form.decision_is_over_a_year_old)
+
+    def test_recent_decision_is_accepted(self):
+        form = self._form(date.today() - timedelta(days=30))
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertFalse(form.decision_is_over_a_year_old)
+
+    def test_future_decision_date_is_rejected(self):
+        """A decision can't be dated in the future — that's still an error."""
+        form = self._form(date.today() + timedelta(days=5))
+        self.assertFalse(form.is_valid())
+        self.assertIn("original_decision_date", form.errors)
+
+
+@pytest.mark.django_db
+class TestAppealStartOldDecisionGuidance:
+    """The view surfaces non-blocking guidance for an over-a-year-old decision."""
+
+    def test_old_decision_starts_appeal_with_supplemental_guidance(
+        self, authenticated_client
+    ):
+        from django.contrib.messages import get_messages
+
+        response = authenticated_client.post(
+            reverse("appeals:appeal_start"),
+            {
+                "original_decision_date": (
+                    date.today() - timedelta(days=400)
+                ).isoformat(),
+                "conditions_appealed": "PTSD (denied)",
+                "denial_reasons": "No nexus",
+            },
+        )
+        # The appeal is created (not blocked) -> redirect onward.
+        assert response.status_code == 302
+        assert Appeal.objects.filter(conditions_appealed="PTSD (denied)").exists()
+
+        text = " ".join(str(m) for m in get_messages(response.wsgi_request))
+        assert "Supplemental Claim" in text
+        assert "any time" in text

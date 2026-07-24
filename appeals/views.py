@@ -188,6 +188,18 @@ def appeal_start(request):
 
             appeal.save()
 
+            # Non-blocking guidance for an old decision: the Supplemental path
+            # is still open (38 CFR § 20.204); only HLR/Board are time-barred.
+            if form.decision_is_over_a_year_old:
+                messages.warning(
+                    request,
+                    "This decision is more than a year old. Higher-Level Review "
+                    "and Board appeals generally must be filed within one year, "
+                    "but you can still file a Supplemental Claim at any time — "
+                    "filing within a year of the decision is what protects your "
+                    "effective date (back pay).",
+                )
+
             # Now that the appeal is saved, clear the session data
             request.session.pop("appeal_recommendation", None)
             request.session.pop("appeal_decision_tree_answers", None)

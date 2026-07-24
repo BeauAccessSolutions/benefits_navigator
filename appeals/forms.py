@@ -59,19 +59,22 @@ class AppealStartForm(forms.ModelForm):
 
     def clean_original_decision_date(self):
         decision_date = self.cleaned_data.get("original_decision_date")
-        if decision_date:
-            # Check if more than 1 year ago (deadline passed)
-            deadline = decision_date + timedelta(days=365)
-            if deadline < date.today():
-                raise ValidationError(
-                    f"This decision is more than 1 year old. The standard appeal deadline "
-                    f'was {deadline.strftime("%B %d, %Y")}. You may still have options - '
-                    f"contact a VSO for guidance."
-                )
-            # Check if in the future
-            if decision_date > date.today():
-                raise ValidationError("Decision date cannot be in the future.")
+        if decision_date and decision_date > date.today():
+            raise ValidationError("Decision date cannot be in the future.")
+        # NOTE: a decision more than a year old is NOT rejected. A Supplemental
+        # Claim can be filed at any time (38 CFR § 20.204); only Higher-Level
+        # Review and Board appeals are time-barred at one year. Blocking intake
+        # here wrongly denied veterans the Supplemental path. The one-year
+        # implications are surfaced as non-blocking guidance in the view.
         return decision_date
+
+    @property
+    def decision_is_over_a_year_old(self):
+        """True when the cleaned decision date is past the 1-year HLR/Board bar."""
+        decision_date = self.cleaned_data.get("original_decision_date")
+        return bool(
+            decision_date and decision_date + timedelta(days=365) < date.today()
+        )
 
 
 class DecisionTreeForm(forms.Form):
