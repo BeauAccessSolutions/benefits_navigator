@@ -486,6 +486,10 @@ class TestStyledAllauthTemplates:
         ("account_email", [], True, "account/email.html"),
         ("account_change_password", [], True, "account/password_change.html"),
         ("account_logout", [], True, "account/logout.html"),
+        # Reauthenticate (sensitive-action step-up) requires an authed user.
+        ("account_reauthenticate", [], True, "account/reauthenticate.html"),
+        # Inactive is a public TemplateView shown after a disabled login.
+        ("account_inactive", [], False, "account/account_inactive.html"),
     ]
 
     def _templates(self, response):
@@ -537,6 +541,24 @@ class TestStyledAllauthTemplates:
     def test_manage_email_form_has_styled_add_field(self, client, user):
         client.force_login(user)
         html = client.get(reverse("account_email")).content.decode()
+        assert 'name="email"' in html
+        assert "px-4 py-3 border" in html
+
+    def test_email_change_template_is_styled(self, rf, user):
+        # account_email renders email_change.html only when ACCOUNT_CHANGE_EMAIL
+        # is enabled (off by default, so it renders email.html above instead).
+        # Render the override directly so a regression to allauth's unstyled
+        # bundled default still fails, ready for whenever the flag is flipped.
+        from allauth.account.forms import AddEmailForm
+        from django.template.loader import render_to_string
+
+        request = rf.get("/accounts/email/")
+        request.user = user
+        html = render_to_string(
+            "account/email_change.html",
+            {"form": AddEmailForm(), "emailaddresses": []},
+            request=request,
+        )
         assert 'name="email"' in html
         assert "px-4 py-3 border" in html
 
