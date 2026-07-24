@@ -1,0 +1,22 @@
+{% extends "allauth/layouts/entrance.html" %}
+{% load i18n %}
+
+{% block head_title %}{% trans "Account Inactive" %}{% endblock head_title %}
+
+{% block content %}
+<div class="text-center mb-8">
+    <h1 class="text-3xl font-bold text-gray-900">{% trans "Account Inactive" %}</h1>
+</div>
+
+<div class="p-4 bg-yellow-50 border border-yellow-200 rounded-md" role="alert">
+    <p class="text-sm text-yellow-800">
+        {% trans "This account is inactive." %}
+    </p>
+</div>
+
+<p class="mt-8 text-center text-sm text-gray-600">
+    <a href="{% url 'account_login' %}" class="text-blue-700 hover:text-blue-800 underline">
+        {% trans "Back to sign in" %}
+    </a>
+</p>
+{% endblock content %}
