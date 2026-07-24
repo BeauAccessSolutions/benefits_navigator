@@ -196,7 +196,11 @@ Your task is to analyze the decision letter text and extract key information in 
 IMPORTANT GUIDELINES:
 1. Be accurate - only report what's explicitly stated in the letter
 2. Use plain language veterans can understand
-3. Calculate appeal deadline as 1 year from decision date
+3. Deadlines are per appeal lane: Higher-Level Review and Board appeals must be
+   filed within 1 year of the decision date. A Supplemental Claim has NO filing
+   deadline — it can be filed at any time — but filing within 1 year of the
+   decision preserves the effective date (back pay). Never tell a veteran a
+   Supplemental Claim expires.
 4. Identify specific evidence issues mentioned
 5. Provide actionable next steps based on VA procedures
 
@@ -259,7 +263,7 @@ OUTPUT FORMAT (JSON):
         {{
             "type": "Supplemental Claim",
             "best_for": "When you have new evidence to submit",
-            "deadline": "1 year from decision",
+            "deadline": "No deadline - can file anytime (file within 1 year to protect effective date)",
             "recommended": true,
             "recommendation_reason": "Why this is recommended for this specific case"
         }},
@@ -311,7 +315,12 @@ Provide your analysis in the JSON format specified. Be sure to recommend the BES
         result["_tokens_used"] = tokens
         result["_cost_estimate"] = float(self.estimate_cost(tokens))
 
-        # Calculate appeal deadline if decision date available
+        # The 1-year mark from the decision date: the Higher-Level Review / Board
+        # filing deadline, and the last day a Supplemental Claim protects the
+        # effective date. It is NOT a hard deadline for a Supplemental Claim,
+        # which can be filed at any time — the per-lane appeal_options above carry
+        # that nuance. Kept as a single date because it is the one time-sensitive
+        # milestone worth surfacing.
         if decision_date:
             result["appeal_deadline"] = (
                 decision_date + timedelta(days=365)
