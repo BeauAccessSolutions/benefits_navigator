@@ -80,15 +80,15 @@
                     <select id="rate-year" onchange="calculate()"
                             class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
                         {% for year in available_rate_years %}
-                        <option value="{{ year }}" {% if year == 2024 %}selected{% endif %}>
-                            {{ year }} Rates{% if year == 2024 %} (Current){% endif %}
+                        <option value="{{ year }}" {% if year == current_rate_year %}selected{% endif %}>
+                            {{ year }} Rates{% if year == current_rate_year %} (Current){% endif %}
                         </option>
                         {% endfor %}
                     </select>
                     <p class="text-xs text-gray-500 mt-1">
                         Select a year to see historical compensation amounts.
                         <span id="dependent-rate-note" class="hidden text-amber-600">
-                            Note: Dependent additions only available for 2024 rates.
+                            Note: Dependent additions are only available for 2024 and later.
                         </span>
                     </p>
                 </div>
@@ -165,10 +165,10 @@
                 </div>
             </div>
 
-            <!-- 2024 Compensation Table -->
+            <!-- Current-year compensation table -->
             <div class="mt-4 bg-white shadow-md rounded-lg p-6">
-                <h3 class="font-bold text-gray-900 mb-3">2024 VA Compensation Rates</h3>
-                <p class="text-xs text-gray-500 mb-3">Monthly rates for veterans without dependents (effective Dec 1, 2023)</p>
+                <h3 class="font-bold text-gray-900 mb-3">{{ current_rate_year }} VA Compensation Rates</h3>
+                <p class="text-xs text-gray-500 mb-3">Monthly rates for veterans without dependents (effective Dec 1, {{ current_rate_year|add:"-1" }})</p>
                 <div class="grid grid-cols-2 gap-2 text-sm">
                     {% for rating, amount in compensation_rates.items %}
                     <div class="flex justify-between px-2 py-1 {% if forloop.counter|divisibleby:2 %}bg-gray-50{% endif %} rounded">
@@ -322,10 +322,11 @@ function calculate() {
     const parents = document.getElementById('parents').value;
     const rateYear = document.getElementById('rate-year').value;
 
-    // Show/hide dependent rate note based on year selection
+    // Show/hide dependent rate note based on year selection. Dependent tables
+    // exist from 2024 on; earlier years apply base rates only.
     const dependentNote = document.getElementById('dependent-rate-note');
     if (dependentNote) {
-        if (rateYear !== '2024') {
+        if (parseInt(rateYear, 10) < 2024) {
             dependentNote.classList.remove('hidden');
         } else {
             dependentNote.classList.add('hidden');
@@ -463,7 +464,7 @@ function addScenario() {
     const hasSpouse = document.getElementById('has-spouse').checked;
     const children = parseInt(document.getElementById('children').value) || 0;
     const parents = parseInt(document.getElementById('parents').value) || 0;
-    const rateYear = parseInt(document.getElementById('rate-year').value) || 2024;
+    const rateYear = parseInt(document.getElementById('rate-year').value) || {{ current_rate_year }};
 
     const scenario = {
         id: scenarioCount,

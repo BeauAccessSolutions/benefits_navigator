@@ -1605,11 +1605,23 @@ class TestRatingCalculatorPageIntegration(TestCase):
         self.assertTemplateUsed(response, "examprep/rating_calculator.html")
 
     def test_calculator_page_contains_compensation_rates(self):
-        """Calculator page includes 2024 compensation rates."""
+        """
+        Calculator page includes the compensation rates currently in force.
+
+        This used to assert the 2024 table specifically, which pinned the bug
+        it was meant to guard: the page served 2024 dollars — labelled
+        "(Current)" — for two years after they stopped being current.
+        """
+        from examprep.va_math import (
+            VA_COMPENSATION_RATES_BY_YEAR,
+            default_rate_year,
+        )
+
         response = self.client.get(reverse("examprep:rating_calculator"))
         self.assertIn("compensation_rates", response.context)
         rates = response.context["compensation_rates"]
-        self.assertEqual(rates[100], VA_COMPENSATION_RATES_2024[100])
+        expected = VA_COMPENSATION_RATES_BY_YEAR[default_rate_year()]
+        self.assertEqual(rates[100], expected[100])
 
     def test_calculator_page_no_saved_calculations_anonymous(self):
         """Anonymous users have no saved calculations."""

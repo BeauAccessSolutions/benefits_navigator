@@ -9,6 +9,7 @@ References:
 - 38 CFR § 4.26 - Bilateral factor
 """
 
+from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 from typing import List, Tuple, Optional
 from dataclasses import dataclass
@@ -489,12 +490,129 @@ DEPENDENT_RATES_BY_YEAR = {
 AVAILABLE_RATE_YEARS = [2026, 2025, 2024, 2023, 2022, 2021, 2020]
 
 
+# =============================================================================
+# RATE CURRENCY
+# =============================================================================
+#
+# VA compensation rates change every December 1 with the COLA. A rate year is
+# named for the calendar year it runs *through*, but it begins the December 1
+# before: the 2026 rates took effect 2025-12-01.
+#
+# Nothing enforced that this table kept up. The checklist lived in CLAUDE.md
+# and depended on somebody remembering in December — and it had already failed
+# quietly: the rating calculator defaulted to the 2024 rates and labelled them
+# "(Current)" well into 2026, quoting veterans a two-year-stale dollar figure.
+# So currency is computed here, defaults derive from it, and CI fails when the
+# table falls behind.
+
+COLA_EFFECTIVE_MONTH = 12
+COLA_EFFECTIVE_DAY = 1
+
+# How long before the next COLA to start warning that new rates are needed.
+RATE_UPDATE_WARNING_DAYS = 45
+
+
+def current_rate_year(today: Optional[date] = None) -> int:
+    """
+    The rate year in force on ``today``.
+
+    On or after December 1, the next year's rates are already in effect —
+    2025-12-01 is the first day of the 2026 rate year.
+    """
+    today = today or date.today()
+    if (today.month, today.day) >= (COLA_EFFECTIVE_MONTH, COLA_EFFECTIVE_DAY):
+        return today.year + 1
+    return today.year
+
+
+def latest_available_rate_year() -> int:
+    """The newest rate year actually present in the tables."""
+    return max(AVAILABLE_RATE_YEARS)
+
+
+def default_rate_year(today: Optional[date] = None) -> int:
+    """
+    The year to use when the caller did not choose one.
+
+    Tracks the current rate year, falling back to the newest year we actually
+    have if the tables have fallen behind — a stale-but-real figure beats a
+    KeyError, and ``rate_currency_status`` plus the CI gate make sure the
+    shortfall is loud rather than silent.
+    """
+    wanted = current_rate_year(today)
+    return wanted if wanted in AVAILABLE_RATE_YEARS else latest_available_rate_year()
+
+
+def next_cola_date(today: Optional[date] = None) -> date:
+    """
+    The next December 1 strictly after ``today``.
+
+    Strictly after, not on-or-after, so it stays consistent with
+    ``current_rate_year``: on December 1 that day's COLA has already taken
+    effect, so the *next* one is a year away. Reporting "0 days" while also
+    reporting a rate year that has already turned over would read as though
+    there were still time to prepare.
+    """
+    today = today or date.today()
+    this_year = date(today.year, COLA_EFFECTIVE_MONTH, COLA_EFFECTIVE_DAY)
+    return this_year if today < this_year else date(today.year + 1, 12, 1)
+
+
+def rate_currency_status(today: Optional[date] = None) -> dict:
+    """
+    Report whether the rate tables are current, due for an update, or overdue.
+
+    ``is_overdue`` is the CI gate's condition: the rate year in force is not in
+    the tables, so the app is quoting last year's dollars as this year's.
+    """
+    today = today or date.today()
+    required = current_rate_year(today)
+    latest = latest_available_rate_year()
+    days_until_cola = (next_cola_date(today) - today).days
+
+    is_overdue = required not in AVAILABLE_RATE_YEARS
+    # Warn once the next COLA is close and its rates are not in yet.
+    is_due_soon = (
+        not is_overdue
+        and days_until_cola <= RATE_UPDATE_WARNING_DAYS
+        and (required + 1) not in AVAILABLE_RATE_YEARS
+    )
+
+    if is_overdue:
+        message = (
+            f"VA compensation rates for {required} are missing. The {required} "
+            f"rates took effect {COLA_EFFECTIVE_MONTH}/{COLA_EFFECTIVE_DAY}/"
+            f"{required - 1}; the newest table we have is {latest}. Veterans "
+            f"are being shown outdated compensation estimates."
+        )
+    elif is_due_soon:
+        message = (
+            f"VA compensation rates for {required + 1} take effect in "
+            f"{days_until_cola} days and are not in the tables yet."
+        )
+    else:
+        message = f"VA compensation rates are current through {latest}."
+
+    return {
+        "today": today,
+        "required_rate_year": required,
+        "latest_available_rate_year": latest,
+        "available_rate_years": list(AVAILABLE_RATE_YEARS),
+        "next_cola_date": next_cola_date(today),
+        "days_until_next_cola": days_until_cola,
+        "is_overdue": is_overdue,
+        "is_due_soon": is_due_soon,
+        "message": message,
+    }
+
+
 def estimate_monthly_compensation(
     combined_rating: int,
     spouse: bool = False,
     children_under_18: int = 0,
     dependent_parents: int = 0,
-    year: int = 2026,
+    year: Optional[int] = None,
+    today: Optional[date] = None,
 ) -> float:
     """
     Estimate monthly VA disability compensation.
@@ -504,15 +622,22 @@ def estimate_monthly_compensation(
         spouse: Whether veteran has a spouse
         children_under_18: Number of children under 18
         dependent_parents: Number of dependent parents (max 2)
-        year: The rate year to use (2020-2026). Defaults to 2026.
+        year: The rate year to use. Defaults to whichever year is currently in
+            force — this used to be hardcoded, which is how the app kept
+            quoting an old year's dollars after the COLA moved.
+        today: Override for the current date, for testing.
 
     Note: This is an estimate. Actual rates depend on many factors
     including effective date, special monthly compensation, etc.
     Dependent rates are available for 2024-2026; for earlier years,
     only base rates are applied.
     """
-    # Get rates for the specified year, fallback to 2026
-    rates = VA_COMPENSATION_RATES_BY_YEAR.get(year, VA_COMPENSATION_RATES_2026)
+    year = year if year is not None else default_rate_year(today)
+
+    # Fall back to the newest table we have rather than a hardcoded year.
+    rates = VA_COMPENSATION_RATES_BY_YEAR.get(
+        year, VA_COMPENSATION_RATES_BY_YEAR[latest_available_rate_year()]
+    )
 
     if combined_rating not in rates:
         return 0.0
