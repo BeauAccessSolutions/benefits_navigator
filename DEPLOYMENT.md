@@ -235,7 +235,21 @@ Download endpoint: `/claims/document/<pk>/download/`
 | Endpoint | Purpose | Response |
 |----------|---------|----------|
 | `/health/` | Liveness check (load balancer) | `{"status": "ok"}` |
-| `/health/?full=1` | Full system health | Detailed JSON |
+| `/health/?full=1` | Full system health (staff or token) | Detailed JSON, or `403` |
+
+### Reading the full health check
+
+It requires either a staff session or the `HEALTH_CHECK_TOKEN` shared secret, passed in
+the `X-Health-Token` header — a header rather than a query parameter so the token stays
+out of access logs, proxy logs and browser history. Set `HEALTH_CHECK_TOKEN` in the DO
+console for unattended monitoring; leave it unset and only staff can read it.
+
+```bash
+curl -H "X-Health-Token: $HEALTH_CHECK_TOKEN" https://your-app.ondigitalocean.app/health/?full=1
+```
+
+Unlike the plain liveness check, this request goes through normal host validation, so
+call it on a hostname in `ALLOWED_HOSTS` rather than an internal IP.
 
 ### Full Health Check Components
 

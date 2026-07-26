@@ -421,6 +421,13 @@ SESSION_COOKIE_SAMESITE = "Lax"
 # Enforced by core.middleware.IdleSessionTimeoutMiddleware.
 SESSION_IDLE_TIMEOUT = env.int("SESSION_IDLE_TIMEOUT", default=1800)  # 30 minutes
 
+# Shared secret letting unattended monitoring read /health/?full=1, which reports
+# database, Redis, Celery and queue state. Supplied in the X-Health-Token header,
+# never a query parameter, so it stays out of access and proxy logs. Unset means
+# only staff sessions can read the detailed status; the plain liveness check at
+# /health/ is unaffected and never requires it.
+HEALTH_CHECK_TOKEN = env("HEALTH_CHECK_TOKEN", default="")
+
 # ==============================================================================
 # CSRF CONFIGURATION
 # ==============================================================================

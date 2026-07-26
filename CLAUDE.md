@@ -242,7 +242,9 @@ ALLOWED_HOSTS
 
 ## Health Check
 - `/health/` — Liveness check
-- `/health/?full=1` — Full status (database, cache, etc.)
+- `/health/?full=1` — Full status (database, cache, Celery). Requires a staff session or
+  the `HEALTH_CHECK_TOKEN` secret in an `X-Health-Token` header; goes through normal
+  `ALLOWED_HOSTS` validation, unlike the liveness check.
 
 ---
 

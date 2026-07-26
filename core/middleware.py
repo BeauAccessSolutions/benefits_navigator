@@ -17,21 +17,31 @@ logger = logging.getLogger(__name__)
 
 class HealthCheckMiddleware:
     """
-    Middleware to handle health check requests before ALLOWED_HOSTS validation.
+    Answer the liveness probe before ALLOWED_HOSTS validation.
 
     This must be placed BEFORE django.middleware.common.CommonMiddleware
     in MIDDLEWARE settings to bypass the Host header check for health endpoints.
 
     DigitalOcean App Platform uses internal IPs (e.g., 10.244.x.x) for health checks,
     which would fail ALLOWED_HOSTS validation.
+
+    It matches on path *and* querystring. Matching on path alone short-circuited
+    ``/health/?full=1`` too, so the detailed status view could never run in
+    production — the endpoint documented for monitoring dashboards answered a
+    flat ``{"status": "ok"}`` no matter how sick the system was. Requests
+    carrying ``full`` fall through to the real view, which means they are also
+    subject to ALLOWED_HOSTS. That is correct: an operator or dashboard reaches
+    the app on a real hostname, and only the internal-IP liveness probe needs
+    the bypass.
     """
+
+    LIVENESS_PATHS = ("/health/", "/health")
 
     def __init__(self, get_response):
         self.get_response = get_response
 
     def __call__(self, request):
-        # Respond to health check without checking ALLOWED_HOSTS
-        if request.path == "/health/" or request.path == "/health":
+        if request.path in self.LIVENESS_PATHS and not request.GET.get("full"):
             return JsonResponse({"status": "ok", "message": "Service is running"})
 
         return self.get_response(request)
