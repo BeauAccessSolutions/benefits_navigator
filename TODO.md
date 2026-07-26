@@ -1,7 +1,53 @@
 # VA Benefits Navigator — TODO & Audit Tracker
 
-**Last Updated:** 2026-07-23
-**Updated By:** Claude Code — logged the 2026-07-23 external (Codex) audit findings below; every finding was independently verified against the current working tree before recording. No fixes applied yet.
+**Last Updated:** 2026-07-26
+**Updated By:** Claude Code — added the log/exception PII hygiene sweep (2026-07-26) below. Prior entry: logged the 2026-07-23 external (Codex) audit findings; every finding was independently verified against the current working tree before recording. No fixes applied yet.
+
+---
+
+## Log & exception PII hygiene (2026-07-26 — cross-app sweep, BN slice)
+
+Prompted by a CIT finding (a PHI boolean logged under an abbreviated key, defeating CIT's
+field-name redaction allowlist). Swept BN for the same class. **BN's own logging is disciplined** —
+of 325 log call sites across the Django apps, 20 interpolate anything user-adjacent, and every one
+of those logs an **id, a count, or a length**, not content (`ai_service.py:153` logs
+`len(truncated_text)`; `accounts/views.py:1239` logs `invitation_id`). Good defaults, and
+`sentry_sdk.init(send_default_pii=False)` is set and guarded by
+`scripts/check_security_invariants.py`.
+
+The residual risk is **third-party exception text**, which nothing here scrubs:
+
+- [ ] **P1 — Sentry ships stack-frame locals, and `send_default_pii=False` does not stop it.**
+  `include_local_variables` is not set anywhere in the repo, so the sentry-sdk default applies
+  (`requirements.txt:84` pins `sentry-sdk>=2.8.0`; the 2.x default is `True`). It is an independent
+  setting from `send_default_pii`. An exception raised inside
+  `claims/services/ocr_service.py::_extract_from_image` / `_extract_from_pdf` has the OCR'd document
+  text bound in the frame's locals — i.e. the contents of a veteran's claim file — and that frame is
+  serialized into the Sentry event. Both sites `raise` after logging, so the exception does
+  propagate to the DjangoIntegration/CeleryIntegration handler.
+  *Confirm before fixing:* `pip show sentry-sdk` for the installed version, then check
+  `include_local_variables` in that version's defaults.
+  *Fix:* `include_local_variables=False` in `benefits_navigator/settings.py:702-710`, or a
+  `before_send` hook that strips frame locals on the OCR/AI code paths.
+
+- [ ] **P2 — 8 sites interpolate `str(e)` from a third party into logs.** The exception text is
+  written by an SMTP server, an OCR library, or the Anthropic API, and can carry a recipient address,
+  a filename, or echoed input:
+  `claims/services/ocr_service.py:87,161` · `claims/services/ai_service.py:165` ·
+  `vso/views.py:1247` · `core/tasks.py:387,442,566` · `core/alerting.py:143`.
+  Email-send failures are the most likely to carry PII — SMTP errors routinely quote the envelope
+  recipient. *Fix:* log the exception **type** plus a correlation id; keep the full text for the
+  debugger, not the log.
+
+- [ ] **P2 — `check_security_invariants.py` has the same blind spot CIT's drift test has.** Check 1
+  ("Prohibited PHI Fields") inspects **Django model field definitions** — the schema. Neither log
+  call sites nor exception surfaces are covered, so a leak that never becomes a model field is
+  invisible to it. *Fix:* add a check that flags `str(e)` / `{e}` / `{exc}` interpolated inside a
+  `logger.*` call outside `tests/`.
+
+**Not verified here:** whether any of the 8 `str(e)` sites has *actually* emitted PII in production —
+that needs a look at real log output, which this sweep did not do. The finding is that no mechanism
+would stop it.
 
 ---
 
