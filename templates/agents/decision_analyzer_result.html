@@ -29,17 +29,34 @@
     </div>
     {% endif %}
 
-    <!-- Appeal Deadline Alert -->
-    {% if analysis.appeal_deadline %}
-    <div class="bg-red-50 border border-red-200 rounded-lg p-4 mb-8">
-        <div class="flex items-center">
-            <svg class="w-6 h-6 text-red-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    {% comment %}
+       Deadlines are per lane, not per decision. A single red "Appeal Deadline"
+       banner told anyone whose best route was a Supplemental Claim that their
+       time had run out — that lane has no deadline at all (38 CFR § 20.204).
+       See core/va_deadlines.py.
+    {% endcomment %}
+    {% if analysis.appeal_deadlines %}
+    <div class="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-8">
+        <div class="flex items-start">
+            <svg class="w-6 h-6 text-amber-600 mr-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
             </svg>
             <div>
-                <span class="font-bold text-red-800">Appeal Deadline:</span>
-                <span class="text-red-700">{{ analysis.appeal_deadline|date:"F j, Y" }}</span>
-                <span class="text-red-600 text-sm ml-2">(1 year from decision date)</span>
+                <h2 class="font-bold text-amber-900">Your filing deadlines</h2>
+                <dl class="mt-2 space-y-1 text-sm">
+                    <div class="flex flex-wrap gap-2">
+                        <dt class="font-medium text-amber-900">Higher-Level Review or Board Appeal:</dt>
+                        <dd class="text-amber-800">by {{ analysis.appeal_deadlines.higher_level_review|date:"F j, Y" }}</dd>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <dt class="font-medium text-amber-900">Supplemental Claim:</dt>
+                        <dd class="text-amber-800">
+                            no deadline &mdash; but filing by
+                            {{ analysis.appeal_deadlines.effective_date_protection|date:"F j, Y" }}
+                            protects your effective date (back pay)
+                        </dd>
+                    </div>
+                </dl>
             </div>
         </div>
     </div>
