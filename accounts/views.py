@@ -15,9 +15,12 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django_ratelimit.decorators import ratelimit
 from django.utils.decorators import method_decorator
+from allauth.account.decorators import reauthentication_required
 from allauth.account.views import LoginView, SignupView, PasswordResetView
 
+from appeals.models import AppealDocument
 from core.models import AuditLog
+from vso.models import CaseNote
 from .models import Subscription, UsageTracking
 
 logger = logging.getLogger(__name__)
@@ -63,9 +66,20 @@ class RateLimitedPasswordResetView(PasswordResetView):
 
 
 @login_required
+@reauthentication_required(allow_get=True)
 def data_export(request):
     """
     Request export of all user data (GDPR compliance).
+
+    The download is a step-up action: ``reauthentication_required`` lets the
+    explanatory page render on GET but forces a fresh password entry before the
+    POST that actually produces the file. That step-up is what lets the export
+    carry the account holder's own identifiers in the clear (date of birth, VA
+    file number) instead of the ``[REDACTED]`` placeholders it used to emit — a
+    portability export that withholds the user's own data from the user is not
+    an honest export, but a stale session is not enough proof to hand PHI to.
+    Users authenticated only through an external provider have no password to
+    re-enter; allauth passes them through (see ``did_recently_authenticate``).
     """
     if request.method == "POST":
         # Log the export request
@@ -95,20 +109,40 @@ def data_export(request):
     return render(request, "accounts/data_export.html", context)
 
 
+# Maximum records per category. The cap exists to bound memory on a
+# synchronous request; when it bites, the export says so per category rather
+# than silently handing back a partial file that calls itself complete.
+MAX_EXPORT_RECORDS = 1000
+
+
 def _generate_user_export(user):
     """
     Generate a complete export of user data.
 
-    PII fields (date_of_birth, va_file_number) are redacted for security.
-    Users can view these in their profile settings if needed.
+    Two properties this export is required to have, because it is the artifact
+    that backs a "download everything we hold about you" promise:
 
-    Query limits applied to prevent memory exhaustion on large datasets.
+    1. **It says what it left out.** Every category is capped at
+       ``MAX_EXPORT_RECORDS``; anything that hit the cap is listed under
+       ``about_this_export.truncated_categories`` and flagged in ``truncated``.
+       Categories that are deliberately not exported (document *files*, the
+       audit log, other people's notes) are named in ``about_this_export``.
+    2. **It carries the user's own identifiers.** Date of birth and VA file
+       number used to come back as ``[REDACTED]`` — withholding the account
+       holder's data from the account holder. The caller (:func:`data_export`)
+       gates the download behind a fresh re-authentication instead.
     """
-    # Maximum records per category to prevent memory exhaustion
-    MAX_EXPORT_RECORDS = 1000
+    truncated = {}
+
+    def collect(queryset, mapper, category):
+        """Map at most MAX_EXPORT_RECORDS rows, recording whether more exist."""
+        rows = list(queryset[: MAX_EXPORT_RECORDS + 1])
+        truncated[category] = len(rows) > MAX_EXPORT_RECORDS
+        return [mapper(row) for row in rows[:MAX_EXPORT_RECORDS]]
 
     export = {
         "export_date": timezone.now().isoformat(),
+        "export_format_version": 2,
         "user": {
             "id": user.id,
             "email": user.email,
@@ -120,39 +154,36 @@ def _generate_user_export(user):
         },
     }
 
-    # Profile data - PII fields redacted for security
+    # Profile. Identifiers are included in full: this file is generated only
+    # after a fresh re-authentication (see data_export).
     if hasattr(user, "profile"):
         profile = user.profile
         export["profile"] = {
             "branch_of_service": profile.branch_of_service,
-            "date_of_birth": "[REDACTED]" if profile.date_of_birth else None,
-            "va_file_number": "[REDACTED]" if profile.va_file_number else None,
+            "date_of_birth": (
+                profile.date_of_birth.isoformat() if profile.date_of_birth else None
+            ),
+            "va_file_number": profile.va_file_number or None,
             "disability_rating": profile.disability_rating,
             "bio": profile.bio,
         }
 
-    # Documents (limited to prevent memory exhaustion)
     if hasattr(user, "documents"):
-        docs = user.documents.filter(is_deleted=False).order_by("-created_at")[
-            :MAX_EXPORT_RECORDS
-        ]
-        export["documents"] = [
-            {
+        export["documents"] = collect(
+            user.documents.filter(is_deleted=False).order_by("-created_at"),
+            lambda doc: {
                 "id": doc.id,
                 "file_name": doc.file_name,
                 "document_type": doc.document_type,
                 "uploaded_at": doc.created_at.isoformat(),
-            }
-            for doc in docs
-        ]
+            },
+            "documents",
+        )
 
-    # Claims (limited to prevent memory exhaustion)
     if hasattr(user, "claims"):
-        claims = user.claims.filter(is_deleted=False).order_by("-created_at")[
-            :MAX_EXPORT_RECORDS
-        ]
-        export["claims"] = [
-            {
+        export["claims"] = collect(
+            user.claims.filter(is_deleted=False).order_by("-created_at"),
+            lambda claim: {
                 "id": claim.id,
                 "title": claim.title,
                 "claim_type": claim.claim_type,
@@ -161,100 +192,266 @@ def _generate_user_export(user):
                     claim.submission_date.isoformat() if claim.submission_date else None
                 ),
                 "created_at": claim.created_at.isoformat(),
-            }
-            for claim in claims
-        ]
+            },
+            "claims",
+        )
 
-    # Appeals (limited to prevent memory exhaustion)
     if hasattr(user, "appeals"):
-        appeals = user.appeals.all().order_by("-created_at")[:MAX_EXPORT_RECORDS]
-        export["appeals"] = [
-            {
+        export["appeals"] = collect(
+            user.appeals.all().order_by("-created_at"),
+            lambda appeal: {
                 "id": appeal.id,
                 "conditions_appealed": appeal.conditions_appealed,
                 "appeal_type": appeal.appeal_type,
                 "status": appeal.status,
                 "created_at": appeal.created_at.isoformat(),
-            }
-            for appeal in appeals
-        ]
+            },
+            "appeals",
+        )
 
-    # Exam checklists (limited to prevent memory exhaustion)
+        # Appeal document metadata (the files themselves are not bundled).
+        export["appeal_documents"] = collect(
+            AppealDocument.objects.filter(appeal__user=user).order_by("-created_at"),
+            lambda doc: {
+                "id": doc.id,
+                "appeal_id": doc.appeal_id,
+                "title": doc.title,
+                "document_type": doc.document_type,
+                "notes": doc.notes,
+                "is_submitted": doc.is_submitted,
+                "uploaded_at": doc.created_at.isoformat(),
+            },
+            "appeal_documents",
+        )
+
     if hasattr(user, "exam_checklists"):
-        checklists = user.exam_checklists.all().order_by("-created_at")[
-            :MAX_EXPORT_RECORDS
-        ]
-        export["exam_checklists"] = [
-            {
+        export["exam_checklists"] = collect(
+            user.exam_checklists.all().order_by("-created_at"),
+            lambda checklist: {
                 "id": checklist.id,
                 "condition": checklist.condition,
                 "exam_date": (
                     checklist.exam_date.isoformat() if checklist.exam_date else None
                 ),
                 "created_at": checklist.created_at.isoformat(),
-            }
-            for checklist in checklists
-        ]
+            },
+            "exam_checklists",
+        )
 
-    # Evidence checklists (limited to prevent memory exhaustion)
     if hasattr(user, "evidence_checklists"):
-        evidence = user.evidence_checklists.all().order_by("-created_at")[
-            :MAX_EXPORT_RECORDS
-        ]
-        export["evidence_checklists"] = [
-            {
+        export["evidence_checklists"] = collect(
+            user.evidence_checklists.all().order_by("-created_at"),
+            lambda checklist: {
                 "id": checklist.id,
                 "condition": checklist.condition,
                 "claim_type": checklist.claim_type,
                 "completion_percentage": checklist.completion_percentage,
                 "created_at": checklist.created_at.isoformat(),
-            }
-            for checklist in evidence
-        ]
+            },
+            "evidence_checklists",
+        )
 
-    # Rating calculations (limited to prevent memory exhaustion)
     if hasattr(user, "rating_calculations"):
-        calcs = user.rating_calculations.all().order_by("-created_at")[
-            :MAX_EXPORT_RECORDS
-        ]
-        export["rating_calculations"] = [
-            {
+        export["rating_calculations"] = collect(
+            user.rating_calculations.all().order_by("-created_at"),
+            lambda calc: {
                 "id": calc.id,
                 "name": calc.name,
                 "combined_rounded": calc.combined_rounded,
                 "created_at": calc.created_at.isoformat(),
-            }
-            for calc in calcs
-        ]
+            },
+            "rating_calculations",
+        )
 
-    # Journey events (limited to prevent memory exhaustion)
     if hasattr(user, "journey_events"):
-        events = user.journey_events.all().order_by("-event_date")[:MAX_EXPORT_RECORDS]
-        export["journey_events"] = [
-            {
+        export["journey_events"] = collect(
+            user.journey_events.all().order_by("-event_date"),
+            lambda event: {
                 "id": event.id,
                 "title": event.title,
                 "event_date": event.event_date.isoformat(),
-            }
-            for event in events
-        ]
+            },
+            "journey_events",
+        )
 
-    # Milestones (limited to prevent memory exhaustion)
     if hasattr(user, "journey_milestones"):
-        milestones = user.journey_milestones.all().order_by("-date")[
-            :MAX_EXPORT_RECORDS
-        ]
-        export["journey_milestones"] = [
-            {
+        export["journey_milestones"] = collect(
+            user.journey_milestones.all().order_by("-date"),
+            lambda milestone: {
                 "id": milestone.id,
                 "title": milestone.title,
                 "date": milestone.date.isoformat(),
                 "milestone_type": milestone.milestone_type,
-            }
-            for milestone in milestones
-        ]
+            },
+            "journey_milestones",
+        )
+
+    export.update(_export_ai_history(user, collect))
+    export.update(_export_vso_records(user, collect))
+
+    export["truncated"] = truncated
+    export["about_this_export"] = {
+        "record_limit_per_category": MAX_EXPORT_RECORDS,
+        "truncated_categories": sorted(k for k, v in truncated.items() if v),
+        "personal_identifiers_included": True,
+        "not_included": {
+            "document_files": (
+                "Only document metadata is exported. Download the files "
+                "themselves from your Documents and Appeals pages."
+            ),
+            "audit_log": (
+                "Security audit records about your account are retained for "
+                "integrity reasons and are available on request."
+            ),
+            "vso_internal_notes": (
+                "Case notes your representative marked as internal are not "
+                "included; only notes shared with you are."
+            ),
+        },
+    }
 
     return export
+
+
+def _export_ai_history(user, collect):
+    """AI analyses and assistant transcripts — previously omitted entirely."""
+    history = {
+        "assistant_threads": collect(
+            user.assistant_threads.all().order_by("-created_at"),
+            lambda thread: {
+                "id": thread.id,
+                "created_at": thread.created_at.isoformat(),
+            },
+            "assistant_threads",
+        ),
+        "assistant_turns": collect(
+            user.assistant_turns.all().order_by("-created_at"),
+            lambda turn: {
+                "id": turn.id,
+                "thread_id": turn.thread_id,
+                "role": turn.role,
+                "content": turn.content,
+                "stopped": turn.stopped,
+                "created_at": turn.created_at.isoformat(),
+            },
+            "assistant_turns",
+        ),
+        "decision_letter_analyses": collect(
+            user.decision_analyses.all().order_by("-created_at"),
+            lambda analysis: {
+                "id": analysis.id,
+                "decision_date": (
+                    analysis.decision_date.isoformat()
+                    if analysis.decision_date
+                    else None
+                ),
+                "summary": analysis.summary,
+                "conditions_granted": analysis.conditions_granted,
+                "conditions_denied": analysis.conditions_denied,
+                "conditions_deferred": analysis.conditions_deferred,
+                "appeal_options": analysis.appeal_options,
+                "evidence_issues": analysis.evidence_issues,
+                "action_items": analysis.action_items,
+                "created_at": analysis.created_at.isoformat(),
+            },
+            "decision_letter_analyses",
+        ),
+        "evidence_gap_analyses": collect(
+            user.evidence_analyses.all().order_by("-created_at"),
+            lambda analysis: {
+                "id": analysis.id,
+                "claimed_conditions": analysis.claimed_conditions,
+                "existing_evidence": analysis.existing_evidence,
+                "evidence_gaps": analysis.evidence_gaps,
+                "strength_assessment": analysis.strength_assessment,
+                "recommendations": analysis.recommendations,
+                "readiness_score": analysis.readiness_score,
+                "created_at": analysis.created_at.isoformat(),
+            },
+            "evidence_gap_analyses",
+        ),
+        "personal_statements": collect(
+            user.personal_statements.all().order_by("-created_at"),
+            lambda statement: {
+                "id": statement.id,
+                "condition": statement.condition,
+                "statement_type": statement.statement_type,
+                "in_service_event": statement.in_service_event,
+                "current_symptoms": statement.current_symptoms,
+                "daily_impact": statement.daily_impact,
+                "work_impact": statement.work_impact,
+                "treatment_history": statement.treatment_history,
+                "worst_days": statement.worst_days,
+                "generated_statement": statement.generated_statement,
+                "final_statement": statement.final_statement,
+                "is_finalized": statement.is_finalized,
+                "created_at": statement.created_at.isoformat(),
+            },
+            "personal_statements",
+        ),
+        "rating_analyses": collect(
+            user.rating_analyses.all().order_by("-created_at"),
+            lambda analysis: {
+                "id": analysis.id,
+                "decision_date": (
+                    analysis.decision_date.isoformat()
+                    if analysis.decision_date
+                    else None
+                ),
+                "combined_rating": analysis.combined_rating,
+                "monthly_compensation": (
+                    str(analysis.monthly_compensation)
+                    if analysis.monthly_compensation is not None
+                    else None
+                ),
+                "conditions": analysis.conditions,
+                "increase_opportunities": analysis.increase_opportunities,
+                "secondary_conditions": analysis.secondary_conditions,
+                "rating_errors": analysis.rating_errors,
+                "effective_date_issues": analysis.effective_date_issues,
+                "priority_actions": analysis.priority_actions,
+                "created_at": analysis.created_at.isoformat(),
+            },
+            "rating_analyses",
+        ),
+    }
+    return history
+
+
+def _export_vso_records(user, collect):
+    """The veteran's side of any VSO case: the case itself, notes shared with them."""
+    return {
+        "vso_cases": collect(
+            user.vso_cases.all().order_by("-created_at"),
+            lambda case: {
+                "id": case.id,
+                "organization": case.organization.name,
+                "title": case.title,
+                "description": case.description,
+                "status": case.status,
+                "conditions": case.conditions,
+                "intake_date": (
+                    case.intake_date.isoformat() if case.intake_date else None
+                ),
+                "created_at": case.created_at.isoformat(),
+            },
+            "vso_cases",
+        ),
+        "vso_case_notes_shared_with_me": collect(
+            CaseNote.objects.filter(
+                case__veteran=user, visible_to_veteran=True
+            ).order_by("-created_at"),
+            lambda note: {
+                "id": note.id,
+                "case_id": note.case_id,
+                "note_type": note.note_type,
+                "subject": note.subject,
+                "content": note.content,
+                "created_at": note.created_at.isoformat(),
+            },
+            "vso_case_notes_shared_with_me",
+        ),
+    }
 
 
 @login_required
