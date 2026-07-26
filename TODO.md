@@ -1,7 +1,85 @@
 # VA Benefits Navigator — TODO & Audit Tracker
 
 **Last Updated:** 2026-07-26
-**Updated By:** Claude Code — added the log/exception PII hygiene sweep (2026-07-26) below. Prior entry: logged the 2026-07-23 external (Codex) audit findings; every finding was independently verified against the current working tree before recording. No fixes applied yet.
+**Updated By:** Claude Code — logged the 2026-07-26 external (Codex) audit of the *deployed* build, and the log/exception PII hygiene sweep, both below. Prior entry: the 2026-07-23 external (Codex) audit. No fixes applied yet.
+
+---
+
+## Audit Summary (2026-07-26 — external Codex audit, pinned to the deployed build)
+
+Verdict: **the active production deployment is not production-ready.** 2 P0, 7 P1, 5 P2.
+
+Pinned to DigitalOcean deployment `c61d811c-8213-4396-b438-6f7fd19f780e`, built from commit
+`a6d8f980`, which matches remote `main`. Read-only; all execution in temporary directories.
+
+**Independently verified here before recording** (the two P0s and the one finding that overlaps the
+hygiene sweep below):
+
+### P0 — CONFIRMED · Scheduled tasks never run in production; account deletion is a broken promise
+`benefits_navigator/settings.py:323` defines a full `CELERY_BEAT_SCHEDULE` — health metrics (5 min),
+processing health (15 min), daily cleanup at 03:00, daily reminders, **account purge and pilot
+retention**.
+
+`app-spec.yaml.template` defines exactly three components — `web`, `worker`, `migrate`. The worker
+runs `celery -A benefits_navigator worker -l info --concurrency=2` with **no `-B`**, and a grep for
+`beat` or `-B` across the whole spec returns nothing. There is no Beat scheduler in the deployment.
+
+**Every scheduled task is dead code in production.** The one that matters legally is deletion:
+`accounts/views.py:261` tells users their account and data are permanently deleted after 30 days,
+the request is recorded, and nothing ever executes it. That is a product promise the infrastructure
+cannot keep. Pilot retention and advance-warning emails are equally inert.
+
+Related: the spec's first line is `name: benefits-navigator-staging`. Production appears to run a
+staging-named spec, which is also the root of the `STAGING=True` / missing-HSTS P2.
+
+### P0 — mechanism confirmed, deployed value on Codex's authority · Local storage breaks OCR
+`settings.py:582` — `USE_S3 = env.bool("USE_S3", default=False)`; `USE_S3` is a declared env key in
+the spec, so the deployed value lives in DO, which Codex read and this pass did not. With it off,
+uploads use local `FileSystemStorage`, the web process sends only a row id to Celery
+(`claims/views.py:88`), and the worker opens the path locally (`claims/tasks.py:98`).
+
+**Worse than "no shared volume was configured":** App Platform has no shared-filesystem primitive
+between components at all — each runs its own container with an ephemeral disk. This cannot be fixed
+by adding a volume. The fixes are object storage (`USE_S3=True` with credentials) or moving OCR
+in-process. Files are also lost on every component replacement or deploy.
+
+### P1 — CONFIRMED, and wider than first recorded · Sentry frame locals
+See the hygiene section below; Codex found this independently and resolved the open question there.
+
+### Remaining Codex findings — recorded, not independently verified here
+- [ ] **P1** — VA rating calculator applies the bilateral factor without proving compensable
+  disabilities in **both** paired extremities; ignores `bilateral_group`, doesn't distinguish sides,
+  omits the more-favorable exception. A single 50% row marked bilateral yields 55% raw / 60%
+  displayed. Conflicts with 38 CFR §4.26. `examprep/va_math.py:169`.
+- [ ] **P1** — compensation estimates default to **2024** rates in July 2026, labelled "Current";
+  2026 values exist in source but aren't the default. `templates/examprep/rating_calculator.html:82`,
+  `examprep/views.py:345`. TDIU's 100% estimate uses the 2024 table too.
+- [ ] **P1** — `complete_structured()` has **no production call sites**. Decision/evidence/statement
+  generation, document summaries and rating extraction all use raw `gateway.complete()` + ad hoc JSON
+  parsing (`agents/services.py:100`), so malformed or adversarial model output bypasses the Pydantic
+  schemas before benefit, evidence, appeal or deadline guidance is persisted.
+- [ ] **P1** — the deployed commit's **Tests workflow failed** and main auto-deployed anyway. There is
+  no effective required-test deployment gate.
+- [ ] **P1** — the "complete" user export omits AI analyses/interactions, assistant conversations, VSO
+  cases and shared analyses, case notes, notification preferences and audit history, and silently caps
+  each category at 1,000 (`accounts/views.py:98`).
+- [ ] **P1** — `/health/?full=1` is intercepted by middleware and returns the same liveness response as
+  `/health/` (`core/middleware.py:32`), so database, cache, queue and worker failures are invisible.
+  Admin OTP defaults off and is not overridden in production, against the project's own trust plan.
+- [ ] **P2** — CSP still allows inline scripts and `unpkg.com`; HSTS absent (`STAGING=True`).
+- [ ] **P2** — E2E suite excluded from CI and cannot complete reliably; auth fixtures time out.
+- [ ] **P2** — two templates leak raw `{# … #}` comments into rendered pages (the 2 failing unit tests).
+- [ ] **P2** — live `/sitemap.xml` publishes `https://example.com/...` URLs.
+- [ ] **P2** — public privacy policy and Terms remain drafts; the footer links authenticated privacy
+  settings rather than a public policy (`docs/TRUST.md:39`).
+
+**Also flagged:** product documentation is materially stale — glossary counts reported variously as
+26/46/86/89, VSO features described as planned despite substantial code, and docs claiming 2026 rates
+are default while production labels 2024 as current.
+
+**Codex's checks:** 1,149 passed / 2 failed (non-E2E pytest), ruff pass, black pass (258 files),
+`makemigrations --check` pass, security-invariant checker pass, Django deploy check warns on HSTS and
+SSL redirect, live deep-health validation fail, production CI/deploy gate fail.
 
 ---
 
@@ -18,15 +96,18 @@ of those logs an **id, a count, or a length**, not content (`ai_service.py:153` 
 The residual risk is **third-party exception text**, which nothing here scrubs:
 
 - [ ] **P1 — Sentry ships stack-frame locals, and `send_default_pii=False` does not stop it.**
-  `include_local_variables` is not set anywhere in the repo, so the sentry-sdk default applies
-  (`requirements.txt:84` pins `sentry-sdk>=2.8.0`; the 2.x default is `True`). It is an independent
-  setting from `send_default_pii`. An exception raised inside
-  `claims/services/ocr_service.py::_extract_from_image` / `_extract_from_pdf` has the OCR'd document
-  text bound in the frame's locals — i.e. the contents of a veteran's claim file — and that frame is
-  serialized into the Sentry event. Both sites `raise` after logging, so the exception does
-  propagate to the DjangoIntegration/CeleryIntegration handler.
-  *Confirm before fixing:* `pip show sentry-sdk` for the installed version, then check
-  `include_local_variables` in that version's defaults.
+  ✅ **Independently confirmed by the Codex audit above** (`settings.py:696`), which also **closes the
+  verification question this entry originally carried**: the *installed* SDK defaults local-variable
+  capture on. No `pip show` needed.
+  ⚠️ **Wider than first recorded.** This entry cited the two `ocr_service` sites; Codex found that
+  **Celery task frames generally retain OCR text and document analysis**, so the exposed surface is
+  every task frame, not two functions.
+  `include_local_variables` is not set anywhere in the repo, so the SDK default applies
+  (`requirements.txt:84` pins `sentry-sdk>=2.8.0`). It is an independent setting from
+  `send_default_pii` — that flag governs request bodies, cookies and user identifiers, not locals.
+  An exception raised inside `claims/services/ocr_service.py::_extract_from_image` / `_extract_from_pdf`
+  has the OCR'd document text bound in the frame's locals — the contents of a veteran's claim file —
+  and both sites `raise` after logging, so it propagates to the Django/Celery integration.
   *Fix:* `include_local_variables=False` in `benefits_navigator/settings.py:702-710`, or a
   `before_send` hook that strips frame locals on the OCR/AI code paths.
 
