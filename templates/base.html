@@ -9,11 +9,13 @@
     <!-- Page title -->
     <title>{% block title %}{{ SITE_NAME }}{% endblock %}</title>
 
-    {# iOS home-screen label for the deployed site added via Safari "Add to Home
+    {% comment %}
+       iOS home-screen label for the deployed site added via Safari "Add to Home
        Screen". Without this it uses the <title> and iOS truncates to
        "BenefitsNav…" (~12-char budget). The native TestFlight app's label is
        separate — CFBundleDisplayName in mobile/ios/.../Info.plist, also shortened
-       here, which takes effect only on the next TestFlight build. #}
+       here, which takes effect only on the next TestFlight build.
+    {% endcomment %}
     <meta name="apple-mobile-web-app-title" content="Benefits">
 
     <!-- Meta description - override in child templates -->
@@ -59,9 +61,11 @@
     {% load static %}
     <link rel="stylesheet" href="{% static 'css/tailwind.min.css' %}">
 
-    {# iOS safe-area (notch / status bar) fix. A separate stylesheet served from
+    {% comment %}
+       iOS safe-area (notch / status bar) fix. A separate stylesheet served from
        'self' — NOT an inline <style>, which the strict CSP (style-src 'self', no
-       unsafe-inline) would block. See safe-area.css for the rationale. #}
+       unsafe-inline) would block. See safe-area.css for the rationale.
+    {% endcomment %}
     <link rel="stylesheet" href="{% static 'css/safe-area.css' %}">
 
     <!-- HTMX for dynamic interactions -->
