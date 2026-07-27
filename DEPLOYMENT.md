@@ -143,6 +143,83 @@ curl -H "X-Health-Token: $HEALTH_CHECK_TOKEN" \
 doctl apps create-deployment 2119eba2-07b6-405f-a962-d40dd6956137 --force-rebuild
 ```
 
+## Gated deploys
+
+Production used to deploy straight from `main`: every component carried
+`deploy_on_push: true` and nothing consulted CI. Commit `a6d8f98` shipped with
+`Tests: failure`. Nobody bypassed a gate — there wasn't one.
+
+Deploys now go through `.github/workflows/deploy.yml`, which waits for every
+check on the merge commit and refuses unless all of them passed. It checks the
+*merge commit* rather than trusting branch protection: protection verifies the
+PR branch, but squash-merge makes a new commit nothing has run.
+
+### Rollout — four steps, in this order
+
+The order matters in both directions: the workflow must be on `main` before it
+can be run by hand, and turning off `deploy_on_push` before the CI path works
+would freeze deploys entirely.
+
+**1. Merge the repo change first.** GitHub only offers `workflow_dispatch` for
+workflows on the **default branch**, so the Deploy workflow cannot be tested
+from a PR branch. Merging is safe: the live spec still has
+`deploy_on_push: true`, and the workflow stops short of deploying while
+`DEPLOY_VIA_CI` is unset. Every push logs a warning that the gate is not armed.
+
+**2. Add the credentials.** Settings → Secrets and variables → Actions:
+
+| Kind | Name | Value |
+|---|---|---|
+| Secret | `DIGITALOCEAN_ACCESS_TOKEN` | a DO API token with read + write on Apps |
+| Variable | `DO_APP_ID` | `2119eba2-07b6-405f-a962-d40dd6956137` |
+| Variable | `DEPLOY_VIA_CI` | `true` — set this **last** |
+
+Or from the CLI (the first prompts, so the token stays out of your shell
+history):
+
+```bash
+gh secret set DIGITALOCEAN_ACCESS_TOKEN
+gh variable set DO_APP_ID --body 2119eba2-07b6-405f-a962-d40dd6956137
+gh variable set DEPLOY_VIA_CI --body true
+```
+
+Only the token is secret. The app ID is not — it appears in plain text
+throughout this file — and calling it a secret would just make it harder to see
+in logs when a deploy misbehaves.
+
+**3. Prove the CI path works.** Actions → Deploy → Run workflow. Confirm it
+reaches DigitalOcean and the app redeploys. Both paths are briefly live: DO
+deploys on push *and* CI deploys after checks. Two deploys is noisy but safe;
+a window with neither is not.
+
+**4. Turn off auto-deploy in DigitalOcean.** Only after step 3 works:
+
+```bash
+doctl apps spec get 2119eba2-07b6-405f-a962-d40dd6956137 > /tmp/live-spec.yaml
+# set deploy_on_push: false on every component, then:
+doctl apps update 2119eba2-07b6-405f-a962-d40dd6956137 --spec /tmp/live-spec.yaml
+```
+
+After this, the Deploy workflow is the only route to production.
+
+### Verifying the gate
+
+The wait-and-refuse logic was dry-run against two real commits before shipping:
+
+| Commit | Checks | Gate |
+|---|---|---|
+| current `main` | all green | **deploy** |
+| `a6d8f98` | `Run Tests: failure` | **refuse** |
+
+`a6d8f98` is the commit that actually reached production broken.
+
+### If you need to deploy urgently
+
+Run the Deploy workflow by hand — it still enforces the checks. If checks are
+genuinely broken and you must ship anyway, deploy from the DigitalOcean console
+directly and say so in the incident log. Do not re-enable `deploy_on_push`:
+that removes the gate for every future commit, not just the urgent one.
+
 ### Connect to staging database
 ```bash
 # Get password from DO Console or use:
