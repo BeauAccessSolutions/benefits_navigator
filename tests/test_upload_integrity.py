@@ -174,10 +174,15 @@ class TestStoredFileIsRemovedOnDelete:
         from django.db.models.signals import post_delete
 
         uids = {"appealdoc_file_cleanup", "document_file_cleanup"}
+        # Index rather than unpack: the entry is a 3-tuple on Django 5.2 and a
+        # 4-tuple on 6.0 (an async flag was added), and this repo currently
+        # resolves 5.2 in CI and 6.0 locally because Django is unpinned at the
+        # top. Only the first two positions — lookup key, receiver — are stable,
+        # and they are all this assertion needs.
         found = {
-            key[0]: ref
-            for key, ref, _sender, _is_async in post_delete.receivers
-            if isinstance(key, tuple) and key[0] in uids
+            entry[0][0]: entry[1]
+            for entry in post_delete.receivers
+            if isinstance(entry[0], tuple) and entry[0][0] in uids
         }
 
         assert set(found) == uids, f"receivers not connected: {uids - set(found)}"
