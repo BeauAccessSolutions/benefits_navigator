@@ -12,9 +12,11 @@ Covers:
 """
 
 import json
+import time
 import pytest
 from datetime import date, timedelta
 
+from allauth.account.internal.flows.login import AUTHENTICATION_METHODS_SESSION_KEY
 from django.test import TestCase, Client
 from django.urls import reverse
 from django.contrib.auth import get_user_model
@@ -23,6 +25,22 @@ from django.utils import timezone
 from accounts.models import UserProfile, Subscription
 
 User = get_user_model()
+
+
+def mark_recently_authenticated(client):
+    """
+    Simulate a fresh password entry for allauth's re-authentication check.
+
+    ``client.login()`` goes through Django's auth, not allauth's login flow, so
+    it never writes the authentication record that ``did_recently_authenticate``
+    reads. Step-up-gated views therefore redirect in tests unless we seed it.
+    """
+    session = client.session
+    session[AUTHENTICATION_METHODS_SESSION_KEY] = [
+        {"method": "password", "at": time.time()}
+    ]
+    session.save()
+    return client
 
 
 # =============================================================================
@@ -579,12 +597,22 @@ class TestDataExportView:
         assert "login" in response.url.lower()
 
     def test_data_export_page_loads(self, authenticated_client):
-        """Data export page loads for authenticated user."""
+        """Data export page loads for authenticated user (GET is not gated)."""
         response = authenticated_client.get(reverse("accounts:data_export"))
         assert response.status_code == 200
 
+    def test_download_requires_recent_authentication(self, authenticated_client):
+        """
+        The download is a step-up action: a merely-logged-in session must be
+        sent to re-authenticate before any PHI leaves the app in one file.
+        """
+        response = authenticated_client.post(reverse("accounts:data_export"))
+        assert response.status_code == 302
+        assert "reauthenticate" in response.url
+
     def test_data_export_generates_json(self, authenticated_client, user):
         """POST generates JSON export file."""
+        mark_recently_authenticated(authenticated_client)
         response = authenticated_client.post(reverse("accounts:data_export"))
         assert response.status_code == 200
         assert response["Content-Type"] == "application/json"
@@ -601,12 +629,32 @@ class TestDataExportView:
         user.profile.disability_rating = 50
         user.profile.save()
 
+        mark_recently_authenticated(authenticated_client)
         response = authenticated_client.post(reverse("accounts:data_export"))
         data = json.loads(response.content)
 
         assert "profile" in data
         assert data["profile"]["branch_of_service"] == "army"
         assert data["profile"]["disability_rating"] == 50
+
+    def test_identifiers_are_exported_not_redacted(self, authenticated_client, user):
+        """
+        The account holder's own identifiers must come back in full. Redacting
+        them made the export useless for the one person entitled to the data;
+        the re-authentication gate above is what makes that safe.
+        """
+        user.profile.date_of_birth = date(1985, 4, 2)
+        user.profile.va_file_number = "C12345678"
+        user.profile.save()
+
+        mark_recently_authenticated(authenticated_client)
+        response = authenticated_client.post(reverse("accounts:data_export"))
+        data = json.loads(response.content)
+
+        assert data["profile"]["date_of_birth"] == "1985-04-02"
+        assert data["profile"]["va_file_number"] == "C12345678"
+        assert "[REDACTED]" not in response.content.decode()
+        assert data["about_this_export"]["personal_identifiers_included"] is True
 
     def test_export_succeeds_with_claims_and_appeals(
         self, authenticated_client, user, claim, appeal
@@ -616,6 +664,7 @@ class TestDataExportView:
         (condition, filed_date, appeal_lane) and 500'd for any user who had a
         claim or appeal. It must succeed and carry the real model fields.
         """
+        mark_recently_authenticated(authenticated_client)
         response = authenticated_client.post(reverse("accounts:data_export"))
         assert response.status_code == 200
 
@@ -631,6 +680,116 @@ class TestDataExportView:
         # The nonexistent fields from the old buggy code must not reappear.
         assert "condition" not in data["claims"][0]
         assert "appeal_lane" not in data["appeals"][0]
+
+    def test_export_describes_its_own_limits(self, authenticated_client):
+        """
+        An export that silently drops records is a lie about completeness. It
+        must carry a per-category truncation map and name what it omits.
+        """
+        mark_recently_authenticated(authenticated_client)
+        response = authenticated_client.post(reverse("accounts:data_export"))
+        data = json.loads(response.content)
+
+        about = data["about_this_export"]
+        assert about["record_limit_per_category"] == 1000
+        assert about["truncated_categories"] == []
+        assert set(about["not_included"]) == {
+            "document_files",
+            "audit_log",
+            "vso_internal_notes",
+        }
+
+        # Every exported category reports whether it was cut short.
+        assert data["truncated"]["claims"] is False
+        assert data["truncated"]["assistant_turns"] is False
+
+    def test_truncation_is_reported_when_the_cap_bites(
+        self, authenticated_client, user, monkeypatch
+    ):
+        """When a category exceeds the cap, the export says so instead of lying."""
+        from claims.models import Claim
+        from accounts import views as accounts_views
+
+        monkeypatch.setattr(accounts_views, "MAX_EXPORT_RECORDS", 2)
+        for i in range(3):
+            Claim.objects.create(user=user, title=f"Claim {i}", claim_type="initial")
+
+        mark_recently_authenticated(authenticated_client)
+        response = authenticated_client.post(reverse("accounts:data_export"))
+        data = json.loads(response.content)
+
+        assert len(data["claims"]) == 2
+        assert data["truncated"]["claims"] is True
+        assert "claims" in data["about_this_export"]["truncated_categories"]
+
+    def test_export_includes_assistant_transcript(self, authenticated_client, user):
+        """Assistant transcripts are PHI the user owns — previously omitted."""
+        from agents.models import AssistantThread, AssistantTurn
+
+        thread = AssistantThread.objects.create(user=user)
+        AssistantTurn.objects.create(
+            thread=thread, user=user, role="user", content="Is my knee claim ready?"
+        )
+
+        mark_recently_authenticated(authenticated_client)
+        response = authenticated_client.post(reverse("accounts:data_export"))
+        data = json.loads(response.content)
+
+        assert data["assistant_threads"][0]["id"] == thread.id
+        assert data["assistant_turns"][0]["content"] == "Is my knee claim ready?"
+        assert data["assistant_turns"][0]["thread_id"] == thread.id
+
+    def test_export_includes_ai_analyses(self, authenticated_client, user):
+        """Agent analyses about the user are part of their record."""
+        from agents.models import AgentInteraction, DecisionLetterAnalysis
+
+        interaction = AgentInteraction.objects.create(
+            user=user, agent_type="decision_analyzer"
+        )
+        DecisionLetterAnalysis.objects.create(
+            interaction=interaction,
+            user=user,
+            summary="Knee granted at 10%.",
+            conditions_granted=[{"condition": "knee", "rating": 10}],
+        )
+
+        mark_recently_authenticated(authenticated_client)
+        response = authenticated_client.post(reverse("accounts:data_export"))
+        data = json.loads(response.content)
+
+        analysis = data["decision_letter_analyses"][0]
+        assert analysis["summary"] == "Knee granted at 10%."
+        assert analysis["conditions_granted"][0]["condition"] == "knee"
+
+    def test_export_includes_only_case_notes_shared_with_the_veteran(
+        self, authenticated_client, user
+    ):
+        """
+        A veteran's export carries the notes their rep shared with them and not
+        the internal ones — the omission is declared in about_this_export.
+        """
+        from accounts.models import Organization
+        from vso.models import VeteranCase, CaseNote
+
+        organization = Organization.objects.create(name="County VSO", slug="county-vso")
+        case = VeteranCase.objects.create(
+            organization=organization, veteran=user, title="Knee appeal"
+        )
+        CaseNote.objects.create(
+            case=case, subject="Shared", content="Filed today", visible_to_veteran=True
+        )
+        CaseNote.objects.create(
+            case=case, subject="Internal", content="Escalate", visible_to_veteran=False
+        )
+
+        mark_recently_authenticated(authenticated_client)
+        response = authenticated_client.post(reverse("accounts:data_export"))
+        data = json.loads(response.content)
+
+        assert data["vso_cases"][0]["title"] == "Knee appeal"
+        subjects = [n["subject"] for n in data["vso_case_notes_shared_with_me"]]
+        assert subjects == ["Shared"]
+        assert "Escalate" not in response.content.decode()
 
 
 # =============================================================================
