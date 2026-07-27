@@ -225,8 +225,15 @@ pytest -n auto            # Parallel execution
 
 ## Services (`.do/app.yaml`)
 1. **Web:** Gunicorn Django (basic-xxs, port 8000)
-2. **Worker:** Celery (basic-xxs, concurrency=2)
-3. **Pre-deploy job:** `python manage.py migrate --noinput`
+2. **Worker:** Celery worker (basic-xxs, concurrency=2) — executes tasks
+3. **Beat:** Celery beat (basic-xxs, **instance_count must stay 1**) — schedules them
+4. **Pre-deploy job:** `python manage.py migrate --noinput`
+
+> **The Beat component is required and was missing for months.** Nothing in
+> `CELERY_BEAT_SCHEDULE` runs without it — including `process_scheduled_account_deletions`,
+> which is what makes the 30-day deletion promise true. The worker does *not* start Beat.
+> Guarded by `tests/test_beat_deployment.py` (spec) and `core.health.check_scheduler`
+> (runtime, visible at `/health/?full=1`).
 
 ## Required Environment Variables
 ```

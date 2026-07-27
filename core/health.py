@@ -152,6 +152,71 @@ def check_document_processing(hours=24):
         }
 
 
+def check_scheduler(stale_after_minutes=30):
+    """
+    Check that Celery Beat is alive and firing periodic tasks.
+
+    This exists because the absence of Beat is otherwise invisible. The
+    deployment ran for months with no scheduler component at all: no errors, no
+    failed requests, every dashboard green — and account purges, pilot data
+    retention and reminder emails simply never happened. Nothing was watching
+    the one signal that would have shown it.
+
+    The signal is ``PeriodicTask.last_run_at``, written by the database
+    scheduler each time it dispatches. The schedule's most frequent entries run
+    every 5 minutes, so if the newest ``last_run_at`` across all enabled tasks
+    is older than ``stale_after_minutes``, Beat is not running.
+
+    Reports ``unknown`` rather than ``healthy`` when it cannot tell — a check
+    that fails open would recreate exactly the silence it exists to break.
+    """
+    try:
+        from django_celery_beat.models import PeriodicTask
+    except ImportError:
+        return {
+            "status": "unknown",
+            "message": "django_celery_beat is not installed; cannot verify Beat",
+        }
+
+    try:
+        tasks = PeriodicTask.objects.filter(enabled=True).exclude(last_run_at=None)
+        latest = tasks.order_by("-last_run_at").first()
+
+        if latest is None:
+            # Either Beat has never run, or it has not completed a first pass
+            # since deploy. Both are worth surfacing rather than assuming fine.
+            enabled_count = PeriodicTask.objects.filter(enabled=True).count()
+            return {
+                "status": "unknown" if enabled_count == 0 else "unhealthy",
+                "message": (
+                    "No periodic task has ever recorded a run. Beat is either "
+                    "not deployed or has never started."
+                ),
+                "enabled_tasks": enabled_count,
+                "last_run_at": None,
+            }
+
+        age = timezone.now() - latest.last_run_at
+        age_minutes = age.total_seconds() / 60
+        stale = age_minutes > stale_after_minutes
+
+        return {
+            "status": "unhealthy" if stale else "healthy",
+            "message": (
+                f"Beat has not dispatched anything for {int(age_minutes)} "
+                f"minutes; scheduled tasks are not running."
+                if stale
+                else f"Beat last dispatched {int(age_minutes)} minutes ago."
+            ),
+            "last_run_at": latest.last_run_at.isoformat(),
+            "last_task": latest.name,
+            "age_minutes": round(age_minutes, 1),
+        }
+    except Exception as e:
+        logger.warning(f"Scheduler health check failed: {e}")
+        return {"status": "unknown", "message": str(e)}
+
+
 def check_stuck_tasks(stuck_after_hours=2):
     """Check for documents stuck in processing state beyond the expected window."""
     try:
@@ -235,6 +300,7 @@ def get_full_health_status():
         "database": check_database(),
         "redis": check_redis(),
         "celery": check_celery(),
+        "scheduler": check_scheduler(),
         "document_processing": check_document_processing(),
         "stuck_tasks": check_stuck_tasks(),
         "failures": check_failure_rate(),

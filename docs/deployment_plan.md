@@ -9,7 +9,7 @@ Shared defaults
 - Proc/commands:
   - Web: `gunicorn benefits_navigator.wsgi:application --workers 3 --threads 2 --timeout 60`.
   - Worker: `celery -A benefits_navigator worker -Q default,ai,notifications -c 2 -Ofair --max-tasks-per-child=100`.
-  - Beat (optional separate component): `celery -A benefits_navigator beat`.
+  - Beat (**required** separate component): `celery -A benefits_navigator beat --scheduler django_celery_beat.schedulers:DatabaseScheduler`. Not optional — without it no scheduled task runs at all, including account purges. Pin to one instance.
 - Health: `/health/` (fast) and `/health/?full=1` (deeper). Add liveness checks for worker by touching Redis and simple task enqueue.
 - Storage: Use DO Spaces for user uploads; serve via signed URLs/X-Accel. Keep staticfiles in built image or DO CDN.
 - DB: Postgres (managed). Enable SSL, set connection limits, and add `CONN_MAX_AGE`/pgbouncer if needed.
@@ -19,7 +19,7 @@ Cost-optimized profile
 ----------------------
 - Web: 1 x Basic droplet (1 vCPU, 1–2 GB) App Platform component.
 - Worker: 1 x Basic droplet (1–2 vCPU). Concurrency 2; keep queues combined if low volume.
-- Beat: Run on worker with `-B` (if reliability acceptable) or tiny separate worker.
+- Beat: tiny separate worker. Do **not** use `-B` on the main worker to save an instance — it double-fires every scheduled task the moment the worker scales past one, which means duplicate reminder emails and repeated retention runs.
 - Postgres: Smallest managed (e.g., 1 vCPU/1GB). Use automatic backups.
 - Redis: Smallest managed (512MB). Use for Celery + cache.
 - Spaces: Standard storage; no CDN unless traffic requires.
