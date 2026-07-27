@@ -19,7 +19,6 @@ document" path — by design, that is a reversible action. It fires on
 import logging
 
 from django.db.models.signals import post_delete
-from django.dispatch import receiver
 
 logger = logging.getLogger(__name__)
 
@@ -44,15 +43,39 @@ def _delete_stored_file(instance, field_name="file"):
         )
 
 
+# Receivers are module-level on purpose. Django's signal registry holds
+# receivers by *weak* reference by default, so a handler defined inside
+# register() would be referenced by nothing else once that call returned — and
+# would stop firing whenever the garbage collector next ran. That is not
+# hypothetical: written that way, this passed locally and failed in CI, where
+# a longer run collected the closures partway through and files stopped being
+# deleted. A module-level function is kept alive by the module itself.
+def appeal_document_deleted(sender, instance, **kwargs):
+    _delete_stored_file(instance)
+
+
+def document_deleted(sender, instance, **kwargs):
+    _delete_stored_file(instance)
+
+
 def register():
-    """Connect the receivers. Called from each app's ``AppConfig.ready()``."""
+    """Connect the receivers. Called from ``CoreConfig.ready()``."""
     from appeals.models import AppealDocument
     from claims.models import Document
 
-    @receiver(post_delete, sender=AppealDocument, dispatch_uid="appealdoc_file_cleanup")
-    def _appeal_document_deleted(sender, instance, **kwargs):
-        _delete_stored_file(instance)
-
-    @receiver(post_delete, sender=Document, dispatch_uid="document_file_cleanup")
-    def _document_deleted(sender, instance, **kwargs):
-        _delete_stored_file(instance)
+    # weak=False as well as module-level functions. Either alone would do; both
+    # together mean the connection cannot be lost to garbage collection however
+    # this module is later refactored. These receivers live for the life of the
+    # process, so there is nothing to auto-disconnect.
+    post_delete.connect(
+        appeal_document_deleted,
+        sender=AppealDocument,
+        dispatch_uid="appealdoc_file_cleanup",
+        weak=False,
+    )
+    post_delete.connect(
+        document_deleted,
+        sender=Document,
+        dispatch_uid="document_file_cleanup",
+        weak=False,
+    )

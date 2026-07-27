@@ -151,3 +151,39 @@ class TestStoredFileIsRemovedOnDelete:
         document.delete()
 
         assert not AppealDocument.objects.filter(pk=document.pk).exists()
+
+    def test_the_receivers_are_held_by_strong_reference(self):
+        """
+        Django stores signal receivers by *weak* reference by default. Written
+        as closures inside ``register()``, these handlers were referenced by
+        nothing else once that call returned, so the collector could reclaim
+        them mid-process and file deletion would silently stop — no error, no
+        failed request, just files quietly accumulating.
+
+        It behaved locally and failed in CI, where a longer run collected them
+        partway through.
+
+        Asserting on the registry rather than forcing a ``gc.collect()``: when
+        collection actually happens depends on reference cycles and timing, so
+        a collect-then-delete test passes against the broken version too (it
+        does — I checked). The registry is the thing that is deterministically
+        either right or wrong.
+        """
+        import weakref
+
+        from django.db.models.signals import post_delete
+
+        uids = {"appealdoc_file_cleanup", "document_file_cleanup"}
+        found = {
+            key[0]: ref
+            for key, ref, _sender, _is_async in post_delete.receivers
+            if isinstance(key, tuple) and key[0] in uids
+        }
+
+        assert set(found) == uids, f"receivers not connected: {uids - set(found)}"
+        for uid, ref in found.items():
+            assert not isinstance(ref, weakref.ReferenceType), (
+                f"{uid} is stored as a weakref — the collector can disconnect "
+                f"it and file deletion stops silently. Connect with weak=False "
+                f"and keep the handler at module level."
+            )
