@@ -363,6 +363,7 @@ def calculate_rating_htmx(request):
                         percentage=percentage,
                         description=r.get("description", ""),
                         is_bilateral=r.get("is_bilateral", False),
+                        limb=r.get("limb", ""),
                     )
                 )
 
@@ -392,10 +393,18 @@ def calculate_rating_htmx(request):
             year=rate_year,
         )
 
+        # Human label for the limb, built here rather than in the template:
+        # "left_leg" needs an underscore→space swap, which Django's filters
+        # can't do without producing "Leftleg".
+        for row in ratings_data:
+            limb = row.get("limb") or ""
+            row["limb_label"] = limb.replace("_", " ").title() if limb else ""
+
         context = {
             "combined_raw": round(result.combined_raw, 2),
             "combined_rounded": result.combined_rounded,
             "bilateral_factor": round(result.bilateral_factor_applied, 2),
+            "bilateral_notes": result.bilateral_notes,
             "monthly_compensation": format_currency(monthly),
             "annual_compensation": format_currency(monthly * 12),
             "step_by_step": result.step_by_step,
@@ -442,6 +451,7 @@ def calculate_rating_json(request):
                         percentage=percentage,
                         description=r.get("description", ""),
                         is_bilateral=r.get("is_bilateral", False),
+                        limb=r.get("limb", ""),
                     )
                 )
 
@@ -475,6 +485,7 @@ def calculate_rating_json(request):
                 "combined_raw": round(result.combined_raw, 2),
                 "combined_rounded": result.combined_rounded,
                 "bilateral_factor": round(result.bilateral_factor_applied, 2),
+                "bilateral_notes": result.bilateral_notes,
                 "monthly_compensation": format_currency(monthly),
                 "annual_compensation": format_currency(monthly * 12),
                 "has_ratings": True,
@@ -954,6 +965,7 @@ def calculate_tdiu_htmx(request):
                     percentage=int(r.get("percentage", 0)),
                     description=r.get("description", ""),
                     is_bilateral=r.get("is_bilateral", False),
+                    limb=r.get("limb", ""),
                 )
             )
 
@@ -1119,6 +1131,7 @@ def export_rating_pdf(request):
                         percentage=percentage,
                         description=r.get("description", ""),
                         is_bilateral=r.get("is_bilateral", False),
+                        limb=r.get("limb", ""),
                     )
                 )
 
@@ -1185,6 +1198,7 @@ def export_saved_rating_pdf(request, pk):
                         percentage=percentage,
                         description=r.get("description", ""),
                         is_bilateral=r.get("is_bilateral", False),
+                        limb=r.get("limb", ""),
                     )
                 )
 
@@ -1255,6 +1269,7 @@ def share_calculation(request):
                         percentage=percentage,
                         description=r.get("description", ""),
                         is_bilateral=r.get("is_bilateral", False),
+                        limb=r.get("limb", ""),
                     )
                 )
 

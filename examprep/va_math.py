@@ -12,7 +12,18 @@ References:
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 from typing import List, Tuple, Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+# Paired extremities for the bilateral factor (38 CFR § 4.26). ``limb`` records
+# which one a disability affects, because the factor turns on there being a
+# compensable disability in *each* member of a pair — something a single
+# "is this bilateral?" checkbox cannot express.
+LIMB_CHOICES = {
+    "left_arm": ("arm", "left"),
+    "right_arm": ("arm", "right"),
+    "left_leg": ("leg", "left"),
+    "right_leg": ("leg", "right"),
+}
 
 
 @dataclass
@@ -23,6 +34,21 @@ class DisabilityRating:
     description: str = ""
     is_bilateral: bool = False
     bilateral_group: str = ""  # e.g., "upper", "lower" for grouping
+    # Which paired extremity this disability affects; one of LIMB_CHOICES, or
+    # "" when it is not an extremity (or predates this field).
+    limb: str = ""
+
+    @property
+    def pair(self) -> Optional[str]:
+        """ "arm" / "leg" — which pair this belongs to, if any."""
+        entry = LIMB_CHOICES.get(self.limb)
+        return entry[0] if entry else None
+
+    @property
+    def side(self) -> Optional[str]:
+        """ "left" / "right", if known."""
+        entry = LIMB_CHOICES.get(self.limb)
+        return entry[1] if entry else None
 
 
 @dataclass
@@ -35,6 +61,10 @@ class CalculationResult:
     step_by_step: List[dict]
     ratings_used: List[DisabilityRating]
     estimated_monthly: Optional[float] = None
+    # Why the bilateral factor was or wasn't applied. Surfaced to the user:
+    # silently declining to apply a factor they expected is its own kind of
+    # wrong answer.
+    bilateral_notes: List[str] = field(default_factory=list)
 
 
 def validate_rating(percentage: int) -> bool:
@@ -134,6 +164,11 @@ def calculate_bilateral_factor(bilateral_ratings: List[int]) -> Tuple[float, flo
     1. Combine all bilateral ratings
     2. Add 10% of that combined value as the bilateral factor
 
+    NOTE: this computes the arithmetic only. Whether a set of ratings *qualifies*
+    for the factor is decided by :func:`group_bilateral_ratings`, which is the
+    part that was missing — this function will happily add 10% to a single
+    rating if you hand it one.
+
     Returns: (combined_bilateral, bilateral_factor_bonus)
     """
     if not bilateral_ratings:
@@ -145,6 +180,92 @@ def calculate_bilateral_factor(bilateral_ratings: List[int]) -> Tuple[float, flo
     bilateral_factor = combined * 0.10
 
     return combined, bilateral_factor
+
+
+def group_bilateral_ratings(
+    ratings: List["DisabilityRating"],
+) -> Tuple[dict, List["DisabilityRating"], List[str]]:
+    """
+    Decide which ratings actually qualify for the bilateral factor.
+
+    38 CFR § 4.26 adds 10% when a partial disability results from disease or
+    injury of **both** arms, of **both** legs, or of paired skeletal muscles.
+    The operative word is both: the factor is compensation for the combined
+    functional loss of a *pair*, so it requires a compensable disability in
+    each member of that pair.
+
+    The previous implementation applied it to anything flagged ``is_bilateral``,
+    with no pairing test at all. A single 50% knee rating with the box ticked
+    combined to 55% and displayed as **60%** — a full bracket of rating, and
+    real money, that 38 CFR § 4.26 does not grant. ``bilateral_group`` existed
+    on the dataclass and was never read.
+
+    Returns ``(qualifying_groups, unqualified, notes)`` where:
+      * ``qualifying_groups`` maps "arm"/"leg" to the ratings in that pair,
+        included only when both sides are represented;
+      * ``unqualified`` are bilateral-flagged ratings that did not qualify and
+        must be combined normally;
+      * ``notes`` explain each exclusion, so the calculator can tell a veteran
+        why the factor was not applied rather than silently dropping it.
+
+    **Legacy data.** Saved calculations from before ``limb`` existed carry only
+    the boolean. Sides cannot be recovered, so those are held to the weaker test
+    that is still necessary — at least two flagged ratings — and the note says
+    the pairing is unverified. A lone flagged rating never qualifies, under
+    either rule; that is the case that was demonstrably wrong.
+
+    Not modelled: paired skeletal muscles (the regulation's third category),
+    which the calculator has no vocabulary for, and the most-favorable
+    arrangement VA applies in some multi-group edge cases. Both would need
+    input the UI does not collect; neither can inflate a rating here.
+    """
+    flagged = [r for r in ratings if r.is_bilateral]
+    if not flagged:
+        return {}, [], []
+
+    notes = []
+    groups = {}
+    unqualified = []
+
+    with_limb = [r for r in flagged if r.pair]
+    without_limb = [r for r in flagged if not r.pair]
+
+    # Modern path: group by pair, require both sides.
+    by_pair = {}
+    for rating in with_limb:
+        by_pair.setdefault(rating.pair, []).append(rating)
+
+    for pair, members in by_pair.items():
+        sides = {r.side for r in members}
+        if {"left", "right"} <= sides:
+            groups[pair] = members
+        else:
+            unqualified.extend(members)
+            only = sides.pop() if len(sides) == 1 else "one side"
+            notes.append(
+                f"Bilateral factor not applied to the {pair} group: only the "
+                f"{only} {pair} has a compensable rating. 38 CFR § 4.26 requires "
+                f"a disability in both."
+            )
+
+    # Legacy path: no limb recorded anywhere. Best available test is count.
+    if without_limb:
+        if not with_limb and len(without_limb) >= 2:
+            groups["unspecified"] = without_limb
+            notes.append(
+                "Bilateral factor applied to ratings saved before this "
+                "calculator recorded which limb each affects; the pairing could "
+                "not be verified. Re-select the limbs to confirm."
+            )
+        else:
+            unqualified.extend(without_limb)
+            notes.append(
+                "Bilateral factor not applied: mark which limb each disability "
+                "affects. The factor needs a compensable rating in both arms or "
+                "both legs (38 CFR § 4.26)."
+            )
+
+    return groups, unqualified, notes
 
 
 def round_to_nearest_10(value: float) -> int:
@@ -186,43 +307,58 @@ def calculate_combined_rating(ratings: List[DisabilityRating]) -> CalculationRes
             ratings_used=[],
         )
 
-    # Separate bilateral and non-bilateral ratings
-    bilateral_ratings = [r for r in ratings if r.is_bilateral]
-    non_bilateral_ratings = [r for r in ratings if not r.is_bilateral]
+    # Decide which flagged ratings actually qualify (38 CFR § 4.26 needs a
+    # compensable disability in BOTH members of a pair — see
+    # group_bilateral_ratings for why this is not just "is_bilateral").
+    qualifying_groups, unqualified, bilateral_notes = group_bilateral_ratings(ratings)
+
+    qualifying_ids = {id(r) for group in qualifying_groups.values() for r in group}
+    non_bilateral_ratings = [r for r in ratings if id(r) not in qualifying_ids]
 
     all_steps = []
     bilateral_factor_bonus = 0.0
+    all_percentages = []
 
-    # Process bilateral ratings if any
-    bilateral_combined = 0.0
-    if bilateral_ratings:
-        bilateral_percentages = [r.percentage for r in bilateral_ratings]
-        bilateral_combined, bilateral_steps = combine_multiple_ratings(
-            bilateral_percentages
-        )
+    # Each qualifying pair gets its own factor and is then treated as a single
+    # disability for further combination. A veteran with both arms and both legs
+    # affected has two groups; the old code could only ever express one.
+    for pair, members in sorted(qualifying_groups.items()):
+        percentages = [r.percentage for r in members]
+        combined, steps = combine_multiple_ratings(percentages)
 
-        # Add bilateral factor (10% of combined bilateral)
-        bilateral_factor_bonus = bilateral_combined * 0.10
-        bilateral_with_factor = bilateral_combined + bilateral_factor_bonus
+        factor = combined * 0.10
+        bilateral_factor_bonus += factor
+        with_factor = combined + factor
 
         all_steps.append(
             {
                 "phase": "bilateral",
-                "description": "Bilateral Conditions (paired extremities)",
-                "ratings": bilateral_percentages,
-                "combined": bilateral_combined,
-                "bilateral_factor": bilateral_factor_bonus,
-                "total_with_factor": bilateral_with_factor,
-                "steps": bilateral_steps,
+                "group": pair,
+                "description": (
+                    f"Bilateral Conditions — both {pair}s (38 CFR § 4.26)"
+                    if pair != "unspecified"
+                    else "Bilateral Conditions (paired extremities)"
+                ),
+                "ratings": percentages,
+                "combined": combined,
+                "bilateral_factor": factor,
+                "total_with_factor": with_factor,
+                "steps": steps,
             }
         )
 
-        # The bilateral total (with factor) is treated as one rating
-        all_percentages = [bilateral_with_factor] + [
-            r.percentage for r in non_bilateral_ratings
-        ]
-    else:
-        all_percentages = [r.percentage for r in non_bilateral_ratings]
+        all_percentages.append(with_factor)
+
+    all_percentages.extend(r.percentage for r in non_bilateral_ratings)
+
+    if bilateral_notes:
+        all_steps.append(
+            {
+                "phase": "bilateral_notes",
+                "description": "Bilateral factor eligibility",
+                "notes": bilateral_notes,
+            }
+        )
 
     # Combine all ratings
     if all_percentages:
@@ -251,6 +387,7 @@ def calculate_combined_rating(ratings: List[DisabilityRating]) -> CalculationRes
         bilateral_factor_applied=bilateral_factor_bonus,
         step_by_step=all_steps,
         ratings_used=ratings,
+        bilateral_notes=bilateral_notes,
     )
 
 
