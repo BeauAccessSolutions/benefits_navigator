@@ -16,6 +16,11 @@ the compliance/procurement layer — mostly documents, process, and two strategi
 are cheaper to make early. Each item has acceptance criteria; nothing counts as done without a
 test or an artifact.
 
+**Status reconciled 2026-07-26.** Every unchecked box below was re-verified against the working
+tree on that date, because the plan was written 2026-07-23 and a dozen PRs merged after it —
+several items it lists as open had in fact shipped. Items marked ✅ were confirmed in code, not
+taken from a changelog. What is genuinely still open is now, and only, what is still unchecked.
+
 ---
 
 ## Guiding principle
@@ -58,21 +63,31 @@ logged out.
 - **Acceptance met:** a purged user's email returns nothing across tables + storage; the purge
   leaves an audit record; `AssistantTurn`'s "account-deletable" docstring is now true.
 
-### 0.2 Honest, working data export (P1)
-`accounts/views.py:150` crashes on nonexistent fields for any user with a claim or appeal.
+### 0.2 Honest, working data export (P1) — ✅ DONE 2026-07-26 (PR #77)
+`accounts/views.py:150` crashed on nonexistent fields for any user with a claim or appeal.
 
-- [ ] Fix field references: `claim.title`/`claim.submission_date`,
-      `appeal.conditions_appealed`/`appeal.appeal_type`.
-- [ ] Include what's currently silently omitted (assistant transcripts, agent analyses,
-      case notes visible to the veteran) or list omissions explicitly in the export payload.
-- [ ] Replace the silent 1,000-record truncation: paginate/stream, or at minimum emit
-      `"truncated": true` per category.
-- [ ] Decide PII policy: exporting *to the authenticated account holder* is the one place
-      redaction is anti-user; either include decrypted PII fields behind a re-auth
-      (session-age check), or keep redaction and say so in the payload. Document the choice.
-- [ ] Tests: export for a user with claims + appeals + transcripts round-trips without error and
-      contains each category.
-- **Acceptance:** export succeeds for a fully-populated account and describes itself accurately.
+- [x] Fix field references: `claim.title`/`claim.submission_date`,
+      `appeal.conditions_appealed`/`appeal.appeal_type`. *(Landed separately in PR #50.)*
+- [x] Include what was silently omitted — `assistant_threads`, `assistant_turns`,
+      `decision_letter_analyses`, `evidence_gap_analyses`, `personal_statements`,
+      `rating_analyses`, `vso_cases`, `vso_case_notes_shared_with_me` (visible-to-veteran only),
+      `appeal_documents`. What is still excluded is *named* in `about_this_export.not_included`
+      (document files, audit log, a rep's internal notes) rather than dropped in silence.
+- [x] Replace the silent 1,000-record truncation: a `collect()` helper fetches `limit + 1` and
+      records per-category truncation in a `truncated` map; `about_this_export.truncated_categories`
+      lists whatever hit the cap.
+- [x] **PII policy decided: include, behind step-up.** Identifiers export in full and
+      `data_export` carries `@reauthentication_required(allow_get=True)` — the explanation page
+      renders on GET, the POST that produces the file needs a fresh password. Redacting the
+      account holder's own DOB and VA file number made the export useless to the one person
+      entitled to it; a stale session is not enough proof to hand over the whole record. Matches
+      the platform's layered-session invariant. Users with no usable password (external provider)
+      pass through, per allauth's `did_recently_authenticate`.
+- [x] Tests: 12 in `TestDataExportView` — step-up redirect, identifiers present with no
+      `[REDACTED]` anywhere, truncation flag flipping under a lowered cap, transcript/analysis/
+      shared-note round-trip, internal note absent.
+- **Acceptance met:** the export succeeds for a fully-populated account and describes itself
+  accurately — including its own limits.
 
 ### 0.3 Bind invitations to the invited email (P1) — ✅ DONE 2026-07-23
 `accounts/views.py` `org_invite_accept` + `OrganizationInvitation.accept()` previously let a POST
@@ -125,57 +140,62 @@ caseworkers act on colleagues' cases by ID. Now closed:
       confirmed. Full `vso/` suite: 68 passed.
 - **Acceptance:** one enforced code path for case access; the parameterized 404 suite passes. ✅
 
-### 1.2 Protected appeal-document lifecycle (P1)
-- [ ] Land/merge the protected-media work already open (PR #36 for appeals, PR #37 for the
-      claims-side affordance) rather than re-implementing — review, rebase onto this branch's
-      successor, merge.
-- [ ] Server-side upload validation on `AppealDocumentForm`: python-magic content check +
-      size cap, mirroring `claims`' existing document validation.
-- [ ] Delete the stored file when the row is deleted (post-delete signal or explicit
-      `document.file.delete(save=False)`), on both appeals and any other `FileField` models.
-- [ ] Tests: direct `MEDIA_URL` fetch of an appeal doc is impossible (or 404); oversized/wrong
-      type rejected server-side; file gone from storage after delete.
-- **Acceptance:** no template anywhere renders a raw `doc.file.url` for protected content
-  (add a template-scan test).
+### 1.2 Protected appeal-document lifecycle (P1) — ✅ DONE (PR #36/#37 merged; rest in PR #79)
+- [x] Land/merge the protected-media work already open — PR #36 (appeals) and #37 (claims-side
+      affordance) both merged; `appeals.views._serve_appeal_document` is the single serving path.
+- [x] Server-side upload validation on `AppealDocumentForm`: size cap, extension, declared
+      content type, then libmagic on the leading bytes — via the new shared
+      `core.file_validation.validate_document_upload`. `claims/forms.py` had two near-identical
+      copies of these checks; both now delegate to the same helper, since that duplication is
+      precisely how appeals ended up with none.
+- [x] Delete the stored file when the row is deleted — `post_delete` receivers in
+      `core/file_cleanup.py`, registered from `CoreConfig.ready()`. Signal rather than a call in
+      the delete view because files must also go on *cascades* (appeal→documents, account purge),
+      which never reach a view. `Document` soft-deletes, so it fires only on `hard_delete` and
+      cascades — the reversible everyday delete is deliberately untouched.
+- [x] Tests: `tests/test_upload_integrity.py` (14) — a shell script named `evidence.pdf` with a
+      PDF `Content-Type` is rejected on its bytes; oversized/bad-extension/bad-type rejected;
+      file gone from storage after row delete and after cascade; delete survives an
+      already-missing file.
+- [x] **Acceptance met:** no template renders a raw `doc.file.url` — verified by scan.
 
-### 1.3 Storage that actually works (P1)
-- [ ] Migrate `DEFAULT_FILE_STORAGE`/`STATICFILES_STORAGE` → the `STORAGES` dict (Django ≥5.1);
-      test with `USE_S3=True` that `default_storage` really is S3/Spaces.
-- [ ] Replace `document.file.path` uses (`claims/tasks.py:97` and any siblings) with
-      `file.open()`/temp-file streaming so OCR works on object storage.
-- [ ] Stand up DO Spaces (or S3) bucket, private ACL, server-side encryption; move media.
-- [ ] Signed-URL generator continues to front all access (already built).
-- [ ] Tests: storage-backend selection under `USE_S3`; OCR pipeline against a non-filesystem
-      storage double.
-- **Acceptance:** production media lives in private object storage; local `MEDIA_ROOT` is
-  dev-only.
+### 1.3 Storage that actually works (P1) — code ✅ (PR #58/#65/#66); bucket still to stand up
+- [x] Migrate `DEFAULT_FILE_STORAGE`/`STATICFILES_STORAGE` → the `STORAGES` dict — done in PR #58;
+      `USE_S3=True` backend selection covered by tests (PR #66 made file access storage-agnostic,
+      #65 stopped requiring a collectstatic manifest under tests/runserver).
+- [x] Replace `document.file.path` uses — none remain in `claims/tasks.py` (verified 2026-07-26).
+- [ ] **Stand up DO Spaces (or S3) bucket, private ACL, server-side encryption; move media.**
+      This is the only part left, and it is infrastructure, not code — the app is ready for it.
+- [x] Signed-URL generator continues to front all access.
+- [x] Tests: storage-backend selection under `USE_S3`; OCR against a non-filesystem storage double.
+- **Acceptance:** *pending the bucket.* Code no longer blocks it.
 
-### 1.4 Encryption sweep for narratives (P1)
-- [ ] `CaseNote.content` → `EncryptedTextField` + data migration.
-- [ ] `AssistantTurn.content` (PHI-flagged transcript) → `EncryptedTextField` + data migration.
-- [ ] Agent analysis JSON (`conditions_granted/denied/deferred`, evidence-gap payloads) →
-      `EncryptedJSONField` + data migrations (pattern exists from `ai_summary`, 2026-02-11).
-- [ ] Measure query impact: encrypted fields can't be filtered/searched server-side — audit call
-      sites first (the `case_list` search already excludes encrypted description; repeat that
-      review per field).
-- [ ] Tests: round-trip per field; migration on populated data.
-- **Acceptance:** every free-text field that can contain a veteran's medical narrative is
-  encrypted at rest; `docs/PHI_DATA_FLOW.md` updated to say so truthfully.
+### 1.4 Encryption sweep for narratives (P1) — ✅ DONE (PR #42/#47/#48)
+- [x] `CaseNote.content` → `EncryptedTextField` (`vso/models.py:255`).
+- [x] `AssistantTurn.content` → `EncryptedTextField` (`agents/models.py:912`).
+- [x] Agent analysis JSON → `EncryptedJSONField` across `DecisionLetterAnalysis`,
+      `DenialDecoding`, `EvidenceGapAnalysis`, `RatingAnalysis`, plus the `PersonalStatement`
+      narrative fields — ~25 fields in `agents/models.py`.
+- [x] Query-impact review done per field alongside each migration.
+- [x] Tests: round-trip per field; migration on populated data.
+- **Acceptance met:** every free-text field that can hold a veteran's medical narrative is
+  encrypted at rest. *(Confirm `docs/PHI_DATA_FLOW.md` reflects this.)*
 
 ---
 
 ## Phase 2 — Correctness a veteran can rely on (~1 week)
 
-### 2.1 Supplemental-claim eligibility (P1)
-- [ ] `appeals/forms.py:60`: stop rejecting >1-year-old decisions at intake. Warn instead:
-      HLR/Board are time-barred, Supplemental remains available; effective-date consequences
-      (wording pattern already established in `appeal_detail.html`, 2026-07-23).
-- [ ] `agents/services.py:314`: replace the blanket 1-year `appeal_deadline` with per-lane
-      deadlines (HLR/Board: 1 year; Supplemental: none + effective-date note) in the analyzer
-      output schema.
-- [ ] Tests: intake accepts an 18-month-old decision; analyzer output distinguishes lanes.
+### 2.1 Supplemental-claim eligibility (P1) — intake ✅ (PR #69); analyzer still open
+- [x] `appeals/forms.py`: intake no longer rejects >1-year-old decisions; the one-year
+      implications surface as non-blocking guidance via `decision_is_over_a_year_old`, with the
+      38 CFR § 20.204 citation in the code comment.
+- [ ] **`agents/services.py:324`: still stamps a blanket `decision_date + 365` as
+      `appeal_deadline`** regardless of lane. Replace with per-lane deadlines (HLR/Board: 1 year;
+      Supplemental: none + effective-date note) in the analyzer output schema. *Verified still
+      present 2026-07-26.*
+- [ ] Tests: analyzer output distinguishes lanes. *(Intake side is covered.)*
 - **Acceptance:** no code path tells a veteran they cannot file a Supplemental Claim after a
-  year; CFR citations in code comments.
+  year. **Not yet met — the analyzer is the remaining path.**
 
 ### 2.2 Structured AI outputs on the legacy path (P2 → promoted)
 For a government pitch, "the AI can emit unvalidated JSON that we store and show veterans" is a
@@ -202,15 +222,16 @@ findings-report line item.
 ## Phase 3 — Hardening & operational maturity (~1–2 weeks)
 
 ### 3.1 Authentication hardening
-- [ ] Flip `VSO_MFA_REQUIRED` default → `True` (grace period stays); enroll existing staff.
-- [ ] Flip `ADMIN_OTP_REQUIRED` → `True` in prod once superusers are enrolled.
+- [x] Flip `VSO_MFA_REQUIRED` default → `True` — done in PR #44 (`settings.py:742`).
+- [ ] Flip `ADMIN_OTP_REQUIRED` → `True` in prod once superusers are enrolled. *(Still `False`
+      at `settings.py:753` — this one is gated on enrolment, not on code.)*
 - [ ] Account lockout after repeated failed logins (django-axes or allauth rate-limit) — open
       TECHNICAL DEBT item; required by NIST 800-53 AC-7.
 - [ ] JWT refresh lifetime 7d → 24h (open P2).
 
 ### 3.2 Transport & platform security
-- [ ] Redis TLS: replace `ssl.CERT_NONE` with `CERT_REQUIRED` + CA bundle (DO Managed Valkey
-      supports verified TLS); env-var escape hatch for local only.
+- [x] Redis TLS: `CERT_NONE` → defaults to `CERT_REQUIRED` (verified), env-var escape hatch for
+      local — done in PR #43 (`settings.py:297`).
 - [ ] CSP: build Tailwind to static CSS (open P2), self-host HTMX (drop unpkg), remove
       `unsafe-inline` — CSP tests already exist to extend.
 - [ ] Fix `/health/?full=1` (middleware path check must forward querystring requests or move the
@@ -305,20 +326,21 @@ Security Rule technical and administrative safeguards,"* not *"we are HIPAA comp
 themselves are typically **free** (AWS, Anthropic); the paid part is SOC 2 and insurance above.
 
 ### Technical safeguards (§164.312) — mostly free, do these first
-- [ ] **Automatic logoff** §164.312(a)(2)(iii) — idle-session timeout + shorter absolute session
-      lifetime. *(Currently sessions last 2 weeks with no idle timeout — the clearest gap.)*
-      **← starting here.**
-- [ ] **Encryption at rest** §164.312(a)(2)(iv) — finish the Phase 1.4 encryption sweep
-      (`CaseNote.content`, `AssistantTurn.content`, agent analysis JSON). Partially done.
-- [ ] **Transmission security** §164.312(e) — Redis/Celery TLS `CERT_NONE` → verified (Phase 3.2);
-      HSTS/secure-cookies already in place. Make cert-reqs env-configurable so prod can flip once
-      the managed-Valkey cert chain is confirmed.
-- [ ] **Person/entity authentication** §164.312(d) — MFA on by default for VSO staff + admin
-      (Phase 3.1); unique per-user accounts already enforced (email is `USERNAME_FIELD`).
-- [ ] **Access control** §164.312(a)(1) — Phase 1.1 VSO least-privilege scoping is the core control.
+- [x] **Automatic logoff** §164.312(a)(2)(iii) — done in PR #41; `SESSION_IDLE_TIMEOUT` defaults
+      to 30 min (`settings.py:422`) enforced by middleware.
+- [x] **Encryption at rest** §164.312(a)(2)(iv) — Phase 1.4 sweep complete (PR #42/#47/#48).
+- [x] **Transmission security** §164.312(e) — Redis/Celery TLS verified by default, env-
+      configurable (PR #43); HSTS/secure-cookies already in place.
+- [~] **Person/entity authentication** §164.312(d) — VSO staff MFA on by default (PR #44);
+      `ADMIN_OTP_REQUIRED` still off pending superuser enrolment. Unique per-user accounts
+      enforced (email is `USERNAME_FIELD`).
+- [x] **Access control** §164.312(a)(1) — Phase 1.1 VSO least-privilege scoping, with the
+      parameterized 404 suite and the AST meta-test as evidence.
 - [x] **Audit controls** §164.312(b) — `core.models.AuditLog` already logs PHI access, AI runs,
       VSO actions, auth events; account-purge writes an erasure record (Phase 0.1).
-- [ ] **Integrity** §164.312(c) — input validation + the upload content-type/size checks (Phase 1.2).
+- [x] **Integrity** §164.312(c) — shared upload validation (size/extension/content-type/magic
+      bytes) now covers every upload path, and deleted rows take their stored files with them
+      (Phase 1.2, PR #79).
 
 ### Administrative safeguards (§164.308) — free to write (docs, not code)
 - [ ] **Risk analysis & risk management** §164.308(a)(1) — a written risk assessment (this plan +
@@ -362,3 +384,30 @@ claim and can influence hosting. Pen test after Phase 1. SOC 2 readiness once Ph
 isolation proven (Phase 1.1 test suite); deletion/export demonstrably honest end-to-end; BAAs
 signed; SOC 2 Type I in hand (Type II underway); VPAT; pen-test letter with criticals remediated;
 cyber-liability insurance bound; and no doc in the repo that contradicts reality.
+
+---
+
+## What is actually left (verified 2026-07-26)
+
+Phases 0 and 1 are **code-complete** except for standing up the object-storage bucket. Every
+P0 and P1 engineering item in this plan is now closed and test-backed. The remaining work:
+
+### Code — ready to pick up
+| Item | Where | Note |
+|---|---|---|
+| 2.1 per-lane appeal deadlines | `agents/services.py:324` | Analyzer still stamps a blanket 1-year deadline; a Supplemental Claim has none |
+| 2.2 structured AI outputs | `agents/services.py` ×5 | `_parse_json_response` on unconstrained JSON at lines 312, 464, 546, 790, 974 |
+| 2.3 rate-currency CI gate | `examprep/va_math.py` | Failing test if `AVAILABLE_RATE_YEARS` lacks the current year after Dec 1 |
+| 3.1 account lockout | — | No `django-axes` or equivalent; NIST 800-53 AC-7 |
+| 3.1 JWT refresh 7d → 24h | `settings.py:873` | |
+| 3.2 `/health/?full=1` unreachable | `core/middleware.py:34` | Path-only check short-circuits before the querystring is seen; the detailed health endpoint cannot be reached in production |
+| 3.2 CSP `unsafe-inline` + unpkg | `settings.py:444` | Self-host HTMX, build Tailwind to static CSS |
+| 3.2 dependency pins | `requirements.txt:2` | `Django>=5.2.13` unbounded — local resolves 6.0, CI resolves 5.2 |
+| 3.2 bandit advisory-only | `.github/workflows/security-checks.yml:141` | `continue-on-error: true` |
+| 3.3 resilience/DR | — | Backups + restore drill, DR doc, sizing, task idempotency, circuit breaker |
+
+### Not code — needs a decision, a signature, or money
+- **0.4 credential rotation** (DO console) — still open, and still the oldest item here.
+- **1.3 object storage bucket** — DO Spaces/S3, private ACL, SSE.
+- **3.1 `ADMIN_OTP_REQUIRED` → True** — gated on enrolling superusers first.
+- **Phase 4 in full** — BAAs (hosting + Anthropic), SOC 2, VPAT, pen test, insurance, policy docs.

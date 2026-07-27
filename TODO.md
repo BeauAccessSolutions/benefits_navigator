@@ -1,16 +1,26 @@
 # VA Benefits Navigator — TODO & Audit Tracker
 
-**Last Updated:** 2026-07-23
-**Updated By:** Claude Code — logged the 2026-07-23 external (Codex) audit findings below; every finding was independently verified against the current working tree before recording. No fixes applied yet.
+**Last Updated:** 2026-07-26
+**Updated By:** Claude Code — reconciled the 2026-07-23 audit section against the working tree.
+Roughly a dozen PRs merged after that audit was written, so several findings recorded as open had
+in fact shipped; each box below was re-checked in code (file + line) rather than taken from a
+changelog. Boxes marked `[~]` are partly done, with the remaining half named explicitly.
+**All P0 and P1 findings from the 2026-07-23 audit are now closed** except the analyzer half of
+the supplemental-claim item. See `docs/GOV_CONTRACT_REMEDIATION_PLAN.md` → "What is actually left"
+for the consolidated remaining work.
 
 ---
 
 ## Audit Summary (2026-07-23 — external Codex audit, verified line-by-line)
 
-Verdict: **not production-ready for sensitive veteran data.** 1 critical + 7 high findings, all
-confirmed against current code on `fix/seed-documentation-content`. Remediation order recommended
-by the auditor: deletion/export lifecycle → VSO authorization scoping → invitation binding →
-protected media & storage → appeal-rule correction → encryption/AI/config hardening.
+Verdict at the time: **not production-ready for sensitive veteran data.** 1 critical + 7 high
+findings, all confirmed against current code on `fix/seed-documentation-content`. Remediation
+order recommended by the auditor: deletion/export lifecycle → VSO authorization scoping →
+invitation binding → protected media & storage → appeal-rule correction → encryption/AI/config
+hardening.
+
+**Status 2026-07-26:** that whole sequence is done. The critical finding and all seven highs are
+closed and test-backed; the only P1 residue is the appeal-analyzer deadline (below).
 
 ### P0 — CRITICAL
 - [x] **Account deletion is a no-op** — Fixed & merged (PR #40, `feat/account-deletion-lifecycle`).
@@ -42,38 +52,41 @@ protected media & storage → appeal-rule correction → encryption/AI/config ha
   a truthy 2FA-status method, so the model checks allauth `EmailAddress.verified` (collision-free),
   not the `User.is_verified` field. Tests: `TestInvitationEmailBinding`, `TestOrgInviteAcceptView`
   (mismatch/unverified/verified/allauth/case-insensitive).
-- [ ] **"Export my data" crashes for real users** — `accounts/views.py:150-182` reads
-  `claim.condition` / `claim.filed_date` (Claim has `title` / `submission_date` —
-  `claims/models.py:299`) and `appeal.condition` / `appeal.appeal_lane` (Appeal has
-  `conditions_appealed` / `appeal_type`). Any user with a claim or appeal gets a 500. Also
-  silently truncates at 1,000 records/category and omits/redacts data while calling itself a
-  complete export.
-- [ ] **Appeal documents: unsafe serving, deletion, and upload validation** —
-  `templates/appeals/partials/document_list.html:17` links `doc.file.url` directly (404 today;
-  auth bypass if media becomes public); `appeal_delete_document` (`appeals/views.py:487`)
-  deletes only the DB row, not the stored file; `AppealDocumentForm` (`appeals/forms.py:275`)
-  has no server-side type/size validation (client-side `accept=` only). Protected-media fix
-  exists on branch (PR #36) but is unmerged.
-- [ ] **S3 storage config is silently ignored** — `settings.py:523+` sets `DEFAULT_FILE_STORAGE`
-  and `STATICFILES_STORAGE`, both removed in Django ≥5.1 (project pins `Django>=5.2.13`); with
-  `USE_S3=True` Django still uses local `FileSystemStorage`. Must migrate to the `STORAGES` dict.
-  Additionally `claims/tasks.py:97` uses `document.file.path`, which remote storage doesn't support.
-- [ ] **Appeal eligibility wrongly blocks valid Supplemental Claims** — `appeals/forms.py:60`
-  (`clean_original_decision_date`) rejects any decision >1 year old before the user picks a lane,
-  but Supplemental Claims have no time limit (the model-level fix from 2026-02-11 covered
-  `Appeal.save()` only, not the intake form). The AI analyzer also stamps a blanket 1-year
-  `appeal_deadline` (`agents/services.py:314-323`).
-- [ ] **Sensitive narratives inconsistently encrypted** — `VeteranCase` narrative fields ARE
-  encrypted, but: `CaseNote.content` is plain `TextField` (`vso/models.py:254`), agent analyses
-  store conditions granted/denied as plain `JSONField` (`agents/models.py:88+`), and
-  `AssistantTurn.content` (PHI-flagged transcript, `agents/models.py:876+`) is plain `TextField`
-  whose deletion story depends on the nonexistent account deletion above.
+- [x] **"Export my data" crashes for real users** — crash fixed in PR #50; the rest (silent
+  1,000-record truncation, omitted categories, self-redacted identifiers) fixed 2026-07-26 in
+  PR #77. The export now declares its own truncation and omissions, carries assistant
+  transcripts / AI analyses / shared VSO notes / appeal-document metadata, and ships the account
+  holder's identifiers in full behind an allauth re-authentication step-up. 12 tests.
+- [x] **Appeal documents: unsafe serving, deletion, and upload validation** — serving fixed by
+  PR #36/#37 (no template renders a raw `doc.file.url`; `_serve_appeal_document` is the one
+  path). Upload validation and file deletion fixed 2026-07-26 in PR #79: shared
+  `core.file_validation.validate_document_upload` (size/extension/content-type/magic bytes) now
+  backs *every* upload path — `claims/forms.py`'s two duplicate copies delegate to it — and
+  `core/file_cleanup.py` `post_delete` receivers remove the stored file on row delete and on
+  cascade. 14 tests.
+- [x] **S3 storage config is silently ignored** — migrated to the `STORAGES` dict in PR #58;
+  storage-agnostic file access in PR #66; `document.file.path` no longer used in `claims/tasks.py`
+  (verified 2026-07-26). *Standing up the actual DO Spaces bucket remains open — infrastructure,
+  not code.*
+- [~] **Appeal eligibility wrongly blocks valid Supplemental Claims** — intake fixed in PR #69
+  (`clean_original_decision_date` warns instead of rejecting, 38 CFR § 20.204 cited in code).
+  **Still open:** `agents/services.py:324` stamps a blanket `decision_date + 365` as
+  `appeal_deadline` regardless of lane.
+- [x] **Sensitive narratives inconsistently encrypted** — closed by PR #42/#47/#48.
+  `CaseNote.content` and `AssistantTurn.content` are `EncryptedTextField`; the agent analysis
+  JSON payloads across `DecisionLetterAnalysis`, `DenialDecoding`, `EvidenceGapAnalysis` and
+  `RatingAnalysis` (~25 fields) are `EncryptedJSONField`. Verified in code 2026-07-26. Account
+  deletion — the dependency this finding named — landed in PR #40.
 
 ### P2 — from the same audit (some already tracked elsewhere in this file)
 - [ ] Legacy high-stakes AI analyses use `_parse_json_response` on unconstrained JSON instead of
-  the gateway's Pydantic `complete_structured` path (`agents/services.py:308`)
-- [ ] Redis/Celery TLS uses `ssl.CERT_NONE` (`settings.py:263`) — no cert verification
-- [ ] `VSO_MFA_REQUIRED` and `ADMIN_OTP_REQUIRED` both default False (`settings.py:660+`)
+  the gateway's Pydantic `complete_structured` path — 5 call sites remain in `agents/services.py`
+  (lines 312, 464, 546, 790, 974), verified 2026-07-26
+- [x] Redis/Celery TLS uses `ssl.CERT_NONE` — fixed in PR #43; defaults to `CERT_REQUIRED`
+  (verified) with an env escape hatch for local (`settings.py:297`)
+- [~] `VSO_MFA_REQUIRED` and `ADMIN_OTP_REQUIRED` both default False — `VSO_MFA_REQUIRED` is now
+  `True` by default (PR #44, `settings.py:742`); `ADMIN_OTP_REQUIRED` is still `False`
+  (`settings.py:753`), gated on enrolling superusers
 - [ ] `HealthCheckMiddleware` intercepts `/health/` by path only (`core/middleware.py:26`), so
   `/health/?full=1` never reaches the full-status view — detailed health check is unreachable
   in production
