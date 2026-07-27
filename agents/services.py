@@ -7,9 +7,11 @@ Enhanced with M21-1 reference data for accuracy.
 
 import json
 import logging
-from datetime import date, timedelta
+from datetime import date
 from decimal import Decimal
 from typing import Optional
+
+from core.va_deadlines import appeal_deadlines_iso
 
 # Import from the centralized AI gateway
 from .ai_gateway import (
@@ -315,22 +317,22 @@ Provide your analysis in the JSON format specified. Be sure to recommend the BES
         result["_tokens_used"] = tokens
         result["_cost_estimate"] = float(self.estimate_cost(tokens))
 
-        # The 1-year mark from the decision date: the Higher-Level Review / Board
-        # filing deadline, and the last day a Supplemental Claim protects the
-        # effective date. It is NOT a hard deadline for a Supplemental Claim,
-        # which can be filed at any time — the per-lane appeal_options above carry
-        # that nuance. Kept as a single date because it is the one time-sensitive
-        # milestone worth surfacing.
-        if decision_date:
-            result["appeal_deadline"] = (
-                decision_date + timedelta(days=365)
-            ).isoformat()
-        elif result.get("decision_date"):
+        # Deadlines are per-lane, not per-decision (38 CFR §§ 20.202, 20.204).
+        # `appeal_deadline` stays for the DateField that persists it and for
+        # existing consumers, but it means specifically "the Higher-Level Review
+        # and Board filing deadline"; `appeal_deadlines` carries the whole
+        # picture, including the fact that a Supplemental Claim has none.
+        effective_decision_date = decision_date
+        if effective_decision_date is None and result.get("decision_date"):
             try:
-                d = date.fromisoformat(result["decision_date"])
-                result["appeal_deadline"] = (d + timedelta(days=365)).isoformat()
+                effective_decision_date = date.fromisoformat(result["decision_date"])
             except (ValueError, TypeError):
-                pass
+                effective_decision_date = None
+
+        deadlines = appeal_deadlines_iso(effective_decision_date)
+        if deadlines:
+            result["appeal_deadlines"] = deadlines
+            result["appeal_deadline"] = deadlines["higher_level_review"]
 
         return result
 

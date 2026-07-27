@@ -110,7 +110,11 @@ class DecisionLetterAnalysis(TimeStampedModel):
     )
     action_items = EncryptedJSONField(default=list, help_text="Recommended next steps")
 
-    # Deadlines
+    # Deadlines. This single date is the Higher-Level Review / Board filing
+    # deadline (38 CFR § 20.202) — NOT a deadline for a Supplemental Claim,
+    # which has none (38 CFR § 20.204). Read it through `appeal_deadlines`
+    # below rather than rendering it on its own; presented alone it tells a
+    # veteran their options have closed when the recommended one has not.
     appeal_deadline = models.DateField(null=True, blank=True)
 
     class Meta:
@@ -123,6 +127,19 @@ class DecisionLetterAnalysis(TimeStampedModel):
 
     def __str__(self):
         return f"Decision Analysis - {self.user.email} - {self.created_at.date()}"
+
+    @property
+    def appeal_deadlines(self):
+        """
+        Per-lane deadlines derived from the stored date.
+
+        Derived rather than stored so analyses saved before this distinction
+        existed answer correctly too — the lanes are a function of the date
+        already in the column. ``None`` when no deadline was captured.
+        """
+        from core.va_deadlines import lanes_from_filing_deadline
+
+        return lanes_from_filing_deadline(self.appeal_deadline)
 
 
 class DenialDecoding(TimeStampedModel):
