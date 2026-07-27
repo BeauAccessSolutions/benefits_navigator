@@ -79,12 +79,64 @@ if data:
 # Web service
 doctl apps logs 2119eba2-07b6-405f-a962-d40dd6956137 web
 
-# Worker (Celery)
+# Worker (Celery — executes tasks)
 doctl apps logs 2119eba2-07b6-405f-a962-d40dd6956137 worker
+
+# Beat (Celery — schedules them)
+doctl apps logs 2119eba2-07b6-405f-a962-d40dd6956137 beat
 
 # Follow logs
 doctl apps logs 2119eba2-07b6-405f-a962-d40dd6956137 worker --follow
 ```
+
+## Celery Beat — required component
+
+Beat is what runs everything in `CELERY_BEAT_SCHEDULE`: account purges, pilot
+data retention, reminder emails, health metrics. **The worker does not start
+it.** The deployment ran without a Beat component for months, during which
+every scheduled task was silently inert — including the purge that makes the
+30-day account-deletion promise true.
+
+`app-spec.yaml.template` now defines a `beat` component. That template is not
+the live spec: the authoritative one lives in the DigitalOcean console
+(`.do/app.yaml` is gitignored), so **merging the repo change does not by itself
+start Beat.** Apply it:
+
+```bash
+doctl apps spec get 2119eba2-07b6-405f-a962-d40dd6956137 > /tmp/live-spec.yaml
+# add the `beat` worker block from app-spec.yaml.template, keeping the live
+# env values, then:
+doctl apps update 2119eba2-07b6-405f-a962-d40dd6956137 --spec /tmp/live-spec.yaml
+```
+
+Verify it took, in this order:
+
+```bash
+doctl apps logs 2119eba2-07b6-405f-a962-d40dd6956137 beat --follow   # expect "beat: Starting..."
+curl -H "X-Health-Token: $HEALTH_CHECK_TOKEN" \
+  https://<app-host>/health/?full=1 | jq .checks.scheduler
+```
+
+`checks.scheduler` reports `unhealthy` until Beat has dispatched something, and
+`healthy` with an `age_minutes` under 30 once it is running.
+
+> ⚠️ **First run purges a backlog.** `process_scheduled_account_deletions` runs
+> daily at 04:00 UTC and permanently deletes every account whose 30-day grace
+> period has elapsed. Because it has never run, that includes *every* deletion
+> requested more than 30 days ago. This is the promised behaviour and it is
+> irreversible. Before enabling Beat, check the size of the backlog:
+>
+> ```bash
+> python manage.py shell -c "
+> from django.contrib.auth import get_user_model; from django.utils import timezone
+> from datetime import timedelta
+> U = get_user_model()
+> print(U.objects.filter(deletion_requested_at__isnull=False,
+>     deletion_requested_at__lte=timezone.now()-timedelta(days=U.DELETION_GRACE_DAYS)).count())
+> "
+> ```
+>
+> Take a database backup first.
 
 ### Force redeploy
 ```bash

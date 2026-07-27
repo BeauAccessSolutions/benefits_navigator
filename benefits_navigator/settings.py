@@ -313,12 +313,31 @@ if CELERY_BROKER_URL.startswith("rediss://"):
     )
 
 # Celery Beat Schedule for periodic tasks
-# DEPLOYMENT NOTE: Beat scheduler runs on the "worker" process in DigitalOcean App Platform
-# (the single Procfile worker dyno). Only ONE instance must run Beat at a time —
-# if you scale the worker to multiple instances, pin Beat to exactly one using
-# CELERY_BEAT_MAX_LOOP_INTERVAL or a dedicated beat dyno. Duplicate Beat instances
-# will double-fire all periodic tasks (duplicate emails, double data retention runs).
+#
+# DEPLOYMENT NOTE: Beat runs as its own App Platform component ("beat" in
+# app-spec.yaml.template), NOT on the worker.
+#
+# This comment previously claimed Beat ran "on the worker process ... the single
+# Procfile worker dyno". There is no Procfile, and the worker's run_command has
+# no -B. Beat was never started, so every task below was dead code in
+# production — including process-scheduled-account-deletions, which is the task
+# that makes the app's 30-day deletion promise true. The docs asserted it was
+# handled, which is exactly why nobody checked for months. Keep this note
+# accurate; it is load-bearing.
+#
+# Exactly one Beat instance may run. The beat component is pinned to
+# instance_count: 1 for that reason — two schedulers double-fire everything
+# (duplicate reminder emails, double retention runs, two purge passes).
 from celery.schedules import crontab
+
+# Store the schedule in Postgres rather than a local shelve file. Two reasons,
+# both learned here: App Platform disks are ephemeral, so a file-based schedule
+# loses its last-run state on every deploy; and the database scheduler records
+# PeriodicTask.last_run_at, which is what lets core.health.check_scheduler
+# notice that Beat has stopped. A silent scheduler is how this failure lasted.
+CELERY_BEAT_SCHEDULER = env(
+    "CELERY_BEAT_SCHEDULER", default="django_celery_beat.schedulers:DatabaseScheduler"
+)
 
 CELERY_BEAT_SCHEDULE = {
     # Health monitoring
