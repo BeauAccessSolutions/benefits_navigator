@@ -14,14 +14,56 @@ from api.graphql import JWTAuthGraphQLView
 from core import views
 
 
+def _full_health_permitted(request):
+    """
+    Who may read the detailed status.
+
+    The full check reports database, Redis, Celery worker and queue state —
+    a map of the infrastructure and a live signal of when it is weak. It was
+    unreachable until now (HealthCheckMiddleware answered every /health/
+    request), so making it reachable must not also make it public.
+
+    Staff sessions pass. Machine monitoring passes with a shared secret in the
+    ``X-Health-Token`` header — a header rather than a query parameter so the
+    token stays out of access logs, proxy logs and browser history.
+    """
+    import secrets
+
+    user = getattr(request, "user", None)
+    if user is not None and user.is_authenticated and user.is_staff:
+        return True
+
+    expected = getattr(settings, "HEALTH_CHECK_TOKEN", "")
+    if not expected:
+        return False
+
+    return secrets.compare_digest(request.headers.get("X-Health-Token", ""), expected)
+
+
 def health_check(request):
-    """Health check endpoint for load balancers and monitoring."""
-    # Simple liveness check - just confirm app is running
-    # Use ?full=1 for detailed status
+    """
+    Health check endpoint for load balancers and monitoring.
+
+    Plain ``/health/`` is a liveness check and is normally answered earlier, by
+    HealthCheckMiddleware, so it works from DigitalOcean's internal IPs without
+    tripping ALLOWED_HOSTS. ``/health/?full=1`` reaches this view and returns
+    the detailed status to staff or to a caller holding HEALTH_CHECK_TOKEN.
+    """
     if request.GET.get("full") != "1":
         return JsonResponse({"status": "ok"}, status=200)
 
-    # Full health check (for monitoring dashboards)
+    if not _full_health_permitted(request):
+        return JsonResponse(
+            {
+                "status": "forbidden",
+                "message": (
+                    "Detailed health status requires a staff session or the "
+                    "X-Health-Token header."
+                ),
+            },
+            status=403,
+        )
+
     from core.health import get_full_health_status
 
     health = get_full_health_status()

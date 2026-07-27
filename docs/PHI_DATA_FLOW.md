@@ -147,11 +147,17 @@ these fields reappear.
 | VSO case data | VSO org members only | `@vso_required` + org-scoped querysets |
 | Admin interface | Django staff only | `is_staff=True` |
 | Health endpoint | Public (no auth) | `/health/` — no sensitive data returned |
-| Full health status | No auth required | `/health/?full=1` — only operational metrics |
+| Full health status | Staff session or `X-Health-Token` | `/health/?full=1` — only operational metrics |
 
-> **Note:** `/health/?full=1` is public. It returns celery worker counts, queue depths,
-> and processing success rates. No user data or PHI is exposed. Consider adding IP
-> allowlist if this becomes a concern.
+> **Note:** `/health/?full=1` returns celery worker counts, queue depths, and processing
+> success rates. No user data or PHI is exposed, but it does describe the infrastructure
+> and signals when it is weak, so it requires a staff session or the `HEALTH_CHECK_TOKEN`
+> shared secret in the `X-Health-Token` header. The plain `/health/` liveness check stays
+> public and unauthenticated for the load balancer.
+>
+> Until 2026-07-26 this row read "no auth required", which was true in intent and moot in
+> practice: `HealthCheckMiddleware` matched on path alone and answered every `/health/`
+> request itself, so the detailed view was unreachable rather than public.
 
 ---
 
