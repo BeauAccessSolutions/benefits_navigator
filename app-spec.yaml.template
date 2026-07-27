@@ -42,13 +42,22 @@ envs:
   - key: PILOT_DATA_RETENTION_DAYS
     value: "30"
 
+# deploy_on_push is FALSE on every component, deliberately.
+#
+# It used to be true, and nothing consulted CI: commit a6d8f98 shipped to
+# production with `Tests: failure`. There was no gate to bypass, because there
+# was no gate. Deploys now go through .github/workflows/deploy.yml, which
+# refuses unless every check on the merge commit is green.
+#
+# Turning this back on re-opens that hole. If you need a manual deploy, run the
+# Deploy workflow by hand (workflow_dispatch) — it still enforces the checks.
 services:
   # Django Web Application
   - name: web
     github:
       repo: Beaudoin0zach/benefits_navigator
       branch: main
-      deploy_on_push: true
+      deploy_on_push: false
     dockerfile_path: Dockerfile.prod
     instance_count: 1
     instance_size_slug: basic-xxs
@@ -81,7 +90,7 @@ workers:
     github:
       repo: Beaudoin0zach/benefits_navigator
       branch: main
-      deploy_on_push: true
+      deploy_on_push: false
     dockerfile_path: Dockerfile.prod
     instance_count: 1
     instance_size_slug: basic-xxs
@@ -123,7 +132,7 @@ workers:
     github:
       repo: Beaudoin0zach/benefits_navigator
       branch: main
-      deploy_on_push: true
+      deploy_on_push: false
     dockerfile_path: Dockerfile.prod
     instance_count: 1
     instance_size_slug: basic-xxs
@@ -158,7 +167,7 @@ jobs:
     github:
       repo: Beaudoin0zach/benefits_navigator
       branch: main
-      deploy_on_push: true
+      deploy_on_push: false
     dockerfile_path: Dockerfile.prod
     kind: PRE_DEPLOY
     instance_count: 1

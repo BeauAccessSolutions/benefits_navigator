@@ -1,0 +1,122 @@
+# Gated production deploy.
+#
+# The problem this exists for: every component in the App Platform spec carries
+# `deploy_on_push: true`, and nothing consults CI. Commit a6d8f98 shipped to
+# production with `Tests: failure` — a known-red build, deployed automatically,
+# with no signal that anything was wrong. There was no gate to bypass because
+# there was no gate.
+#
+# So: DigitalOcean stops deploying on push, and this workflow becomes the only
+# path to production. It waits for every check on the merge commit to conclude,
+# refuses to deploy unless all of them succeeded, and only then asks DO for a
+# deployment.
+#
+# It checks the *merge commit*, not the PR head. Branch protection verifies the
+# PR branch, but squash-merge creates a new commit that nothing has tested, and
+# `strict: false` means the branch need not have been up to date. The commit
+# that ships is the commit that must be green.
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  # Never let two deploys race; a superseded one is cancelled.
+  group: production-deploy
+  cancel-in-progress: false
+
+permissions:
+  checks: read
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to production
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Report whether the gate is armed
+        run: |
+          if [ "${{ vars.DEPLOY_VIA_CI }}" = "true" ]; then
+            echo "::notice::CI deploy gate is ARMED — this workflow controls production deploys."
+          else
+            echo "::warning::CI deploy gate is NOT armed. DigitalOcean is still \
+          deploying on push without consulting CI, which is how a red build \
+          reached production before. See DEPLOYMENT.md → 'Gated deploys' for \
+          the three-step rollout."
+          fi
+
+      - name: Wait for all checks on this commit, and require them green
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
+          SELF: ${{ github.job }}
+        run: |
+          set -euo pipefail
+
+          # Poll until every check run on this commit has concluded. Deadline is
+          # generous: the test suite plus benchmarks run around 5 minutes, and a
+          # queued runner can add more. Timing out is a refusal, not a pass.
+          deadline=$(( SECONDS + 1800 ))
+
+          while :; do
+            runs=$(gh api "repos/$REPO/commits/$SHA/check-runs" --paginate \
+              --jq '.check_runs[] | select(.name != "Deploy to production")
+                    | "\(.name)\t\(.status)\t\(.conclusion // "")"')
+
+            if [ -z "$runs" ]; then
+              echo "No check runs reported yet; waiting."
+            else
+              pending=$(printf '%s\n' "$runs" | awk -F'\t' '$2 != "completed"' || true)
+              if [ -z "$pending" ]; then
+                break
+              fi
+              echo "Still running:"
+              printf '%s\n' "$pending" | awk -F'\t' '{print "  - " $1 " (" $2 ")"}'
+            fi
+
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::error::Checks did not finish within the deadline. Refusing to deploy."
+              exit 1
+            fi
+            sleep 20
+          done
+
+          echo "All checks concluded:"
+          printf '%s\n' "$runs" | awk -F'\t' '{print "  - " $1 ": " $3}'
+
+          # neutral/skipped are legitimate non-failures; anything else is not.
+          bad=$(printf '%s\n' "$runs" \
+            | awk -F'\t' '$3 != "success" && $3 != "neutral" && $3 != "skipped"' || true)
+
+          if [ -n "$bad" ]; then
+            echo "::error::Refusing to deploy — these checks did not pass:"
+            printf '%s\n' "$bad" | awk -F'\t' '{print "  - " $1 ": " $3}'
+            exit 1
+          fi
+
+          echo "::notice::All checks green for $SHA."
+
+      - name: Install doctl
+        if: vars.DEPLOY_VIA_CI == 'true'
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Trigger the DigitalOcean deployment
+        if: vars.DEPLOY_VIA_CI == 'true'
+        env:
+          APP_ID: ${{ secrets.DO_APP_ID }}
+        run: |
+          set -euo pipefail
+          if [ -z "${APP_ID:-}" ]; then
+            echo "::error::DO_APP_ID secret is not set; cannot deploy."
+            exit 1
+          fi
+          # --wait so a failed rollout fails this job rather than reporting a
+          # green deploy that quietly rolled back to the previous container.
+          doctl apps create-deployment "$APP_ID" --wait
