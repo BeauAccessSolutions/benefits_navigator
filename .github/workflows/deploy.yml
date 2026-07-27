@@ -110,11 +110,11 @@ jobs:
       - name: Trigger the DigitalOcean deployment
         if: vars.DEPLOY_VIA_CI == 'true'
         env:
-          APP_ID: ${{ secrets.DO_APP_ID }}
+          APP_ID: ${{ vars.DO_APP_ID }}
         run: |
           set -euo pipefail
           if [ -z "${APP_ID:-}" ]; then
-            echo "::error::DO_APP_ID secret is not set; cannot deploy."
+            echo "::error::DO_APP_ID variable is not set; cannot deploy."
             exit 1
           fi
           # --wait so a failed rollout fails this job rather than reporting a
