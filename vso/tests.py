@@ -746,22 +746,25 @@ class TestAcceptInvitationAtomicity(TestCase):
             username="atomic_veteran@example.com", password="TestPass123!"
         )
 
-    def _seed_pending_case_session(self):
-        session = self.client.session
-        session[f"pending_case_{self.invitation.token}"] = {
+    def _seed_pending_case_payload(self):
+        # The payload lives on the invitation itself — NOT in a session. The
+        # old version of this helper seeded the accepting veteran's session,
+        # which masked that production stored the payload in the INVITER's
+        # session where accept_invitation could never read it.
+        self.invitation.case_payload = {
             "title": "Atomic Test Case",
             "description": "",
             "priority": "normal",
             "invited_by_id": self.caseworker.id,
         }
-        session.save()
+        self.invitation.save(update_fields=["case_payload"])
 
     def test_accept_creates_membership_case_and_note_together(self):
         """Happy path: invitation, case, and note are all created."""
         from accounts.models import OrganizationMembership
         from vso.models import VeteranCase, CaseNote
 
-        self._seed_pending_case_session()
+        self._seed_pending_case_payload()
         response = self.client.post(
             reverse("vso:accept_invitation", args=[self.invitation.token])
         )
@@ -788,7 +791,7 @@ class TestAcceptInvitationAtomicity(TestCase):
         from accounts.models import OrganizationMembership
         from vso.models import VeteranCase, CaseNote
 
-        self._seed_pending_case_session()
+        self._seed_pending_case_payload()
 
         with mock.patch(
             "vso.views.CaseNote.objects.create",
@@ -1416,3 +1419,275 @@ def test_no_unscoped_case_by_pk_lookups_in_views():
         "Unscoped case-by-pk lookups found in vso/views.py "
         f"(route them through get_scoped_case_or_404): {offenders}"
     )
+
+
+# =============================================================================
+# POSITIVE-PATH RENDER TESTS (2026-08-02 experience audit, P0-5/P0-6)
+# =============================================================================
+# The endpoints below all 500'd in production while the negative-path suite
+# (404/302 assertions above) stayed green. These tests exercise the HAPPY path
+# for each one: a properly scoped staffer with real data must get a 200/302,
+# not a crash.
+
+
+class VSOPositivePathBase(TestCase):
+    """Shared fixture: an org, a caseworker, a veteran, and a populated case."""
+
+    def setUp(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from claims.models import Document
+        from vso.models import VeteranCase, CaseNote, SharedDocument, CaseCondition
+
+        self.org = Organization.objects.create(
+            name="Happy Path VSO",
+            slug="happy-path-vso",
+            org_type="vso",
+        )
+        self.worker = User.objects.create_user(
+            email="happy_worker@example.com", password="TestPass123!"
+        )
+        OrganizationMembership.objects.create(
+            user=self.worker,
+            organization=self.org,
+            role="caseworker",
+            is_active=True,
+        )
+        self.veteran = User.objects.create_user(
+            email="happy_vet@example.com", password="TestPass123!"
+        )
+        self.case = VeteranCase.objects.create(
+            organization=self.org,
+            veteran=self.veteran,
+            assigned_to=self.worker,
+            title="Happy Path Case",
+            status="active",
+        )
+        self.note = CaseNote.objects.create(
+            case=self.case,
+            author=self.worker,
+            note_type="general",
+            subject="First contact",
+            content="Spoke with veteran about the claim.",
+        )
+        self.document = Document.objects.create(
+            user=self.veteran,
+            file=SimpleUploadedFile(
+                "dd214.pdf", b"%PDF-1.4 test", content_type="application/pdf"
+            ),
+            file_name="dd214.pdf",
+            file_size=13,
+            mime_type="application/pdf",
+            document_type="dd214",
+            status="completed",
+        )
+        self.shared_doc = SharedDocument.objects.create(
+            case=self.case,
+            document=self.document,
+            shared_by=self.veteran,
+        )
+        self.condition = CaseCondition.objects.create(
+            case=self.case,
+            condition_name="PTSD",
+            diagnostic_code="9411",
+            has_diagnosis=True,
+        )
+        self.client.login(
+            email="happy_worker@example.com", password="TestPass123!"
+        )
+
+
+class TestVSOEndpointHappyPaths(VSOPositivePathBase):
+    def test_evidence_packet_builder_renders(self):
+        """Regression: crashed on SharedDocument.REVIEW_STATUS_CHOICES and
+        nonexistent document.title/.uploaded_at/sd.vso_notes/sd.review_status."""
+        response = self.client.get(
+            reverse("vso:evidence_packet", args=[self.case.pk])
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "dd214.pdf")
+        self.assertContains(response, "PTSD")
+
+    def test_case_notes_partial_renders(self):
+        """Regression: vso/partials/case_notes.html did not exist."""
+        response = self.client.get(
+            reverse("vso:case_notes_partial", args=[self.case.pk])
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "First contact")
+
+    def test_case_documents_partial_renders(self):
+        """Regression: vso/partials/case_documents.html did not exist."""
+        response = self.client.get(
+            reverse("vso:case_documents_partial", args=[self.case.pk])
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "dd214.pdf")
+
+    def test_case_detail_still_renders_with_partials(self):
+        """case_detail now includes the partials — must still render whole."""
+        response = self.client.get(
+            reverse("vso:case_detail", args=[self.case.pk])
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "First contact")
+        self.assertContains(response, "dd214.pdf")
+
+    def test_start_appeal_from_denied_case(self):
+        """Regression: called .all()/.exists() on the case.conditions JSON
+        field; the tracked-condition relation is case.case_conditions."""
+        from appeals.models import Appeal
+
+        self.case.status = "closed_denied"
+        self.case.save(update_fields=["status"])
+
+        response = self.client.post(
+            reverse("vso:start_appeal", args=[self.case.pk])
+        )
+        appeal = Appeal.objects.get(veteran_case=self.case)
+        self.assertRedirects(
+            response,
+            reverse("appeals:appeal_detail", args=[appeal.pk]),
+            fetch_redirect_response=False,
+        )
+        self.assertEqual(appeal.user, self.veteran)
+        self.assertIn("PTSD", appeal.conditions_appealed)
+        self.case.refresh_from_db()
+        self.assertEqual(self.case.status, "appeal_in_progress")
+
+    def test_invite_veteran_with_existing_open_case_warns(self):
+        """Regression: VeteranCase had no get_absolute_url, so warning about
+        an existing case crashed instead of redirecting."""
+        response = self.client.post(
+            reverse("vso:invite_veteran"),
+            {"email": self.veteran.email},
+        )
+        self.assertRedirects(
+            response, reverse("vso:invitations"), fetch_redirect_response=False
+        )
+        from accounts.models import OrganizationInvitation
+
+        self.assertFalse(
+            OrganizationInvitation.objects.filter(
+                organization=self.org, email=self.veteran.email
+            ).exists()
+        )
+
+
+class TestCaseListOrdering(VSOPositivePathBase):
+    def test_bogus_order_by_returns_200(self):
+        """Regression: raw ?order_by= reached .order_by() → FieldError 500."""
+        response = self.client.get(reverse("vso:case_list"), {"order_by": "hax"})
+        self.assertEqual(response.status_code, 200)
+
+    def test_related_field_order_by_is_rejected(self):
+        """Related-field ordering was a field-value oracle; must be ignored."""
+        response = self.client.get(
+            reverse("vso:case_list"), {"order_by": "veteran__va_file_number"}
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_allowlisted_order_by_still_works(self):
+        response = self.client.get(
+            reverse("vso:case_list"), {"order_by": "-priority"}
+        )
+        self.assertEqual(response.status_code, 200)
+
+
+class TestInvitationCasePayloadFlow(TestCase):
+    """
+    End-to-end regression for the pending-case handoff: the inviting staffer
+    and the accepting veteran use SEPARATE sessions, exactly like production.
+    The old implementation stored the case details in the staffer's session,
+    so the promised case + milestone note were never created.
+    """
+
+    def setUp(self):
+        from allauth.account.models import EmailAddress
+
+        self.org = Organization.objects.create(
+            name="Payload Flow VSO",
+            slug="payload-flow-vso",
+            org_type="vso",
+        )
+        self.worker = User.objects.create_user(
+            email="flow_worker@example.com", password="TestPass123!"
+        )
+        OrganizationMembership.objects.create(
+            user=self.worker,
+            organization=self.org,
+            role="caseworker",
+            is_active=True,
+        )
+        self.veteran = User.objects.create_user(
+            email="flow_vet@example.com", password="TestPass123!"
+        )
+        EmailAddress.objects.create(
+            user=self.veteran,
+            email=self.veteran.email,
+            verified=True,
+            primary=True,
+        )
+
+    def test_invite_then_accept_creates_case_across_sessions(self):
+        from django.test import Client
+        from accounts.models import OrganizationInvitation
+        from vso.models import VeteranCase, CaseNote
+
+        staffer_client = Client()
+        staffer_client.login(
+            email="flow_worker@example.com", password="TestPass123!"
+        )
+        response = staffer_client.post(
+            reverse("vso:invite_veteran"),
+            {
+                "email": self.veteran.email,
+                "case_title": "PTSD increase",
+                "case_description": "Rating increase 50 -> 70",
+                "priority": "high",
+            },
+        )
+        self.assertRedirects(
+            response, reverse("vso:invitations"), fetch_redirect_response=False
+        )
+
+        invitation = OrganizationInvitation.objects.get(
+            organization=self.org, email=self.veteran.email
+        )
+        # Payload must survive on the invitation itself, not in any session.
+        self.assertEqual(invitation.case_payload["title"], "PTSD increase")
+        self.assertEqual(invitation.case_payload["invited_by_id"], self.worker.id)
+
+        veteran_client = Client()
+        veteran_client.login(email="flow_vet@example.com", password="TestPass123!")
+        response = veteran_client.post(
+            reverse("vso:accept_invitation", args=[invitation.token])
+        )
+        self.assertEqual(response.status_code, 302)
+
+        case = VeteranCase.objects.get(organization=self.org, veteran=self.veteran)
+        self.assertEqual(case.title, "PTSD increase")
+        self.assertEqual(case.priority, "high")
+        self.assertEqual(case.assigned_to, self.worker)
+        self.assertTrue(
+            CaseNote.objects.filter(case=case, note_type="milestone").exists()
+        )
+        invitation.refresh_from_db()
+        self.assertIsNotNone(invitation.accepted_at)
+        # PII payload is cleared once consumed.
+        self.assertIsNone(invitation.case_payload)
+
+    def test_invite_without_case_title_stores_no_payload(self):
+        from django.test import Client
+        from accounts.models import OrganizationInvitation
+
+        staffer_client = Client()
+        staffer_client.login(
+            email="flow_worker@example.com", password="TestPass123!"
+        )
+        staffer_client.post(
+            reverse("vso:invite_veteran"), {"email": self.veteran.email}
+        )
+        invitation = OrganizationInvitation.objects.get(
+            organization=self.org, email=self.veteran.email
+        )
+        self.assertIsNone(invitation.case_payload)

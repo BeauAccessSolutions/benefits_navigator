@@ -8,7 +8,11 @@ from django.utils import timezone
 from datetime import date, timedelta
 
 from core.models import TimeStampedModel
-from core.encryption import EncryptedCharField, EncryptedDateField
+from core.encryption import (
+    EncryptedCharField,
+    EncryptedDateField,
+    EncryptedJSONField,
+)
 
 
 class UserManager(BaseUserManager):
@@ -664,6 +668,17 @@ class OrganizationInvitation(TimeStampedModel):
     # Token for accepting invitation
     token = models.CharField("Invitation token", max_length=64, unique=True)
     expires_at = models.DateTimeField("Expires at")
+
+    # Case details to create when a veteran accepts (title/description/priority/
+    # invited_by_id). Persisted on the invitation — NOT in the inviter's session,
+    # which the accepting veteran's request can never see. Description may
+    # contain case PII, so it's encrypted at rest; cleared once consumed.
+    case_payload = EncryptedJSONField(
+        "Pending case payload",
+        null=True,
+        blank=True,
+        help_text="Case details to create when the invitation is accepted",
+    )
 
     # Status
     accepted_at = models.DateTimeField("Accepted at", null=True, blank=True)

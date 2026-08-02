@@ -7,6 +7,7 @@ and collaborate on claims and appeals.
 
 from django.db import models
 from django.conf import settings
+from django.urls import reverse
 from django.utils import timezone
 from core.models import TimeStampedModel
 from core.encryption import EncryptedTextField, EncryptedJSONField
@@ -181,6 +182,9 @@ class VeteranCase(TimeStampedModel):
 
     def __str__(self):
         return f"{self.title} - {self.veteran.email}"
+
+    def get_absolute_url(self):
+        return reverse("vso:case_detail", kwargs={"pk": self.pk})
 
     @property
     def is_open(self):

@@ -43,7 +43,6 @@
                                     stroke="{% if readiness_percentage >= 80 %}#22c55e{% elif readiness_percentage >= 50 %}#3b82f6{% elif readiness_percentage >= 25 %}#eab308{% else %}#9ca3af{% endif %}"
                                     stroke-width="12" fill="none"
                                     stroke-dasharray="440"
-                                    stroke-dashoffset="{{ 440|add:readiness_percentage|add:-440|multiply:440|divisibleby:100|default:440 }}"
                                     stroke-linecap="round"
                                     style="stroke-dashoffset: calc(440 - (440 * {{ readiness_percentage }} / 100))"/>
                         </svg>
