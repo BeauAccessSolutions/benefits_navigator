@@ -25,3 +25,17 @@
 - [gh, merge]: `gh pr merge --admin` blocked by the permission classifier after branch protection blocked the normal merge → handed the merge to the user, who did it in the UI.
 
 ---
+## Session: 2026-08-02
+
+**Project:** benefits-navigator (audit session — Path A + Path B vertical-slice experience audit)
+
+### Failures
+- [Bash, pytest]: First suite run died with `ValueError: SECRET_KEY environment variable is required in staging/production!` — settings raise unless `DEBUG=True`, and the audit worktree has no `.env`. Resolved by prefixing every run with `DEBUG=True`; noted that the same guard is what makes the missing-env-var class of bug fail loudly (the model cited in the audit's P0 fix recommendation).
+- [Bash, pytest]: A throwaway verification file collected **0 tests** — the class was named `AuditVerification`, which does not match pytest's `Test*` discovery pattern, and the run silently reported success-shaped output ("3 warnings in 0.01s") rather than an error. Renamed to `TestAuditVerification`; 8/8 then ran. A zero-collected run reads almost exactly like a passing one — check the collected count, not just the absence of red.
+- [Bash, pytest]: `-m "not e2e and not slow"` deselected nothing — the files under `tests/e2e/` carry no `e2e` marker despite the marker being registered in `pytest.ini`, so 112 browser-setup errors still ran. Worked around with `--ignore=tests/e2e`; filed as a test-hygiene item in the audit report (the marker/CI-exclusion mismatch means the e2e exclusion in CI is also nominal).
+- [Bash, uvx pip-audit]: Dependency vulnerability scan exceeded a 180s timeout resolving the environment and never produced output; reported as explicitly *not covered* in the audit's verification ledger rather than silently omitted.
+- [gh]: `gh issue list` and `gh pr review --approve` were both blocked by the permission classifier mid-session. The issue list was recoverable (answered from the session's own filing records); the approve was handed to the user, who merged PR #101 in the UI. Blocked-tool output should never be reported as an absence — the null-result-guard applies to permission denials too.
+- [Bash, gh auth]: The active `gh` account was `LangworthyWatch` (a repo-scoped deploy identity) while the work targeted a `BeauAccessSolutions` repo. Caught before filing by running the three-plane diagnosis from the `gh-account-switch` skill; switched Plane A to `Beaudoin0zach`. Note the switch is machine-wide and was left in place.
+- [pre-commit, LESSONS.md]: The shared-lessons commit was rejected twice — first by the concurrent-session region check (`STAGE_OK`), then by the no-growth gate (+23 entry-lines). The region check was satisfied by verifying from the diff content that all regions were mine; the growth gate was paid down to +18 by merging one new entry into the existing entry it mirrored, then overridden with `LESSONS_GROWTH_OK=1` and flagged for `/prune-lessons` (file is 54 lines over target).
+
+---
