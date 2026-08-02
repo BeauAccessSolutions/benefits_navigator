@@ -12,3 +12,7 @@ class CoreConfig(AppConfig):
         from core import file_cleanup
 
         file_cleanup.register()
+
+        # Register the deploy-time configuration checks (`manage.py check
+        # --deploy`); importing the module is what registers them.
+        from core import checks  # noqa: F401

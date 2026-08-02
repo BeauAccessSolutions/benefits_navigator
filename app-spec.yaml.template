@@ -28,6 +28,28 @@ envs:
     value: "CHANGE_ME"
   - key: FIELD_ENCRYPTION_KEY
     value: "CHANGE_ME"
+  # Public origin — invitation/password-reset links are built from this.
+  # Leaving it unset means emails link to http://localhost:8000.
+  - key: SITE_URL
+    value: "https://vabenefitsnavigator.org"
+  # Email delivery. The settings default is the console backend, which prints
+  # mail to stdout — with mandatory email verification that means no signup
+  # can ever complete. `manage.py check --deploy` (run by the migrate job)
+  # fails the rollout if these are left unset.
+  - key: EMAIL_BACKEND
+    value: "django.core.mail.backends.smtp.EmailBackend"
+  - key: EMAIL_HOST
+    value: "CHANGE_ME"
+  - key: EMAIL_PORT
+    value: "587"
+  - key: EMAIL_USE_TLS
+    value: "True"
+  - key: EMAIL_HOST_USER
+    value: "CHANGE_ME"
+  - key: EMAIL_HOST_PASSWORD
+    value: "CHANGE_ME"
+  - key: DEFAULT_FROM_EMAIL
+    value: "noreply@vabenefitsnavigator.org"
   # Pilot mode settings (set values in DO Console)
   - key: PILOT_MODE
     value: "True"
@@ -172,7 +194,11 @@ jobs:
     kind: PRE_DEPLOY
     instance_count: 1
     instance_size_slug: basic-xxs
-    run_command: /bin/sh -c "python manage.py migrate --noinput; exit 0"
+    # The deploy check runs first and fail-closed: a DEBUG=False process with
+    # dev defaults (console email, empty ANTHROPIC_API_KEY/SENTRY_DSN,
+    # localhost SITE_URL — see core/checks.py) halts the rollout here, and the
+    # previous container keeps serving.
+    run_command: /bin/sh -c "python manage.py check --deploy --fail-level ERROR && python manage.py migrate --noinput"
     envs:
       - key: SECRET_KEY
         value: "CHANGE_ME"
@@ -188,4 +214,5 @@ jobs:
 # - REDIS_URL / CELERY_BROKER_URL (rediss://user:password@host:port)
 # - ANTHROPIC_API_KEY
 # - SENTRY_DSN
+# - EMAIL_HOST / EMAIL_HOST_USER / EMAIL_HOST_PASSWORD (SMTP credentials)
 # - ALLOWED_HOSTS (comma-separated list of domains)

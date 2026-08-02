@@ -68,6 +68,16 @@ jobs:
           npm run build
 
       - name: Django system checks (deploy)
+        # core/checks.py fails `check --deploy` when a DEBUG=False process
+        # still has dev defaults (console email, empty ANTHROPIC_API_KEY /
+        # SENTRY_DSN, localhost SITE_URL). CI is not a deployment, so this
+        # step supplies deployment-shaped stand-ins; the values are asserted
+        # against for real in the App Platform PRE_DEPLOY job, which runs the
+        # same command with the live environment.
+        env:
+          SENTRY_DSN: https://ci-fake-key@example.invalid/1
+          EMAIL_BACKEND: django.core.mail.backends.smtp.EmailBackend
+          SITE_URL: https://ci.invalid
         run: |
           python manage.py check --deploy --fail-level ERROR
 
