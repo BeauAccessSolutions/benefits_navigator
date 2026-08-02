@@ -197,8 +197,11 @@
     </div>
     {% endif %}
 
+    <!-- Share with VSO -->
+    {% include 'agents/partials/analysis_share_controls.html' %}
+
     <!-- Actions -->
-    <div class="flex gap-4">
+    <div class="flex gap-4 mt-8">
         <a href="{% url 'agents:decision_analyzer' %}"
            class="flex-1 text-center py-3 px-4 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50">
             Analyze Another Letter

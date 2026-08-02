@@ -1,0 +1,117 @@
+{% extends 'base.html' %}
+
+{% block title %}Share Analysis - {{ SITE_NAME }}{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <!-- Header -->
+    <header class="mb-6">
+        <nav class="text-sm text-gray-500 mb-2" aria-label="Breadcrumb">
+            <a href="{{ result_url }}" class="hover:underline">{{ analysis_label }}</a>
+            <span class="mx-2 text-gray-400">/</span>
+            <span>Share</span>
+        </nav>
+        <h1 class="text-2xl font-bold text-gray-900">Share {{ analysis_label }} with VSO</h1>
+        <p class="text-gray-600 mt-1">
+            Share this AI analysis from {{ analysis.created_at|date:"F j, Y" }} with your
+            Veterans Service Organization
+        </p>
+    </header>
+
+    {% if active_cases %}
+    <!-- Share Form -->
+    <div class="bg-white rounded-lg shadow">
+        <form method="post" class="p-6 space-y-6">
+            {% csrf_token %}
+
+            <!-- Case Selection -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-3">
+                    Select Case to Share With
+                </label>
+                <div class="space-y-3">
+                    {% for case in active_cases %}
+                    <label class="relative flex items-start p-4 border rounded-lg cursor-pointer hover:bg-gray-50 focus-within:ring-2 focus-within:ring-blue-500">
+                        <input type="radio" name="case_id" value="{{ case.pk }}" required aria-required="true"
+                               class="mt-0.5 h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500">
+                        <div class="ml-3">
+                            <span class="block text-sm font-medium text-gray-900">{{ case.title }}</span>
+                            <span class="block text-sm text-gray-500">{{ case.organization.name }}</span>
+                            <span class="block text-xs text-gray-400 mt-1">
+                                Caseworker: {% if case.assigned_to %}{{ case.assigned_to.get_full_name|default:case.assigned_to.email }}{% else %}Unassigned{% endif %}
+                            </span>
+                        </div>
+                        <span class="ml-auto inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                            {{ case.get_status_display }}
+                        </span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Sensitivity Notice -->
+            <div class="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                <p class="text-sm font-medium text-gray-900">This analysis contains AI-generated insights</p>
+                <p class="text-sm text-amber-700 mt-1">
+                    It may include sensitive interpretations of your medical information,
+                    conditions, and ratings. Only share it if you want your caseworker to
+                    see these insights.
+                </p>
+            </div>
+
+            <!-- Privacy Notice -->
+            <div class="bg-blue-50 border-l-4 border-blue-500 p-4">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <svg class="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                        </svg>
+                    </div>
+                    <div class="ml-3">
+                        <h3 class="text-sm font-medium text-blue-800">What happens when you share?</h3>
+                        <div class="mt-2 text-sm text-blue-700">
+                            <ul class="list-disc pl-5 space-y-1">
+                                <li>Your VSO caseworker can view a summary of this analysis on your case</li>
+                                <li>Conditions found in the analysis are added to your case's evidence tracker</li>
+                                <li>You can revoke access at any time</li>
+                                <li>The analysis remains in your account</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="flex justify-end space-x-4 pt-4 border-t border-gray-200">
+                <a href="{{ result_url }}"
+                   class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">
+                    Cancel
+                </a>
+                <button type="submit"
+                        class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    Share Analysis
+                </button>
+            </div>
+        </form>
+    </div>
+
+    {% else %}
+    <!-- No Cases Available -->
+    <div class="bg-white rounded-lg shadow p-8 text-center">
+        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
+        </svg>
+        <h3 class="mt-4 text-lg font-medium text-gray-900">No Active VSO Cases</h3>
+        <p class="mt-2 text-sm text-gray-500">
+            You don't have any active cases with a Veterans Service Organization.
+            A VSO must first create a case for you before you can share analyses.
+        </p>
+        <div class="mt-6">
+            <a href="{{ result_url }}" class="text-blue-600 hover:text-blue-800 font-medium">
+                &larr; Back to Analysis
+            </a>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

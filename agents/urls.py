@@ -56,4 +56,15 @@ urlpatterns = [
     ),
     # Condition Discovery Tool
     path("condition-discovery/", views.condition_discovery, name="condition_discovery"),
+    # Analysis Sharing with VSO (decision | rating)
+    path(
+        "analyses/<str:analysis_type>/<int:pk>/share/",
+        views.analysis_share,
+        name="analysis_share",
+    ),
+    path(
+        "analyses/<str:analysis_type>/<int:pk>/share/<int:share_pk>/revoke/",
+        views.analysis_unshare,
+        name="analysis_unshare",
+    ),
 ]
