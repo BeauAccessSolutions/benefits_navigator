@@ -25,3 +25,18 @@
 - [gh, merge]: `gh pr merge --admin` blocked by the permission classifier after branch protection blocked the normal merge → handed the merge to the user, who did it in the UI.
 
 ---
+## Session: 2026-08-02 (env-var remediation / email / deploy gate / signup styling)
+
+**Project:** benefits-navigator
+
+### Failures
+- [gh workflow vars]: Deploy run triggered by a push ~20s before `DEPLOY_VIA_CI` was set snapshotted the unset value and silently skipped its deploy steps while reporting green → proved the gate with a fresh `workflow_dispatch` run. (Lesson added to shared LESSONS.md: vars/secrets snapshot at run creation.)
+- [doctl spec verify]: grepped the updated spec for `deploy_on_push: false` and got 0 — DO renders false by omitting the key, so the check false-negatived → verified by key absence + no push-caused deployments. (do-app-platform-debug skill updated.)
+- [cloudflare dashboard]: first `_dmarc` TXT submit silently failed to save (dialog closed, record absent at the authoritative NS) → re-added via a fresh dialog with element refs; verified with dig.
+- [git merge]: merged a stale `origin/main` into the PR #54 branch (fetch was skipped when an earlier compound command was denied), dropping PR #101's changes → re-fetched and re-merged.
+- [python spec edit]: string-replace building the beat-component spec mangled a line (`- dockerfile_path- dockerfile_path:`) → caught in diff review before apply; rewrote the insertion and validated with yaml.safe_load.
+- [grep escaping]: `grep "min-h-\\\\[48px\\\\]"` false-negatived on the built CSS, nearly triggering an unnecessary rebuild-and-commit → settled with `grep -F`.
+- [local preview]: signup page 500'd (`no such table: django_site`) — fresh worktree sqlite had no migrations → `manage.py migrate`.
+- [observability, unresolved]: verification email delivered to the inbox but appears in NEITHER Resend account's Emails log — the DO `EMAIL_HOST_PASSWORD` may belong to the first (kindredaccess) Resend account; delivery works, logs don't. Follow up.
+
+---
