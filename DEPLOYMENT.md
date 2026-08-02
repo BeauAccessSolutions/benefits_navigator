@@ -79,17 +79,146 @@ if data:
 # Web service
 doctl apps logs 2119eba2-07b6-405f-a962-d40dd6956137 web
 
-# Worker (Celery)
+# Worker (Celery — executes tasks)
 doctl apps logs 2119eba2-07b6-405f-a962-d40dd6956137 worker
+
+# Beat (Celery — schedules them)
+doctl apps logs 2119eba2-07b6-405f-a962-d40dd6956137 beat
 
 # Follow logs
 doctl apps logs 2119eba2-07b6-405f-a962-d40dd6956137 worker --follow
 ```
 
+## Celery Beat — required component
+
+Beat is what runs everything in `CELERY_BEAT_SCHEDULE`: account purges, pilot
+data retention, reminder emails, health metrics. **The worker does not start
+it.** The deployment ran without a Beat component for months, during which
+every scheduled task was silently inert — including the purge that makes the
+30-day account-deletion promise true.
+
+`app-spec.yaml.template` now defines a `beat` component. That template is not
+the live spec: the authoritative one lives in the DigitalOcean console
+(`.do/app.yaml` is gitignored), so **merging the repo change does not by itself
+start Beat.** Apply it:
+
+```bash
+doctl apps spec get 2119eba2-07b6-405f-a962-d40dd6956137 > /tmp/live-spec.yaml
+# add the `beat` worker block from app-spec.yaml.template, keeping the live
+# env values, then:
+doctl apps update 2119eba2-07b6-405f-a962-d40dd6956137 --spec /tmp/live-spec.yaml
+```
+
+Verify it took, in this order:
+
+```bash
+doctl apps logs 2119eba2-07b6-405f-a962-d40dd6956137 beat --follow   # expect "beat: Starting..."
+curl -H "X-Health-Token: $HEALTH_CHECK_TOKEN" \
+  https://<app-host>/health/?full=1 | jq .checks.scheduler
+```
+
+`checks.scheduler` reports `unhealthy` until Beat has dispatched something, and
+`healthy` with an `age_minutes` under 30 once it is running.
+
+> ⚠️ **First run purges a backlog.** `process_scheduled_account_deletions` runs
+> daily at 04:00 UTC and permanently deletes every account whose 30-day grace
+> period has elapsed. Because it has never run, that includes *every* deletion
+> requested more than 30 days ago. This is the promised behaviour and it is
+> irreversible. Before enabling Beat, check the size of the backlog:
+>
+> ```bash
+> python manage.py shell -c "
+> from django.contrib.auth import get_user_model; from django.utils import timezone
+> from datetime import timedelta
+> U = get_user_model()
+> print(U.objects.filter(deletion_requested_at__isnull=False,
+>     deletion_requested_at__lte=timezone.now()-timedelta(days=U.DELETION_GRACE_DAYS)).count())
+> "
+> ```
+>
+> Take a database backup first.
+
 ### Force redeploy
 ```bash
 doctl apps create-deployment 2119eba2-07b6-405f-a962-d40dd6956137 --force-rebuild
 ```
+
+## Gated deploys
+
+Production used to deploy straight from `main`: every component carried
+`deploy_on_push: true` and nothing consulted CI. Commit `a6d8f98` shipped with
+`Tests: failure`. Nobody bypassed a gate — there wasn't one.
+
+Deploys now go through `.github/workflows/deploy.yml`, which waits for every
+check on the merge commit and refuses unless all of them passed. It checks the
+*merge commit* rather than trusting branch protection: protection verifies the
+PR branch, but squash-merge makes a new commit nothing has run.
+
+### Rollout — four steps, in this order
+
+The order matters in both directions: the workflow must be on `main` before it
+can be run by hand, and turning off `deploy_on_push` before the CI path works
+would freeze deploys entirely.
+
+**1. Merge the repo change first.** GitHub only offers `workflow_dispatch` for
+workflows on the **default branch**, so the Deploy workflow cannot be tested
+from a PR branch. Merging is safe: the live spec still has
+`deploy_on_push: true`, and the workflow stops short of deploying while
+`DEPLOY_VIA_CI` is unset. Every push logs a warning that the gate is not armed.
+
+**2. Add the credentials.** Settings → Secrets and variables → Actions:
+
+| Kind | Name | Value |
+|---|---|---|
+| Secret | `DIGITALOCEAN_ACCESS_TOKEN` | a DO API token with read + write on Apps |
+| Variable | `DO_APP_ID` | `2119eba2-07b6-405f-a962-d40dd6956137` |
+| Variable | `DEPLOY_VIA_CI` | `true` — set this **last** |
+
+Or from the CLI (the first prompts, so the token stays out of your shell
+history):
+
+```bash
+gh secret set DIGITALOCEAN_ACCESS_TOKEN
+gh variable set DO_APP_ID --body 2119eba2-07b6-405f-a962-d40dd6956137
+gh variable set DEPLOY_VIA_CI --body true
+```
+
+Only the token is secret. The app ID is not — it appears in plain text
+throughout this file — and calling it a secret would just make it harder to see
+in logs when a deploy misbehaves.
+
+**3. Prove the CI path works.** Actions → Deploy → Run workflow. Confirm it
+reaches DigitalOcean and the app redeploys. Both paths are briefly live: DO
+deploys on push *and* CI deploys after checks. Two deploys is noisy but safe;
+a window with neither is not.
+
+**4. Turn off auto-deploy in DigitalOcean.** Only after step 3 works:
+
+```bash
+doctl apps spec get 2119eba2-07b6-405f-a962-d40dd6956137 > /tmp/live-spec.yaml
+# set deploy_on_push: false on every component, then:
+doctl apps update 2119eba2-07b6-405f-a962-d40dd6956137 --spec /tmp/live-spec.yaml
+```
+
+After this, the Deploy workflow is the only route to production.
+
+### Verifying the gate
+
+The wait-and-refuse logic was dry-run against two real commits before shipping:
+
+| Commit | Checks | Gate |
+|---|---|---|
+| current `main` | all green | **deploy** |
+| `a6d8f98` | `Run Tests: failure` | **refuse** |
+
+`a6d8f98` is the commit that actually reached production broken.
+
+### If you need to deploy urgently
+
+Run the Deploy workflow by hand — it still enforces the checks. If checks are
+genuinely broken and you must ship anyway, deploy from the DigitalOcean console
+directly and say so in the incident log. Do not re-enable `deploy_on_push`:
+that removes the gate for every future commit, not just the urgent one.
 
 ### Connect to staging database
 ```bash
@@ -235,7 +364,21 @@ Download endpoint: `/claims/document/<pk>/download/`
 | Endpoint | Purpose | Response |
 |----------|---------|----------|
 | `/health/` | Liveness check (load balancer) | `{"status": "ok"}` |
-| `/health/?full=1` | Full system health | Detailed JSON |
+| `/health/?full=1` | Full system health (staff or token) | Detailed JSON, or `403` |
+
+### Reading the full health check
+
+It requires either a staff session or the `HEALTH_CHECK_TOKEN` shared secret, passed in
+the `X-Health-Token` header — a header rather than a query parameter so the token stays
+out of access logs, proxy logs and browser history. Set `HEALTH_CHECK_TOKEN` in the DO
+console for unattended monitoring; leave it unset and only staff can read it.
+
+```bash
+curl -H "X-Health-Token: $HEALTH_CHECK_TOKEN" https://your-app.ondigitalocean.app/health/?full=1
+```
+
+Unlike the plain liveness check, this request goes through normal host validation, so
+call it on a hostname in `ALLOWED_HOSTS` rather than an internal IP.
 
 ### Full Health Check Components
 

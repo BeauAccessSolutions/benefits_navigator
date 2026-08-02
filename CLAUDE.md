@@ -225,8 +225,15 @@ pytest -n auto            # Parallel execution
 
 ## Services (`.do/app.yaml`)
 1. **Web:** Gunicorn Django (basic-xxs, port 8000)
-2. **Worker:** Celery (basic-xxs, concurrency=2)
-3. **Pre-deploy job:** `python manage.py migrate --noinput`
+2. **Worker:** Celery worker (basic-xxs, concurrency=2) — executes tasks
+3. **Beat:** Celery beat (basic-xxs, **instance_count must stay 1**) — schedules them
+4. **Pre-deploy job:** `python manage.py migrate --noinput`
+
+> **The Beat component is required and was missing for months.** Nothing in
+> `CELERY_BEAT_SCHEDULE` runs without it — including `process_scheduled_account_deletions`,
+> which is what makes the 30-day deletion promise true. The worker does *not* start Beat.
+> Guarded by `tests/test_beat_deployment.py` (spec) and `core.health.check_scheduler`
+> (runtime, visible at `/health/?full=1`).
 
 ## Required Environment Variables
 ```
@@ -242,7 +249,9 @@ ALLOWED_HOSTS
 
 ## Health Check
 - `/health/` — Liveness check
-- `/health/?full=1` — Full status (database, cache, etc.)
+- `/health/?full=1` — Full status (database, cache, Celery). Requires a staff session or
+  the `HEALTH_CHECK_TOKEN` secret in an `X-Health-Token` header; goes through normal
+  `ALLOWED_HOSTS` validation, unlike the liveness check.
 
 ---
 
@@ -423,13 +432,27 @@ def my_task(self, resource_id):
 
 ## Compensation Rates (Annual Update Required)
 
-VA compensation rates change annually with COLA, effective December 1.
+VA compensation rates change annually with COLA, effective December 1. A rate
+year is named for the year it runs *through* but starts the December 1 before:
+the 2026 rates took effect 2025-12-01.
 
-**Update Checklist (run each December):**
+**This is enforced, not remembered.** Relying on the checklist below failed once
+already — the rating calculator served 2024 rates labelled "(Current)" into 2026.
+
+| Mechanism | What it does |
+|---|---|
+| `tests/test_rate_currency.py` | CI gate — fails the build once the year in force is missing from the tables |
+| `.github/workflows/rate-currency.yml` | Weekly scheduled `--strict` run; starts failing ~45 days *before* the COLA |
+| `python manage.py check_rate_currency` | Run it any time; `--date YYYY-MM-DD` to check a future date. Exits 1 when overdue |
+
+Defaults derive from `examprep.va_math.default_rate_year()` — never hardcode a
+year in a view, template or function default.
+
+**Update Checklist (run each December — `check_rate_currency` prints this too):**
 1. Check https://www.va.gov/disability/compensation-rates/veteran-rates/ for new rates
-2. Update `examprep/va_math.py` — add new `VA_COMPENSATION_RATES_{YEAR}` and `DEPENDENT_RATES_{YEAR}`
+2. Update `examprep/va_math.py` — add new `VA_COMPENSATION_RATES_{YEAR}` and `DEPENDENT_RATES_{YEAR}`, and register both in the `*_BY_YEAR` maps
 3. Update `examprep/va_special_compensation.py` — SMC rates
-4. Update `AVAILABLE_RATE_YEARS` list and default year
+4. Add the new year to `AVAILABLE_RATE_YEARS` (no default to update — it follows)
 5. Add tests for new rate year
 6. Verify bilateral factor and rounding still match 38 CFR § 4.25
 

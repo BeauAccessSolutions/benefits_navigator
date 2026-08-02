@@ -9,9 +9,21 @@ References:
 - 38 CFR § 4.26 - Bilateral factor
 """
 
+from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 from typing import List, Tuple, Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+# Paired extremities for the bilateral factor (38 CFR § 4.26). ``limb`` records
+# which one a disability affects, because the factor turns on there being a
+# compensable disability in *each* member of a pair — something a single
+# "is this bilateral?" checkbox cannot express.
+LIMB_CHOICES = {
+    "left_arm": ("arm", "left"),
+    "right_arm": ("arm", "right"),
+    "left_leg": ("leg", "left"),
+    "right_leg": ("leg", "right"),
+}
 
 
 @dataclass
@@ -22,6 +34,21 @@ class DisabilityRating:
     description: str = ""
     is_bilateral: bool = False
     bilateral_group: str = ""  # e.g., "upper", "lower" for grouping
+    # Which paired extremity this disability affects; one of LIMB_CHOICES, or
+    # "" when it is not an extremity (or predates this field).
+    limb: str = ""
+
+    @property
+    def pair(self) -> Optional[str]:
+        """ "arm" / "leg" — which pair this belongs to, if any."""
+        entry = LIMB_CHOICES.get(self.limb)
+        return entry[0] if entry else None
+
+    @property
+    def side(self) -> Optional[str]:
+        """ "left" / "right", if known."""
+        entry = LIMB_CHOICES.get(self.limb)
+        return entry[1] if entry else None
 
 
 @dataclass
@@ -34,6 +61,10 @@ class CalculationResult:
     step_by_step: List[dict]
     ratings_used: List[DisabilityRating]
     estimated_monthly: Optional[float] = None
+    # Why the bilateral factor was or wasn't applied. Surfaced to the user:
+    # silently declining to apply a factor they expected is its own kind of
+    # wrong answer.
+    bilateral_notes: List[str] = field(default_factory=list)
 
 
 def validate_rating(percentage: int) -> bool:
@@ -133,6 +164,11 @@ def calculate_bilateral_factor(bilateral_ratings: List[int]) -> Tuple[float, flo
     1. Combine all bilateral ratings
     2. Add 10% of that combined value as the bilateral factor
 
+    NOTE: this computes the arithmetic only. Whether a set of ratings *qualifies*
+    for the factor is decided by :func:`group_bilateral_ratings`, which is the
+    part that was missing — this function will happily add 10% to a single
+    rating if you hand it one.
+
     Returns: (combined_bilateral, bilateral_factor_bonus)
     """
     if not bilateral_ratings:
@@ -144,6 +180,92 @@ def calculate_bilateral_factor(bilateral_ratings: List[int]) -> Tuple[float, flo
     bilateral_factor = combined * 0.10
 
     return combined, bilateral_factor
+
+
+def group_bilateral_ratings(
+    ratings: List["DisabilityRating"],
+) -> Tuple[dict, List["DisabilityRating"], List[str]]:
+    """
+    Decide which ratings actually qualify for the bilateral factor.
+
+    38 CFR § 4.26 adds 10% when a partial disability results from disease or
+    injury of **both** arms, of **both** legs, or of paired skeletal muscles.
+    The operative word is both: the factor is compensation for the combined
+    functional loss of a *pair*, so it requires a compensable disability in
+    each member of that pair.
+
+    The previous implementation applied it to anything flagged ``is_bilateral``,
+    with no pairing test at all. A single 50% knee rating with the box ticked
+    combined to 55% and displayed as **60%** — a full bracket of rating, and
+    real money, that 38 CFR § 4.26 does not grant. ``bilateral_group`` existed
+    on the dataclass and was never read.
+
+    Returns ``(qualifying_groups, unqualified, notes)`` where:
+      * ``qualifying_groups`` maps "arm"/"leg" to the ratings in that pair,
+        included only when both sides are represented;
+      * ``unqualified`` are bilateral-flagged ratings that did not qualify and
+        must be combined normally;
+      * ``notes`` explain each exclusion, so the calculator can tell a veteran
+        why the factor was not applied rather than silently dropping it.
+
+    **Legacy data.** Saved calculations from before ``limb`` existed carry only
+    the boolean. Sides cannot be recovered, so those are held to the weaker test
+    that is still necessary — at least two flagged ratings — and the note says
+    the pairing is unverified. A lone flagged rating never qualifies, under
+    either rule; that is the case that was demonstrably wrong.
+
+    Not modelled: paired skeletal muscles (the regulation's third category),
+    which the calculator has no vocabulary for, and the most-favorable
+    arrangement VA applies in some multi-group edge cases. Both would need
+    input the UI does not collect; neither can inflate a rating here.
+    """
+    flagged = [r for r in ratings if r.is_bilateral]
+    if not flagged:
+        return {}, [], []
+
+    notes = []
+    groups = {}
+    unqualified = []
+
+    with_limb = [r for r in flagged if r.pair]
+    without_limb = [r for r in flagged if not r.pair]
+
+    # Modern path: group by pair, require both sides.
+    by_pair = {}
+    for rating in with_limb:
+        by_pair.setdefault(rating.pair, []).append(rating)
+
+    for pair, members in by_pair.items():
+        sides = {r.side for r in members}
+        if {"left", "right"} <= sides:
+            groups[pair] = members
+        else:
+            unqualified.extend(members)
+            only = sides.pop() if len(sides) == 1 else "one side"
+            notes.append(
+                f"Bilateral factor not applied to the {pair} group: only the "
+                f"{only} {pair} has a compensable rating. 38 CFR § 4.26 requires "
+                f"a disability in both."
+            )
+
+    # Legacy path: no limb recorded anywhere. Best available test is count.
+    if without_limb:
+        if not with_limb and len(without_limb) >= 2:
+            groups["unspecified"] = without_limb
+            notes.append(
+                "Bilateral factor applied to ratings saved before this "
+                "calculator recorded which limb each affects; the pairing could "
+                "not be verified. Re-select the limbs to confirm."
+            )
+        else:
+            unqualified.extend(without_limb)
+            notes.append(
+                "Bilateral factor not applied: mark which limb each disability "
+                "affects. The factor needs a compensable rating in both arms or "
+                "both legs (38 CFR § 4.26)."
+            )
+
+    return groups, unqualified, notes
 
 
 def round_to_nearest_10(value: float) -> int:
@@ -185,43 +307,58 @@ def calculate_combined_rating(ratings: List[DisabilityRating]) -> CalculationRes
             ratings_used=[],
         )
 
-    # Separate bilateral and non-bilateral ratings
-    bilateral_ratings = [r for r in ratings if r.is_bilateral]
-    non_bilateral_ratings = [r for r in ratings if not r.is_bilateral]
+    # Decide which flagged ratings actually qualify (38 CFR § 4.26 needs a
+    # compensable disability in BOTH members of a pair — see
+    # group_bilateral_ratings for why this is not just "is_bilateral").
+    qualifying_groups, unqualified, bilateral_notes = group_bilateral_ratings(ratings)
+
+    qualifying_ids = {id(r) for group in qualifying_groups.values() for r in group}
+    non_bilateral_ratings = [r for r in ratings if id(r) not in qualifying_ids]
 
     all_steps = []
     bilateral_factor_bonus = 0.0
+    all_percentages = []
 
-    # Process bilateral ratings if any
-    bilateral_combined = 0.0
-    if bilateral_ratings:
-        bilateral_percentages = [r.percentage for r in bilateral_ratings]
-        bilateral_combined, bilateral_steps = combine_multiple_ratings(
-            bilateral_percentages
-        )
+    # Each qualifying pair gets its own factor and is then treated as a single
+    # disability for further combination. A veteran with both arms and both legs
+    # affected has two groups; the old code could only ever express one.
+    for pair, members in sorted(qualifying_groups.items()):
+        percentages = [r.percentage for r in members]
+        combined, steps = combine_multiple_ratings(percentages)
 
-        # Add bilateral factor (10% of combined bilateral)
-        bilateral_factor_bonus = bilateral_combined * 0.10
-        bilateral_with_factor = bilateral_combined + bilateral_factor_bonus
+        factor = combined * 0.10
+        bilateral_factor_bonus += factor
+        with_factor = combined + factor
 
         all_steps.append(
             {
                 "phase": "bilateral",
-                "description": "Bilateral Conditions (paired extremities)",
-                "ratings": bilateral_percentages,
-                "combined": bilateral_combined,
-                "bilateral_factor": bilateral_factor_bonus,
-                "total_with_factor": bilateral_with_factor,
-                "steps": bilateral_steps,
+                "group": pair,
+                "description": (
+                    f"Bilateral Conditions — both {pair}s (38 CFR § 4.26)"
+                    if pair != "unspecified"
+                    else "Bilateral Conditions (paired extremities)"
+                ),
+                "ratings": percentages,
+                "combined": combined,
+                "bilateral_factor": factor,
+                "total_with_factor": with_factor,
+                "steps": steps,
             }
         )
 
-        # The bilateral total (with factor) is treated as one rating
-        all_percentages = [bilateral_with_factor] + [
-            r.percentage for r in non_bilateral_ratings
-        ]
-    else:
-        all_percentages = [r.percentage for r in non_bilateral_ratings]
+        all_percentages.append(with_factor)
+
+    all_percentages.extend(r.percentage for r in non_bilateral_ratings)
+
+    if bilateral_notes:
+        all_steps.append(
+            {
+                "phase": "bilateral_notes",
+                "description": "Bilateral factor eligibility",
+                "notes": bilateral_notes,
+            }
+        )
 
     # Combine all ratings
     if all_percentages:
@@ -250,6 +387,7 @@ def calculate_combined_rating(ratings: List[DisabilityRating]) -> CalculationRes
         bilateral_factor_applied=bilateral_factor_bonus,
         step_by_step=all_steps,
         ratings_used=ratings,
+        bilateral_notes=bilateral_notes,
     )
 
 
@@ -489,12 +627,129 @@ DEPENDENT_RATES_BY_YEAR = {
 AVAILABLE_RATE_YEARS = [2026, 2025, 2024, 2023, 2022, 2021, 2020]
 
 
+# =============================================================================
+# RATE CURRENCY
+# =============================================================================
+#
+# VA compensation rates change every December 1 with the COLA. A rate year is
+# named for the calendar year it runs *through*, but it begins the December 1
+# before: the 2026 rates took effect 2025-12-01.
+#
+# Nothing enforced that this table kept up. The checklist lived in CLAUDE.md
+# and depended on somebody remembering in December — and it had already failed
+# quietly: the rating calculator defaulted to the 2024 rates and labelled them
+# "(Current)" well into 2026, quoting veterans a two-year-stale dollar figure.
+# So currency is computed here, defaults derive from it, and CI fails when the
+# table falls behind.
+
+COLA_EFFECTIVE_MONTH = 12
+COLA_EFFECTIVE_DAY = 1
+
+# How long before the next COLA to start warning that new rates are needed.
+RATE_UPDATE_WARNING_DAYS = 45
+
+
+def current_rate_year(today: Optional[date] = None) -> int:
+    """
+    The rate year in force on ``today``.
+
+    On or after December 1, the next year's rates are already in effect —
+    2025-12-01 is the first day of the 2026 rate year.
+    """
+    today = today or date.today()
+    if (today.month, today.day) >= (COLA_EFFECTIVE_MONTH, COLA_EFFECTIVE_DAY):
+        return today.year + 1
+    return today.year
+
+
+def latest_available_rate_year() -> int:
+    """The newest rate year actually present in the tables."""
+    return max(AVAILABLE_RATE_YEARS)
+
+
+def default_rate_year(today: Optional[date] = None) -> int:
+    """
+    The year to use when the caller did not choose one.
+
+    Tracks the current rate year, falling back to the newest year we actually
+    have if the tables have fallen behind — a stale-but-real figure beats a
+    KeyError, and ``rate_currency_status`` plus the CI gate make sure the
+    shortfall is loud rather than silent.
+    """
+    wanted = current_rate_year(today)
+    return wanted if wanted in AVAILABLE_RATE_YEARS else latest_available_rate_year()
+
+
+def next_cola_date(today: Optional[date] = None) -> date:
+    """
+    The next December 1 strictly after ``today``.
+
+    Strictly after, not on-or-after, so it stays consistent with
+    ``current_rate_year``: on December 1 that day's COLA has already taken
+    effect, so the *next* one is a year away. Reporting "0 days" while also
+    reporting a rate year that has already turned over would read as though
+    there were still time to prepare.
+    """
+    today = today or date.today()
+    this_year = date(today.year, COLA_EFFECTIVE_MONTH, COLA_EFFECTIVE_DAY)
+    return this_year if today < this_year else date(today.year + 1, 12, 1)
+
+
+def rate_currency_status(today: Optional[date] = None) -> dict:
+    """
+    Report whether the rate tables are current, due for an update, or overdue.
+
+    ``is_overdue`` is the CI gate's condition: the rate year in force is not in
+    the tables, so the app is quoting last year's dollars as this year's.
+    """
+    today = today or date.today()
+    required = current_rate_year(today)
+    latest = latest_available_rate_year()
+    days_until_cola = (next_cola_date(today) - today).days
+
+    is_overdue = required not in AVAILABLE_RATE_YEARS
+    # Warn once the next COLA is close and its rates are not in yet.
+    is_due_soon = (
+        not is_overdue
+        and days_until_cola <= RATE_UPDATE_WARNING_DAYS
+        and (required + 1) not in AVAILABLE_RATE_YEARS
+    )
+
+    if is_overdue:
+        message = (
+            f"VA compensation rates for {required} are missing. The {required} "
+            f"rates took effect {COLA_EFFECTIVE_MONTH}/{COLA_EFFECTIVE_DAY}/"
+            f"{required - 1}; the newest table we have is {latest}. Veterans "
+            f"are being shown outdated compensation estimates."
+        )
+    elif is_due_soon:
+        message = (
+            f"VA compensation rates for {required + 1} take effect in "
+            f"{days_until_cola} days and are not in the tables yet."
+        )
+    else:
+        message = f"VA compensation rates are current through {latest}."
+
+    return {
+        "today": today,
+        "required_rate_year": required,
+        "latest_available_rate_year": latest,
+        "available_rate_years": list(AVAILABLE_RATE_YEARS),
+        "next_cola_date": next_cola_date(today),
+        "days_until_next_cola": days_until_cola,
+        "is_overdue": is_overdue,
+        "is_due_soon": is_due_soon,
+        "message": message,
+    }
+
+
 def estimate_monthly_compensation(
     combined_rating: int,
     spouse: bool = False,
     children_under_18: int = 0,
     dependent_parents: int = 0,
-    year: int = 2026,
+    year: Optional[int] = None,
+    today: Optional[date] = None,
 ) -> float:
     """
     Estimate monthly VA disability compensation.
@@ -504,15 +759,22 @@ def estimate_monthly_compensation(
         spouse: Whether veteran has a spouse
         children_under_18: Number of children under 18
         dependent_parents: Number of dependent parents (max 2)
-        year: The rate year to use (2020-2026). Defaults to 2026.
+        year: The rate year to use. Defaults to whichever year is currently in
+            force — this used to be hardcoded, which is how the app kept
+            quoting an old year's dollars after the COLA moved.
+        today: Override for the current date, for testing.
 
     Note: This is an estimate. Actual rates depend on many factors
     including effective date, special monthly compensation, etc.
     Dependent rates are available for 2024-2026; for earlier years,
     only base rates are applied.
     """
-    # Get rates for the specified year, fallback to 2026
-    rates = VA_COMPENSATION_RATES_BY_YEAR.get(year, VA_COMPENSATION_RATES_2026)
+    year = year if year is not None else default_rate_year(today)
+
+    # Fall back to the newest table we have rather than a hardcoded year.
+    rates = VA_COMPENSATION_RATES_BY_YEAR.get(
+        year, VA_COMPENSATION_RATES_BY_YEAR[latest_available_rate_year()]
+    )
 
     if combined_rating not in rates:
         return 0.0

@@ -8,6 +8,7 @@ from celery import shared_task
 from django.utils import timezone
 
 from .models import Document
+from core.file_access import as_local_path
 from .services.ocr_service import OCRService
 from .services.ai_service import AIService
 
@@ -94,7 +95,8 @@ def process_document_task(self, document_id):
 
         # Step 1: OCR Processing
         ocr_service = OCRService()
-        ocr_result = ocr_service.extract_text(document.file.path)
+        with as_local_path(document.file) as ocr_path:
+            ocr_result = ocr_service.extract_text(ocr_path)
 
         # Keep OCR text in memory for passing to AI service
         ocr_text = ocr_result["text"]
@@ -237,7 +239,8 @@ def decode_denial_letter_task(self, document_id, user_id=None):
         logger.info(f"Starting OCR for denial letter {document_id}")
 
         ocr_service = OCRService()
-        ocr_result = ocr_service.extract_text(document.file.path)
+        with as_local_path(document.file) as ocr_path:
+            ocr_result = ocr_service.extract_text(ocr_path)
 
         # Keep OCR text in memory only (not persisted for PHI protection)
         ocr_text = ocr_result["text"]
@@ -447,7 +450,8 @@ def analyze_rating_decision_task(
         logger.info(f"Starting OCR for rating decision {document_id}")
 
         ocr_service = OCRService()
-        ocr_result = ocr_service.extract_text(document.file.path)
+        with as_local_path(document.file) as ocr_path:
+            ocr_result = ocr_service.extract_text(ocr_path)
 
         # Keep OCR text in memory only (not persisted for PHI protection)
         ocr_text = ocr_result["text"]

@@ -2,7 +2,6 @@
 Views for claims app - Document upload and management
 """
 
-import os
 import mimetypes
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
@@ -12,6 +11,7 @@ from django.views.decorators.http import require_http_methods
 from django.conf import settings
 from django_ratelimit.decorators import ratelimit
 
+from core.file_access import local_path_or_none
 from core.models import AuditLog
 from agents.views import require_ai_consent_view
 from .models import Document
@@ -423,10 +423,10 @@ def document_download(request, pk):
     if not document.file:
         raise Http404("Document file not found")
 
-    file_path = document.file.path
+    file_path = document.file.name
 
     # Verify file exists on disk
-    if not os.path.exists(file_path):
+    if not document.file.storage.exists(file_path):
         raise Http404("Document file not found on disk")
 
     # Audit log the download
@@ -451,7 +451,10 @@ def document_download(request, pk):
     use_sendfile = getattr(settings, "USE_X_SENDFILE", False)
     sendfile_root = getattr(settings, "SENDFILE_ROOT", "")
 
-    if use_sendfile and sendfile_root:
+    # X-Accel-Redirect can only serve a file nginx can see on disk, so it is
+    # unavailable on remote storage (S3) — fall through to streaming there.
+    local_path = local_path_or_none(document.file)
+    if use_sendfile and sendfile_root and local_path:
         # Production: Use X-Sendfile/X-Accel-Redirect for nginx/apache
         # This is more efficient as the web server handles the file transfer
         from django.http import HttpResponse
@@ -460,7 +463,7 @@ def document_download(request, pk):
 
         # Calculate the internal redirect path for nginx
         # The file path relative to SENDFILE_ROOT
-        internal_path = file_path.replace(str(settings.MEDIA_ROOT), "/protected-media")
+        internal_path = local_path.replace(str(settings.MEDIA_ROOT), "/protected-media")
         response["X-Accel-Redirect"] = internal_path
         response["Content-Disposition"] = f'attachment; filename="{document.file_name}"'
         return response
@@ -468,7 +471,7 @@ def document_download(request, pk):
         # Development: Serve file directly through Django
         # This is slower but works without web server configuration
         response = FileResponse(
-            open(file_path, "rb"),
+            document.file.open("rb"),
             content_type=content_type,
             as_attachment=True,
             filename=document.file_name,
@@ -492,9 +495,9 @@ def document_view_inline(request, pk):
     if not document.file:
         raise Http404("Document file not found")
 
-    file_path = document.file.path
+    file_path = document.file.name
 
-    if not os.path.exists(file_path):
+    if not document.file.storage.exists(file_path):
         raise Http404("Document file not found on disk")
 
     # Audit log the view
@@ -516,7 +519,7 @@ def document_view_inline(request, pk):
 
     # Serve file inline (for viewing in browser)
     response = FileResponse(
-        open(file_path, "rb"),
+        document.file.open("rb"),
         content_type=content_type,
     )
     response["Content-Disposition"] = f'inline; filename="{document.file_name}"'
@@ -577,9 +580,9 @@ def document_download_signed(request, token):
     if not document.file:
         raise Http404("Document file not found")
 
-    file_path = document.file.path
+    file_path = document.file.name
 
-    if not os.path.exists(file_path):
+    if not document.file.storage.exists(file_path):
         raise Http404("Document file not found on disk")
 
     # Audit log the download (use document owner since token-based access)
@@ -603,7 +606,7 @@ def document_download_signed(request, token):
 
     # Serve file
     response = FileResponse(
-        open(file_path, "rb"),
+        document.file.open("rb"),
         content_type=content_type,
         as_attachment=True,
         filename=document.file_name,
@@ -659,9 +662,9 @@ def document_view_signed(request, token):
     if not document.file:
         raise Http404("Document file not found")
 
-    file_path = document.file.path
+    file_path = document.file.name
 
-    if not os.path.exists(file_path):
+    if not document.file.storage.exists(file_path):
         raise Http404("Document file not found on disk")
 
     # Audit log the view (use document owner since token-based access)
@@ -685,7 +688,7 @@ def document_view_signed(request, token):
 
     # Serve file inline
     response = FileResponse(
-        open(file_path, "rb"),
+        document.file.open("rb"),
         content_type=content_type,
     )
     response["Content-Disposition"] = f'inline; filename="{document.file_name}"'

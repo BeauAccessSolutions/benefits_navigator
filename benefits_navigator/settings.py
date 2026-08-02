@@ -47,6 +47,12 @@ if not SECRET_KEY or SECRET_KEY.startswith("django-insecure"):
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env("DEBUG")
 
+# Detect test runs (CI runs with DEBUG=False, and Django forces DEBUG=False
+# under the test runner regardless of the environment). Defined here, above
+# first use, because both STORAGES and the production-only security block below
+# branch on it.
+TESTING = "pytest" in sys.modules or "test" in sys.argv
+
 # Field-level encryption key for PII (VA file numbers, DOB, etc.)
 # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 # MUST be set in staging/production - no fallback allowed for defense in depth
@@ -230,11 +236,38 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [BASE_DIR / "static"]
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 # Media files (User uploads)
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+
+# Storage backends. Django >= 5.1 REMOVED the old DEFAULT_FILE_STORAGE and
+# STATICFILES_STORAGE settings — they are silently ignored, so they must be
+# expressed here or the configured backend never takes effect. The S3 block
+# below overrides these entries when USE_S3 is on.
+
+# What deployed environments serve: hashed, compressed, far-future-cacheable
+# assets. It resolves {% static %} through a manifest that `collectstatic`
+# writes.
+MANIFEST_STATICFILES_BACKEND = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+# What runserver and the test suite use. Neither runs collectstatic, so there is
+# no manifest for the backend above to read, and every {% static %} render
+# raises "Missing staticfiles manifest entry" — which takes down any test that
+# renders a page, not just static-file tests.
+LOCAL_STATICFILES_BACKEND = "django.contrib.staticfiles.storage.StaticFilesStorage"
+
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": (
+            LOCAL_STATICFILES_BACKEND
+            if DEBUG or TESTING
+            else MANIFEST_STATICFILES_BACKEND
+        ),
+    },
+}
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
@@ -280,12 +313,31 @@ if CELERY_BROKER_URL.startswith("rediss://"):
     )
 
 # Celery Beat Schedule for periodic tasks
-# DEPLOYMENT NOTE: Beat scheduler runs on the "worker" process in DigitalOcean App Platform
-# (the single Procfile worker dyno). Only ONE instance must run Beat at a time —
-# if you scale the worker to multiple instances, pin Beat to exactly one using
-# CELERY_BEAT_MAX_LOOP_INTERVAL or a dedicated beat dyno. Duplicate Beat instances
-# will double-fire all periodic tasks (duplicate emails, double data retention runs).
+#
+# DEPLOYMENT NOTE: Beat runs as its own App Platform component ("beat" in
+# app-spec.yaml.template), NOT on the worker.
+#
+# This comment previously claimed Beat ran "on the worker process ... the single
+# Procfile worker dyno". There is no Procfile, and the worker's run_command has
+# no -B. Beat was never started, so every task below was dead code in
+# production — including process-scheduled-account-deletions, which is the task
+# that makes the app's 30-day deletion promise true. The docs asserted it was
+# handled, which is exactly why nobody checked for months. Keep this note
+# accurate; it is load-bearing.
+#
+# Exactly one Beat instance may run. The beat component is pinned to
+# instance_count: 1 for that reason — two schedulers double-fire everything
+# (duplicate reminder emails, double retention runs, two purge passes).
 from celery.schedules import crontab
+
+# Store the schedule in Postgres rather than a local shelve file. Two reasons,
+# both learned here: App Platform disks are ephemeral, so a file-based schedule
+# loses its last-run state on every deploy; and the database scheduler records
+# PeriodicTask.last_run_at, which is what lets core.health.check_scheduler
+# notice that Beat has stopped. A silent scheduler is how this failure lasted.
+CELERY_BEAT_SCHEDULER = env(
+    "CELERY_BEAT_SCHEDULER", default="django_celery_beat.schedulers:DatabaseScheduler"
+)
 
 CELERY_BEAT_SCHEDULE = {
     # Health monitoring
@@ -388,6 +440,13 @@ SESSION_COOKIE_SAMESITE = "Lax"
 # Enforced by core.middleware.IdleSessionTimeoutMiddleware.
 SESSION_IDLE_TIMEOUT = env.int("SESSION_IDLE_TIMEOUT", default=1800)  # 30 minutes
 
+# Shared secret letting unattended monitoring read /health/?full=1, which reports
+# database, Redis, Celery and queue state. Supplied in the X-Health-Token header,
+# never a query parameter, so it stays out of access and proxy logs. Unset means
+# only staff sessions can read the detailed status; the plain liveness check at
+# /health/ is unaffected and never requires it.
+HEALTH_CHECK_TOKEN = env("HEALTH_CHECK_TOKEN", default="")
+
 # ==============================================================================
 # CSRF CONFIGURATION
 # ==============================================================================
@@ -415,9 +474,9 @@ CSP_CONNECT_SRC = ("'self'",)
 CSP_FRAME_ANCESTORS = ("'none'",)
 CSP_FORM_ACTION = ("'self'",)
 
-# Detect test runs (CI runs with DEBUG=False) so production-only HTTP->HTTPS
-# redirects don't turn every test-client request into a 301.
-TESTING = "pytest" in sys.modules or "test" in sys.argv
+# TESTING is defined near DEBUG at the top of this file — it is needed earlier,
+# by STORAGES. It also keeps production-only HTTP->HTTPS redirects from turning
+# every test-client request into a 301.
 
 # Production-only settings (skip SSL redirect in staging - DO handles SSL at edge)
 if not DEBUG and not TESTING:
@@ -557,12 +616,17 @@ if USE_S3:
     AWS_DEFAULT_ACL = "private"
     AWS_S3_OBJECT_PARAMETERS = {"CacheControl": "max-age=86400"}
 
-    # S3 static files settings
-    STATICFILES_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
+    # Point both storage backends at S3 via the STORAGES dict defined above.
+    # (Assigning DEFAULT_FILE_STORAGE / STATICFILES_STORAGE here would be a
+    # no-op on Django >= 5.1 — that was the bug: USE_S3=True still wrote
+    # veteran documents to the local filesystem.)
+    STORAGES["default"] = {
+        "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
+    }
+    STORAGES["staticfiles"] = {
+        "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
+    }
     STATIC_URL = f"https://{AWS_S3_CUSTOM_DOMAIN}/static/"
-
-    # S3 media files settings
-    DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
     MEDIA_URL = f"https://{AWS_S3_CUSTOM_DOMAIN}/media/"
 
 # ==============================================================================

@@ -24,6 +24,7 @@ from .permissions import (
     vso_staff_required,
     member_is_org_admin,
     scope_cases_for_member,
+    get_scoped_case_or_404,
 )
 from .services import GapCheckerService
 from appeals.models import Appeal
@@ -232,7 +233,7 @@ def dashboard(request):
 
     # Recent activity (notes and shared documents)
     recent_notes = (
-        CaseNote.objects.filter(case__organization=org)
+        CaseNote.objects.filter(case__in=cases)
         .select_related("case", "author")
         .order_by("-created_at")[:10]
     )
@@ -358,6 +359,8 @@ def case_list(request):
             .select_related("veteran", "assigned_to")
             .prefetch_related("case_conditions")
         )
+        # Rebuilt from scratch — must re-apply least-privilege scoping.
+        cases = scope_cases_for_member(request.user, org, cases)
 
     if status_filter:
         cases = cases.filter(status=status_filter)
@@ -382,8 +385,21 @@ def case_list(request):
             # description is encrypted at rest — not searchable via icontains
         )
 
-    # Ordering
+    # Ordering — allowlisted so a crafted ?order_by= can't trigger a
+    # FieldError 500 or probe field values via related-field ordering.
+    allowed_orderings = {
+        "created_at",
+        "updated_at",
+        "title",
+        "status",
+        "priority",
+        "intake_date",
+        "next_action_date",
+        "last_activity_at",
+    }
     order_by = request.GET.get("order_by", "-created_at")
+    if order_by.lstrip("-") not in allowed_orderings:
+        order_by = "-created_at"
     cases = cases.order_by(order_by)
 
     # Add triage labels to cases and filter if needed
@@ -508,14 +524,14 @@ def _export_cases_csv(cases, request=None, org=None):
 
     # Audit log the export
     if request and request.user.is_authenticated:
-        AuditLog.objects.create(
-            user=request.user,
+        # AuditLog.log (not objects.create) so the IP goes through
+        # _get_client_ip: behind the App Platform load balancer REMOTE_ADDR is
+        # the proxy, and a bulk pull of veteran data is the last event whose
+        # source IP should be a constant.
+        AuditLog.log(
             action="vso_case_export",
+            request=request,
             resource_type="VeteranCase",
-            ip_address=request.META.get("REMOTE_ADDR"),
-            user_agent=request.META.get("HTTP_USER_AGENT", "")[:500],
-            request_path=request.path,
-            request_method=request.method,
             details={
                 "case_count": len(case_ids),
                 "case_ids": case_ids[:100],  # Limit to first 100 for storage
@@ -565,10 +581,17 @@ def bulk_case_action(request):
         messages.error(request, "No cases selected.")
         return redirect("vso:case_list")
 
-    # Get cases within organization
-    cases = VeteranCase.objects.filter(
-        pk__in=case_ids, organization=org, is_archived=False
-    ).prefetch_related("case_conditions")
+    # Get cases within organization, honoring least-privilege scoping so a
+    # restricted caseworker cannot bulk-act on a colleague's case by id.
+    cases = (
+        scope_cases_for_member(
+            request.user,
+            org,
+            VeteranCase.objects.filter(organization=org, is_archived=False),
+        )
+        .filter(pk__in=case_ids)
+        .prefetch_related("case_conditions")
+    )
 
     count = cases.count()
     if count == 0:
@@ -659,16 +682,13 @@ def case_detail(request, pk):
     if not org:
         return redirect("vso:dashboard")
 
-    case = get_object_or_404(
-        scope_cases_for_member(
-            request.user,
-            org,
-            VeteranCase.objects.select_related(
-                "veteran", "assigned_to", "organization"
-            ),
+    case = get_scoped_case_or_404(
+        request.user,
+        org,
+        pk,
+        queryset=VeteranCase.objects.select_related(
+            "veteran", "assigned_to", "organization"
         ),
-        pk=pk,
-        organization=org,
     )
 
     # Surfaced to the veteran on their data-activity page
@@ -741,7 +761,7 @@ def case_update_status(request, pk):
     HTMX endpoint to update case status
     """
     org = get_user_organization(request.user, request=request)
-    case = get_object_or_404(VeteranCase, pk=pk, organization=org)
+    case = get_scoped_case_or_404(request.user, org, pk)
 
     # Archived cases are read-only
     if is_case_read_only(case):
@@ -785,7 +805,7 @@ def case_archive(request, pk):
     the default case list but can still be accessed.
     """
     org = get_user_organization(request.user, request=request)
-    case = get_object_or_404(VeteranCase, pk=pk, organization=org)
+    case = get_scoped_case_or_404(request.user, org, pk)
 
     if case.status.startswith("closed"):
         case.is_archived = True
@@ -830,7 +850,7 @@ def add_case_note(request, pk):
     Add a note to a case
     """
     org = get_user_organization(request.user, request=request)
-    case = get_object_or_404(VeteranCase, pk=pk, organization=org)
+    case = get_scoped_case_or_404(request.user, org, pk)
 
     # Archived cases are read-only
     if is_case_read_only(case):
@@ -869,7 +889,7 @@ def complete_action_item(request, pk, note_pk):
     Mark an action item as complete
     """
     org = get_user_organization(request.user, request=request)
-    case = get_object_or_404(VeteranCase, pk=pk, organization=org)
+    case = get_scoped_case_or_404(request.user, org, pk)
 
     # Archived cases are read-only
     if is_case_read_only(case):
@@ -973,7 +993,7 @@ def shared_document_review(request, pk, doc_pk):
     Review a shared document with comprehensive AI analysis for VSO prep.
     """
     org = get_user_organization(request.user, request=request)
-    case = get_object_or_404(VeteranCase, pk=pk, organization=org)
+    case = get_scoped_case_or_404(request.user, org, pk)
     shared_doc = get_object_or_404(SharedDocument, pk=doc_pk, case=case)
 
     # Surfaced to the veteran on their data-activity page
@@ -1072,7 +1092,7 @@ def case_notes_partial(request, pk):
     HTMX partial for case notes list
     """
     org = get_user_organization(request.user, request=request)
-    case = get_object_or_404(VeteranCase, pk=pk, organization=org)
+    case = get_scoped_case_or_404(request.user, org, pk)
     notes = case.notes.select_related("author").order_by("-created_at")
 
     return render(
@@ -1091,7 +1111,7 @@ def case_documents_partial(request, pk):
     HTMX partial for shared documents list
     """
     org = get_user_organization(request.user, request=request)
-    case = get_object_or_404(VeteranCase, pk=pk, organization=org)
+    case = get_scoped_case_or_404(request.user, org, pk)
     shared_docs = case.shared_documents.select_related("document", "shared_by")
 
     return render(
@@ -1169,19 +1189,25 @@ def invite_veteran(request):
                 )
                 return redirect("vso:invitations")
 
-        # Create the invitation
+        # Create the invitation. Case details are persisted ON the invitation:
+        # accept_invitation runs in the accepting veteran's request, which has
+        # no access to the inviting staffer's session.
         invitation = OrganizationInvitation.objects.create(
-            organization=org, email=email, role="veteran", invited_by=request.user
+            organization=org,
+            email=email,
+            role="veteran",
+            invited_by=request.user,
+            case_payload=(
+                {
+                    "title": case_title,
+                    "description": case_description,
+                    "priority": priority,
+                    "invited_by_id": request.user.id,
+                }
+                if case_title
+                else None
+            ),
         )
-
-        # Store case details in session for when invitation is accepted
-        if case_title:
-            request.session[f"pending_case_{invitation.token}"] = {
-                "title": case_title,
-                "description": case_description,
-                "priority": priority,
-                "invited_by_id": request.user.id,
-            }
 
         # Send invitation email
         _send_veteran_invitation_email(invitation, case_title)
@@ -1371,8 +1397,8 @@ def accept_invitation(request, token):
             with transaction.atomic():
                 invitation.accept(request.user)
 
-                # Create case if details were stored
-                case_info = request.session.get(f"pending_case_{token}", {})
+                # Create case if details were stored on the invitation
+                case_info = invitation.case_payload or {}
                 if case_info:
                     from django.contrib.auth import get_user_model
 
@@ -1404,11 +1430,9 @@ def accept_invitation(request, token):
                         visible_to_veteran=True,
                     )
 
-            # Clean up session (outside the DB transaction — session storage
-            # isn't part of it, and this should only happen once the writes
-            # above have actually committed).
-            if case_info:
-                del request.session[f"pending_case_{token}"]
+                    # Payload consumed — don't keep case PII on the invitation.
+                    invitation.case_payload = None
+                    invitation.save(update_fields=["case_payload"])
 
             messages.success(
                 request,
@@ -1448,7 +1472,7 @@ def start_appeal_from_case(request, pk):
         messages.error(request, "Please select an organization to continue.")
         return redirect("vso:select_organization")
 
-    case = get_object_or_404(VeteranCase, pk=pk, organization=org)
+    case = get_scoped_case_or_404(request.user, org, pk)
 
     # Only allow starting appeals for denied cases or cases in appeal status
     if case.status not in ["closed_denied", "appeal_in_progress"]:
@@ -1467,17 +1491,15 @@ def start_appeal_from_case(request, pk):
         )
         return redirect("appeals:appeal_detail", pk=existing_appeal.pk)
 
-    # Create new appeal linked to the case
+    # Create new appeal linked to the case. Note case.conditions is a JSON
+    # field — the tracked-condition relation is case.case_conditions.
+    condition_names = [c.condition_name for c in case.case_conditions.all()]
     appeal = Appeal.objects.create(
         user=case.veteran,
         veteran_case=case,
         status="deciding",
         original_decision_date=case.decision_date,
-        conditions_appealed=(
-            ", ".join([c.condition_name for c in case.conditions.all()])
-            if case.conditions.exists()
-            else ""
-        ),
+        conditions_appealed=", ".join(condition_names),
     )
 
     # Update case status if not already in appeal
@@ -1663,15 +1685,11 @@ def _export_reports_csv(org, data, request=None):
 
     # Audit log the export
     if request and request.user.is_authenticated:
-        AuditLog.objects.create(
-            user=request.user,
+        AuditLog.log(
             action="vso_report_export",
+            request=request,
             resource_type="Organization",
             resource_id=org.pk,
-            ip_address=request.META.get("REMOTE_ADDR"),
-            user_agent=request.META.get("HTTP_USER_AGENT", "")[:500],
-            request_path=request.path,
-            request_method=request.method,
             details={
                 "organization": org.slug,
                 "format": "csv",
@@ -1740,15 +1758,11 @@ def _export_reports_pdf(org, data, request=None):
     """Export reports data to PDF format for board presentations with audit logging."""
     # Audit log the export
     if request and request.user.is_authenticated:
-        AuditLog.objects.create(
-            user=request.user,
+        AuditLog.log(
             action="vso_report_export",
+            request=request,
             resource_type="Organization",
             resource_id=org.pk,
-            ip_address=request.META.get("REMOTE_ADDR"),
-            user_agent=request.META.get("HTTP_USER_AGENT", "")[:500],
-            request_path=request.path,
-            request_method=request.method,
             details={
                 "organization": org.slug,
                 "format": "pdf",
@@ -2207,10 +2221,11 @@ def evidence_packet_builder(request, pk):
     if not org:
         return redirect("vso:dashboard")
 
-    case = get_object_or_404(
-        VeteranCase.objects.select_related("veteran", "organization"),
-        pk=pk,
-        organization=org,
+    case = get_scoped_case_or_404(
+        request.user,
+        org,
+        pk,
+        queryset=VeteranCase.objects.select_related("veteran", "organization"),
     )
 
     # Get case conditions
@@ -2228,13 +2243,14 @@ def evidence_packet_builder(request, pk):
         doc_data = {
             "id": sd.id,
             "document": sd.document,
-            "title": sd.document.title if sd.document else "Untitled",
+            "title": sd.document.file_name if sd.document else "Untitled",
             "document_type": sd.document.document_type if sd.document else "other",
-            "uploaded_at": sd.document.uploaded_at if sd.document else sd.shared_at,
+            "uploaded_at": sd.document.created_at if sd.document else sd.shared_at,
             "shared_at": sd.shared_at,
-            "vso_notes": sd.vso_notes,
-            "review_status": sd.review_status,
-            # Which conditions this document supports (stored in vso_notes as JSON or comma-separated)
+            "vso_notes": sd.review_notes,
+            "review_status": sd.status,
+            "review_status_display": sd.get_status_display(),
+            # Which conditions this document supports (stored in review_notes as JSON or comma-separated)
             "assigned_conditions": [],
         }
         documents_list.append(doc_data)
@@ -2265,7 +2281,7 @@ def evidence_packet_builder(request, pk):
         "conditions": conditions,
         "documents": documents_list,
         "evidence_checklist": evidence_checklist,
-        "document_types": SharedDocument.REVIEW_STATUS_CHOICES,
+        "document_types": SharedDocument.SHARE_STATUS_CHOICES,
         "conditions_complete": conditions_complete,
         "conditions_total": conditions_total,
         "completion_percentage": round(completion_percentage),

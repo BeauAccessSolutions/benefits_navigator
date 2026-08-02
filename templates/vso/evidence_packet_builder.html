@@ -161,11 +161,11 @@
                                 </div>
                             </div>
                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                                {% if doc.review_status == 'approved' %}bg-green-100 text-green-800
-                                {% elif doc.review_status == 'needs_info' %}bg-yellow-100 text-yellow-800
-                                {% elif doc.review_status == 'rejected' %}bg-red-100 text-red-800
+                                {% if doc.review_status == 'reviewed' %}bg-green-100 text-green-800
+                                {% elif doc.review_status == 'action_needed' %}bg-yellow-100 text-yellow-800
+                                {% elif doc.review_status == 'archived' %}bg-red-100 text-red-800
                                 {% else %}bg-gray-100 text-gray-800{% endif %}">
-                                {{ doc.review_status|default:"Pending"|title }}
+                                {{ doc.review_status_display|default:"Pending" }}
                             </span>
                         </div>
                     </div>

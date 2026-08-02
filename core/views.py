@@ -156,12 +156,15 @@ def claim_progress(request):
     user = request.user
 
     # Get counts for progress calculation — single annotated query (6 COUNTs → 1 DB round-trip)
+    from django.contrib.auth import get_user_model
     from django.db.models import Count, Q
     from claims.models import Document
     from agents.models import EvidenceGapAnalysis
 
+    # NOT type(user): request.user is a SimpleLazyObject, whose type has no
+    # .objects manager — only the real user model class does.
     user_data = (
-        type(user)
+        get_user_model()
         .objects.filter(pk=user.pk)
         .annotate(
             doc_count=Count(
@@ -287,7 +290,7 @@ def claim_progress(request):
                 "priority": "high",
                 "action": "Upload your VA documents",
                 "description": "Start by uploading your DD-214, medical records, or decision letters.",
-                "url_name": "claims:upload",
+                "url_name": "claims:document_upload",
                 "url_label": "Upload Documents",
             }
         )
@@ -309,7 +312,7 @@ def claim_progress(request):
                 "priority": "medium",
                 "action": "Get a rating analysis",
                 "description": "Upload your rating decision to identify potential increases.",
-                "url_name": "agents:rating_analyzer",
+                "url_name": "claims:rating_analyzer",
                 "url_label": "Analyze Rating",
             }
         )

@@ -1,0 +1,52 @@
+# VA Compensation Rate Currency
+#
+# VA rates change every December 1 with the COLA. The pytest gate
+# (tests/test_rate_currency.py) fails the build once the tables have already
+# fallen behind — correct, but it only speaks up after veterans are being
+# quoted stale dollars, and it does so by breaking whatever unrelated PR
+# happens to be open that morning.
+#
+# This job is the early warning. It runs weekly and uses --strict, so it starts
+# failing ~45 days before the COLA — while there is still time to gather the
+# new rates. A scheduled job going red is a notification; it blocks nobody.
+
+name: Rate Currency
+
+on:
+  schedule:
+    # Mondays at 13:00 UTC.
+    - cron: '0 13 * * 1'
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  check:
+    name: Check VA rate tables are current
+    runs-on: ubuntu-latest
+
+    env:
+      SECRET_KEY: test-secret-key-for-ci-checks
+      DEBUG: 'False'
+      DATABASE_URL: sqlite:///rate-check.sqlite3
+      ALLOWED_HOSTS: localhost,127.0.0.1
+      ANTHROPIC_API_KEY: sk-ant-test-fake-key
+      DJANGO_SETTINGS_MODULE: benefits_navigator.settings
+      FIELD_ENCRYPTION_KEY: icYQDhc0tmgE75lYSiQfexQ-2bSFuMJBn9SsiH5xpOI=
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      # No database access: the command reads the rate tables in the source.
+      - name: Check rate currency
+        run: python manage.py check_rate_currency --strict

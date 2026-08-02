@@ -418,3 +418,33 @@ def scope_cases_for_member(user, organization, cases):
     if member_is_org_admin(user, organization):
         return cases
     return cases.filter(Q(assigned_to=user) | Q(assigned_to__isnull=True))
+
+
+def get_scoped_case_or_404(user, organization, pk, queryset=None):
+    """
+    Fetch a single case by pk, enforcing BOTH org isolation and
+    least-privilege caseworker visibility (see scope_cases_for_member).
+
+    This is the ONLY sanctioned way to look up a case by pk in VSO views.
+    A restricted caseworker who probes or enumerates a colleague's case id
+    gets Http404 — indistinguishable from the case not existing — closing the
+    intra-org authorization gap where org-only filters let any member act on
+    any case in the org.
+
+    Callers may pass a pre-built queryset (e.g. with select_related); it is
+    filtered to the org and scoped before the pk lookup.
+    """
+    from django.http import Http404
+    from django.shortcuts import get_object_or_404
+    from vso.models import VeteranCase
+
+    if organization is None:
+        raise Http404("No organization selected")
+
+    if queryset is None:
+        queryset = VeteranCase.objects.all()
+
+    scoped = scope_cases_for_member(
+        user, organization, queryset.filter(organization=organization)
+    )
+    return get_object_or_404(scoped, pk=pk)

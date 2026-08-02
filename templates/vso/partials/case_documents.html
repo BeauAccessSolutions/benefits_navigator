@@ -1,0 +1,30 @@
+{# Shared documents list — rendered inline by case_detail.html and by the #}
+{# vso:case_documents_partial HTMX endpoint. Context: case, shared_documents. #}
+<div class="divide-y divide-gray-200">
+    {% for doc in shared_documents %}
+    <div class="px-6 py-4 flex justify-between items-center">
+        <div>
+            <p class="font-medium text-gray-900">{{ doc.document.file_name }}</p>
+            <p class="text-sm text-gray-500">
+                Shared {{ doc.shared_at|timesince }} ago by {{ doc.shared_by.email|default:"Veteran" }}
+            </p>
+        </div>
+        <div class="flex items-center space-x-2">
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium
+                {% if doc.status == 'reviewed' %}bg-green-100 text-green-800
+                {% elif doc.status == 'action_needed' %}bg-yellow-100 text-yellow-800
+                {% else %}bg-gray-100 text-gray-800{% endif %}">
+                {{ doc.get_status_display }}
+            </span>
+            <a href="{% url 'vso:shared_document_review' pk=case.pk doc_pk=doc.pk %}"
+               class="text-blue-600 hover:text-blue-800 text-sm font-medium">
+                Review
+            </a>
+        </div>
+    </div>
+    {% empty %}
+    <div class="px-6 py-8 text-center text-gray-500">
+        <p>No documents shared yet.</p>
+    </div>
+    {% endfor %}
+</div>

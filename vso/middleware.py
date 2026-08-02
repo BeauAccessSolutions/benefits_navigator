@@ -112,9 +112,7 @@ class VSOStaffMFAMiddleware:
                         .first()
                     )
                     grace_ends = (
-                        compute_mfa_grace_end(
-                            joined_at, enforcement_start, grace_days
-                        )
+                        compute_mfa_grace_end(joined_at, enforcement_start, grace_days)
                         or timezone.now()
                     )
 

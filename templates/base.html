@@ -2,10 +2,21 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- viewport-fit=cover: required for env(safe-area-inset-*) to be non-zero
+         (see the safe-area <style> below). -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 
     <!-- Page title -->
     <title>{% block title %}{{ SITE_NAME }}{% endblock %}</title>
+
+    {% comment %}
+       iOS home-screen label for the deployed site added via Safari "Add to Home
+       Screen". Without this it uses the <title> and iOS truncates to
+       "BenefitsNav…" (~12-char budget). The native TestFlight app's label is
+       separate — CFBundleDisplayName in mobile/ios/.../Info.plist, also shortened
+       here, which takes effect only on the next TestFlight build.
+    {% endcomment %}
+    <meta name="apple-mobile-web-app-title" content="Benefits">
 
     <!-- Meta description - override in child templates -->
     <meta name="description" content="{% block meta_description %}{{ SITE_DESCRIPTION }}{% endblock %}">
@@ -50,6 +61,13 @@
     {% load static %}
     <link rel="stylesheet" href="{% static 'css/tailwind.min.css' %}">
 
+    {% comment %}
+       iOS safe-area (notch / status bar) fix. A separate stylesheet served from
+       'self' — NOT an inline <style>, which the strict CSP (style-src 'self', no
+       unsafe-inline) would block. See safe-area.css for the rationale.
+    {% endcomment %}
+    <link rel="stylesheet" href="{% static 'css/safe-area.css' %}">
+
     <!-- HTMX for dynamic interactions -->
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
 
@@ -60,7 +78,7 @@
     <a href="#main-content" class="skip-link">Skip to main content</a>
 
     <!-- Header with navigation -->
-    <header role="banner" class="bg-blue-900 text-white shadow-md">
+    <header role="banner" class="relative bg-blue-900 text-white shadow-md">
         <div class="container mx-auto px-4 py-4">
             <div class="flex justify-between items-center">
                 <div class="flex items-center space-x-3">
@@ -72,72 +90,34 @@
                     </h1>
                 </div>
 
-                <nav role="navigation" aria-label="Main navigation">
-                    <ul class="flex space-x-6">
-                        <li>
-                            <a href="/claims/" class="hover:underline focus:underline"
-                               {% if request.resolver_match.app_name == 'claims' %}aria-current="page"{% endif %}>
-                                Claims Assistant
-                            </a>
-                        </li>
-                        <li>
-                            <a href="/exam-prep/" class="hover:underline focus:underline"
-                               {% if request.resolver_match.app_name == 'examprep' %}aria-current="page"{% endif %}>
-                                C&P Exam Prep
-                            </a>
-                        </li>
-                        <li>
-                            <a href="/appeals/" class="hover:underline focus:underline"
-                               {% if request.resolver_match.app_name == 'appeals' %}aria-current="page"{% endif %}>
-                                Appeals Guidance
-                            </a>
-                        </li>
-                        <li>
-                            <a href="/docs/" class="hover:underline focus:underline"
-                               {% if request.resolver_match.app_name == 'documentation' %}aria-current="page"{% endif %}>
-                                Documentation
-                            </a>
-                        </li>
-                        {% if user.is_authenticated %}
-                        <li>
-                            <a href="/journey/" class="hover:underline focus:underline"
-                               {% if request.resolver_match.url_name == 'journey_dashboard' %}aria-current="page"{% endif %}>
-                                My Journey
-                            </a>
-                        </li>
-                        <li>
-                            <a href="/dashboard/" class="hover:underline focus:underline"
-                               {% if request.resolver_match.url_name == 'dashboard' %}aria-current="page"{% endif %}>
-                                Dashboard
-                            </a>
-                        </li>
-                        {% if is_vso_staff %}
-                        <li>
-                            <a href="{% url 'vso:dashboard' %}" class="hover:underline focus:underline bg-green-700 px-3 py-1 rounded"
-                               {% if request.resolver_match.app_name == 'vso' %}aria-current="page"{% endif %}>
-                                VSO Portal
-                            </a>
-                        </li>
-                        {% endif %}
-                        <li>
-                            <a href="/accounts/logout/" class="hover:underline focus:underline">
-                                Logout
-                            </a>
-                        </li>
-                        {% else %}
-                        <li>
-                            <a href="/accounts/login/" class="hover:underline focus:underline">
-                                Login
-                            </a>
-                        </li>
-                        <li>
-                            <a href="/accounts/signup/" class="bg-white text-blue-900 px-4 py-2 rounded hover:bg-gray-100 focus:bg-gray-100">
-                                Sign Up
-                            </a>
-                        </li>
-                        {% endif %}
+                <!-- Desktop navigation -->
+                {# xl, not md: signed in with the VSO badge the bar needs ~930px #}
+                {# beside a 250px logo. At md (768px) it overflowed the viewport #}
+                {# — the bug this nav exists to fix — and stayed cramped at lg. #}
+                <nav role="navigation" aria-label="Main navigation" class="hidden xl:block">
+                    <ul class="flex items-center space-x-6">
+                        {% include "partials/nav_links.html" %}
                     </ul>
                 </nav>
+
+                <!-- Mobile navigation: CSS-only <details> disclosure (no JS, CSP-safe) -->
+                <details class="xl:hidden">
+                    {# No -mr-2: the negative margin pushed the 44px summary 8px #}
+                    {# past the header's content box, so the row reported an     #}
+                    {# overflow and the <details> box measured 36px, not 44px.   #}
+                    <summary class="list-none flex items-center justify-center cursor-pointer p-2 min-w-[44px] min-h-[44px] rounded hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-white"
+                             aria-label="Toggle navigation menu">
+                        <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                        </svg>
+                    </summary>
+                    <nav role="navigation" aria-label="Mobile navigation"
+                         class="absolute left-0 right-0 top-full z-50 bg-blue-900 border-t border-blue-800 shadow-lg">
+                        <ul class="flex flex-col px-4 py-3 space-y-1">
+                            {% include "partials/nav_links.html" %}
+                        </ul>
+                    </nav>
+                </details>
             </div>
         </div>
     </header>

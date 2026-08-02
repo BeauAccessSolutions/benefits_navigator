@@ -230,11 +230,14 @@
                         <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
                     </svg>
                     <span class="font-medium text-red-800">
-                        {{ analysis.days_until_deadline }} days remaining to appeal
+                        {{ analysis.days_until_deadline }} days remaining for a
+                        Higher-Level Review or Board Appeal
                     </span>
                 </div>
                 <p class="text-sm text-red-700 mt-2">
-                    Deadline: {{ analysis.deadline_tracker.appeal_deadline }}
+                    Deadline: {{ analysis.deadline_tracker.appeal_deadline }}.
+                    A Supplemental Claim has no deadline &mdash; filing by this
+                    date protects your effective date (back pay).
                 </p>
             </div>
             {% endif %}

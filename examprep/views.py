@@ -20,8 +20,8 @@ from .forms import ExamChecklistForm
 from .va_math import (
     DisabilityRating,
     calculate_combined_rating,
+    default_rate_year,
     estimate_monthly_compensation,
-    VA_COMPENSATION_RATES_2024,
     VA_COMPENSATION_RATES_BY_YEAR,
     AVAILABLE_RATE_YEARS,
     format_currency,
@@ -314,10 +314,16 @@ def rating_calculator(request):
     # Check for imported ratings from session (from rating analysis import)
     imported_ratings = request.session.pop("imported_ratings", None)
 
+    # The rates table and the year picker both follow the year actually in
+    # force. Both were pinned to 2024, so the page showed two-year-old dollar
+    # amounts under a "(Current)" label.
+    current_year = default_rate_year()
+
     context = {
-        "compensation_rates": VA_COMPENSATION_RATES_2024,
+        "compensation_rates": VA_COMPENSATION_RATES_BY_YEAR[current_year],
         "compensation_rates_by_year": VA_COMPENSATION_RATES_BY_YEAR,
         "available_rate_years": AVAILABLE_RATE_YEARS,
+        "current_rate_year": current_year,
         "saved_calculations": saved_calculations,
         "imported_ratings": json.dumps(imported_ratings) if imported_ratings else None,
     }
@@ -342,10 +348,10 @@ def calculate_rating_htmx(request):
         children = int(request.POST.get("children_under_18", 0))
         parents = int(request.POST.get("dependent_parents", 0))
 
-        # Parse rate year (default to 2024)
-        rate_year = int(request.POST.get("rate_year", 2024))
+        # Default to the rate year actually in force, not a hardcoded one.
+        rate_year = int(request.POST.get("rate_year", default_rate_year()))
         if rate_year not in AVAILABLE_RATE_YEARS:
-            rate_year = 2024
+            rate_year = default_rate_year()
 
         # Convert to DisabilityRating objects
         ratings = []
@@ -357,6 +363,7 @@ def calculate_rating_htmx(request):
                         percentage=percentage,
                         description=r.get("description", ""),
                         is_bilateral=r.get("is_bilateral", False),
+                        limb=r.get("limb", ""),
                     )
                 )
 
@@ -386,10 +393,18 @@ def calculate_rating_htmx(request):
             year=rate_year,
         )
 
+        # Human label for the limb, built here rather than in the template:
+        # "left_leg" needs an underscore→space swap, which Django's filters
+        # can't do without producing "Leftleg".
+        for row in ratings_data:
+            limb = row.get("limb") or ""
+            row["limb_label"] = limb.replace("_", " ").title() if limb else ""
+
         context = {
             "combined_raw": round(result.combined_raw, 2),
             "combined_rounded": result.combined_rounded,
             "bilateral_factor": round(result.bilateral_factor_applied, 2),
+            "bilateral_notes": result.bilateral_notes,
             "monthly_compensation": format_currency(monthly),
             "annual_compensation": format_currency(monthly * 12),
             "step_by_step": result.step_by_step,
@@ -421,10 +436,10 @@ def calculate_rating_json(request):
         children = int(request.POST.get("children_under_18", 0))
         parents = int(request.POST.get("dependent_parents", 0))
 
-        # Parse rate year (default to 2024)
-        rate_year = int(request.POST.get("rate_year", 2024))
+        # Default to the rate year actually in force, not a hardcoded one.
+        rate_year = int(request.POST.get("rate_year", default_rate_year()))
         if rate_year not in AVAILABLE_RATE_YEARS:
-            rate_year = 2024
+            rate_year = default_rate_year()
 
         # Convert to DisabilityRating objects
         ratings = []
@@ -436,6 +451,7 @@ def calculate_rating_json(request):
                         percentage=percentage,
                         description=r.get("description", ""),
                         is_bilateral=r.get("is_bilateral", False),
+                        limb=r.get("limb", ""),
                     )
                 )
 
@@ -469,6 +485,7 @@ def calculate_rating_json(request):
                 "combined_raw": round(result.combined_raw, 2),
                 "combined_rounded": result.combined_rounded,
                 "bilateral_factor": round(result.bilateral_factor_applied, 2),
+                "bilateral_notes": result.bilateral_notes,
                 "monthly_compensation": format_currency(monthly),
                 "annual_compensation": format_currency(monthly * 12),
                 "has_ratings": True,
@@ -906,8 +923,10 @@ def tdiu_calculator(request):
     TDIU (Total Disability Individual Unemployability) eligibility calculator.
     Accessible to all users.
     """
+    current_year = default_rate_year()
     context = {
-        "compensation_rates": VA_COMPENSATION_RATES_2024,
+        "compensation_rates": VA_COMPENSATION_RATES_BY_YEAR[current_year],
+        "current_rate_year": current_year,
     }
     return render(request, "examprep/tdiu_calculator.html", context)
 
@@ -946,6 +965,7 @@ def calculate_tdiu_htmx(request):
                     percentage=int(r.get("percentage", 0)),
                     description=r.get("description", ""),
                     is_bilateral=r.get("is_bilateral", False),
+                    limb=r.get("limb", ""),
                 )
             )
 
@@ -965,7 +985,11 @@ def calculate_tdiu_htmx(request):
             "qualifying_ratings": result.qualifying_ratings,
             "explanations": result.explanations,
             "recommendations": result.recommendations,
-            "monthly_at_100": format_currency(VA_COMPENSATION_RATES_2024.get(100, 0)),
+            # TDIU pays at the 100% rate, so this is the headline number a
+            # veteran takes away — it must be the current year's, not 2024's.
+            "monthly_at_100": format_currency(
+                VA_COMPENSATION_RATES_BY_YEAR[default_rate_year()].get(100, 0)
+            ),
         }
         return render(request, "examprep/partials/tdiu_result.html", context)
 
@@ -1107,6 +1131,7 @@ def export_rating_pdf(request):
                         percentage=percentage,
                         description=r.get("description", ""),
                         is_bilateral=r.get("is_bilateral", False),
+                        limb=r.get("limb", ""),
                     )
                 )
 
@@ -1173,6 +1198,7 @@ def export_saved_rating_pdf(request, pk):
                         percentage=percentage,
                         description=r.get("description", ""),
                         is_bilateral=r.get("is_bilateral", False),
+                        limb=r.get("limb", ""),
                     )
                 )
 
@@ -1243,6 +1269,7 @@ def share_calculation(request):
                         percentage=percentage,
                         description=r.get("description", ""),
                         is_bilateral=r.get("is_bilateral", False),
+                        limb=r.get("limb", ""),
                     )
                 )
 

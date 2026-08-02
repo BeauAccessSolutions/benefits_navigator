@@ -723,8 +723,18 @@ class TestAcceptInvitationAtomicity(TestCase):
         self.caseworker = User.objects.create_user(
             email="atomic_caseworker@example.com", password="TestPass123!"
         )
+        # Invitations can only be accepted by the invited, email-verified
+        # account (remediation 0.3). allauth's EmailAddress is the signal.
+        from allauth.account.models import EmailAddress
+
         self.veteran = User.objects.create_user(
             email="atomic_veteran@example.com", password="TestPass123!"
+        )
+        EmailAddress.objects.create(
+            user=self.veteran,
+            email=self.veteran.email,
+            verified=True,
+            primary=True,
         )
         self.invitation = OrganizationInvitation.objects.create(
             organization=self.org,
@@ -736,22 +746,25 @@ class TestAcceptInvitationAtomicity(TestCase):
             username="atomic_veteran@example.com", password="TestPass123!"
         )
 
-    def _seed_pending_case_session(self):
-        session = self.client.session
-        session[f"pending_case_{self.invitation.token}"] = {
+    def _seed_pending_case_payload(self):
+        # The payload lives on the invitation itself — NOT in a session. The
+        # old version of this helper seeded the accepting veteran's session,
+        # which masked that production stored the payload in the INVITER's
+        # session where accept_invitation could never read it.
+        self.invitation.case_payload = {
             "title": "Atomic Test Case",
             "description": "",
             "priority": "normal",
             "invited_by_id": self.caseworker.id,
         }
-        session.save()
+        self.invitation.save(update_fields=["case_payload"])
 
     def test_accept_creates_membership_case_and_note_together(self):
         """Happy path: invitation, case, and note are all created."""
         from accounts.models import OrganizationMembership
         from vso.models import VeteranCase, CaseNote
 
-        self._seed_pending_case_session()
+        self._seed_pending_case_payload()
         response = self.client.post(
             reverse("vso:accept_invitation", args=[self.invitation.token])
         )
@@ -778,7 +791,7 @@ class TestAcceptInvitationAtomicity(TestCase):
         from accounts.models import OrganizationMembership
         from vso.models import VeteranCase, CaseNote
 
-        self._seed_pending_case_session()
+        self._seed_pending_case_payload()
 
         with mock.patch(
             "vso.views.CaseNote.objects.create",
@@ -1155,3 +1168,512 @@ class TestMFAGraceEnd(TestCase):
         from vso.middleware import compute_mfa_grace_end
 
         self.assertIsNone(compute_mfa_grace_end(None, None, 7))
+
+
+# =============================================================================
+# INTRA-ORG AUTHORIZATION TESTS (Phase 1.1)
+# =============================================================================
+# A restricted caseworker must not be able to act on a COLLEAGUE'S case in the
+# same org by guessing/enumerating its id. This is INTRA-org isolation, distinct
+# from the cross-org IDOR fixed 2026-02-11 (see TestCrossOrgSecurity above).
+
+# Every case-by-pk endpoint, with the HTTP method that reaches the case lookup
+# and a builder for its URL args. Parameterizing over this list means a newly
+# added case endpoint that forgets get_scoped_case_or_404 will fail the negative
+# suite the moment its row is added here.
+INTRA_ORG_CASE_ENDPOINTS = [
+    ("vso:case_detail", "get", lambda case: [case.pk]),
+    ("vso:case_update_status", "post", lambda case: [case.pk]),
+    ("vso:case_archive", "post", lambda case: [case.pk]),
+    ("vso:add_case_note", "post", lambda case: [case.pk]),
+    ("vso:complete_action_item", "post", lambda case: [case.pk, 999999]),
+    ("vso:shared_document_review", "get", lambda case: [case.pk, 999999]),
+    ("vso:case_notes_partial", "get", lambda case: [case.pk]),
+    ("vso:case_documents_partial", "get", lambda case: [case.pk]),
+    ("vso:start_appeal", "post", lambda case: [case.pk]),
+    ("vso:evidence_packet", "get", lambda case: [case.pk]),
+]
+
+
+@pytest.mark.django_db
+class TestIntraOrgCaseworkerIsolation:
+    """
+    In an org with restrict_caseworker_visibility=True, a restricted caseworker
+    sees only cases assigned to them or unassigned. These tests prove that
+    least-privilege scoping is enforced on EVERY case-by-pk endpoint, not just
+    the list/detail views, closing the intra-org authorization gap.
+    """
+
+    @pytest.fixture(autouse=True)
+    def setup(self, db):
+        from vso.models import VeteranCase
+
+        self.org = Organization.objects.create(
+            name="Restricted Org",
+            slug="restricted-org",
+            org_type="vso",
+            restrict_caseworker_visibility=True,
+        )
+        self.worker_a = User.objects.create_user(
+            email="worker_a@example.com", password="TestPass123!"
+        )
+        self.worker_b = User.objects.create_user(
+            email="worker_b@example.com", password="TestPass123!"
+        )
+        self.veteran = User.objects.create_user(
+            email="vet_intra@example.com", password="TestPass123!"
+        )
+        for worker in (self.worker_a, self.worker_b):
+            OrganizationMembership.objects.create(
+                user=worker,
+                organization=self.org,
+                role="caseworker",
+                is_active=True,
+            )
+        # Case assigned to worker B. Worker A is a restricted, unassigned peer.
+        self.case_b = VeteranCase.objects.create(
+            organization=self.org,
+            veteran=self.veteran,
+            assigned_to=self.worker_b,
+            title="Worker B's case",
+            status="intake",
+        )
+
+    @pytest.mark.parametrize("url_name,method,args_fn", INTRA_ORG_CASE_ENDPOINTS)
+    def test_restricted_worker_cannot_reach_colleague_case(
+        self, client, url_name, method, args_fn
+    ):
+        """Worker A (restricted) is scoped out of Worker B's case everywhere."""
+        client.login(email="worker_a@example.com", password="TestPass123!")
+        url = reverse(url_name, args=args_fn(self.case_b))
+        response = getattr(client, method)(url)
+        # 404 = scoped out, indistinguishable from "does not exist". A redirect
+        # is only acceptable if it does NOT land back on the target case.
+        assert response.status_code in (
+            404,
+            302,
+        ), f"{url_name} returned {response.status_code}; expected 404 or 302"
+        if response.status_code == 302:
+            assert f"/{self.case_b.pk}/" not in response.url
+
+    def test_assigned_worker_can_reach_own_case(self, client):
+        """Regression: the ASSIGNED worker is not over-blocked by scoping."""
+        client.login(email="worker_b@example.com", password="TestPass123!")
+        url = reverse("vso:case_detail", args=[self.case_b.pk])
+        response = client.get(url)
+        assert response.status_code == 200
+
+    def test_admin_in_restricted_org_can_reach_any_case(self, client):
+        """Regression: admins bypass caseworker visibility restrictions."""
+        admin = User.objects.create_user(
+            email="admin_intra@example.com", password="TestPass123!"
+        )
+        OrganizationMembership.objects.create(
+            user=admin, organization=self.org, role="admin", is_active=True
+        )
+        client.login(email="admin_intra@example.com", password="TestPass123!")
+        response = client.get(reverse("vso:case_detail", args=[self.case_b.pk]))
+        assert response.status_code == 200
+
+    def test_unrestricted_org_worker_can_reach_colleague_case(self, client):
+        """Regression: without the flag, caseworkers see all org cases."""
+        from vso.models import VeteranCase
+
+        open_org = Organization.objects.create(
+            name="Open Org",
+            slug="open-org",
+            org_type="vso",
+            restrict_caseworker_visibility=False,
+        )
+        worker_c = User.objects.create_user(
+            email="worker_c@example.com", password="TestPass123!"
+        )
+        worker_d = User.objects.create_user(
+            email="worker_d@example.com", password="TestPass123!"
+        )
+        vet = User.objects.create_user(
+            email="vet_open@example.com", password="TestPass123!"
+        )
+        for worker in (worker_c, worker_d):
+            OrganizationMembership.objects.create(
+                user=worker, organization=open_org, role="caseworker", is_active=True
+            )
+        case_d = VeteranCase.objects.create(
+            organization=open_org,
+            veteran=vet,
+            assigned_to=worker_d,
+            title="Worker D's case",
+            status="intake",
+        )
+        client.login(email="worker_c@example.com", password="TestPass123!")
+        response = client.get(reverse("vso:case_detail", args=[case_d.pk]))
+        assert response.status_code == 200
+
+
+@pytest.mark.django_db
+class TestScopedCaseHelper:
+    """Unit tests for get_scoped_case_or_404 (the single sanctioned lookup)."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self, db):
+        from vso.models import VeteranCase
+
+        self.org = Organization.objects.create(
+            name="Helper Org",
+            slug="helper-org",
+            org_type="vso",
+            restrict_caseworker_visibility=True,
+        )
+        self.worker_a = User.objects.create_user(email="ha@example.com", password="x")
+        self.worker_b = User.objects.create_user(email="hb@example.com", password="x")
+        self.vet = User.objects.create_user(email="hv@example.com", password="x")
+        for worker in (self.worker_a, self.worker_b):
+            OrganizationMembership.objects.create(
+                user=worker, organization=self.org, role="caseworker", is_active=True
+            )
+        self.case_b = VeteranCase.objects.create(
+            organization=self.org,
+            veteran=self.vet,
+            assigned_to=self.worker_b,
+            title="B",
+            status="intake",
+        )
+        self.case_unassigned = VeteranCase.objects.create(
+            organization=self.org,
+            veteran=self.vet,
+            assigned_to=None,
+            title="Unassigned",
+            status="intake",
+        )
+
+    def test_restricted_worker_gets_404_for_colleague_case(self):
+        from django.http import Http404
+        from vso.permissions import get_scoped_case_or_404
+
+        with pytest.raises(Http404):
+            get_scoped_case_or_404(self.worker_a, self.org, self.case_b.pk)
+
+    def test_assigned_worker_gets_own_case(self):
+        from vso.permissions import get_scoped_case_or_404
+
+        case = get_scoped_case_or_404(self.worker_b, self.org, self.case_b.pk)
+        assert case.pk == self.case_b.pk
+
+    def test_restricted_worker_can_see_unassigned_case(self):
+        from vso.permissions import get_scoped_case_or_404
+
+        case = get_scoped_case_or_404(self.worker_a, self.org, self.case_unassigned.pk)
+        assert case.pk == self.case_unassigned.pk
+
+    def test_none_org_raises_404(self):
+        from django.http import Http404
+        from vso.permissions import get_scoped_case_or_404
+
+        with pytest.raises(Http404):
+            get_scoped_case_or_404(self.worker_a, None, self.case_b.pk)
+
+
+@pytest.mark.django_db
+def test_no_unscoped_case_by_pk_lookups_in_views():
+    """
+    Meta-test / tripwire: no VSO view may look a case up by pk through a raw,
+    org-only queryset. Every case-by-pk access MUST go through
+    get_scoped_case_or_404 (which applies scope_cases_for_member). This catches
+    future endpoints that reintroduce the intra-org authorization gap.
+    """
+    import ast
+    from pathlib import Path
+
+    import vso.views
+
+    source = Path(vso.views.__file__).read_text()
+    tree = ast.parse(source)
+
+    def leftmost_name(node):
+        while isinstance(node, (ast.Attribute, ast.Call, ast.Subscript)):
+            if isinstance(node, ast.Call):
+                node = node.func
+            else:
+                node = node.value
+        return node.id if isinstance(node, ast.Name) else None
+
+    offenders = []
+    for call in ast.walk(tree):
+        if not isinstance(call, ast.Call):
+            continue
+        func = call.func
+        fname = (
+            func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
+        )
+        # get_object_or_404(VeteranCase..., pk=...) — bare model / manager lookup
+        if fname == "get_object_or_404" and call.args:
+            if leftmost_name(call.args[0]) == "VeteranCase":
+                offenders.append(("get_object_or_404", call.lineno))
+        # VeteranCase.objects...filter/get(pk=... / pk__in=...) not via scope
+        if fname in {"filter", "get"} and leftmost_name(func) == "VeteranCase":
+            kwargs = {kw.arg for kw in call.keywords}
+            if "pk" in kwargs or "pk__in" in kwargs:
+                offenders.append((fname, call.lineno))
+
+    assert not offenders, (
+        "Unscoped case-by-pk lookups found in vso/views.py "
+        f"(route them through get_scoped_case_or_404): {offenders}"
+    )
+
+
+# =============================================================================
+# POSITIVE-PATH RENDER TESTS (2026-08-02 experience audit, P0-5/P0-6)
+# =============================================================================
+# The endpoints below all 500'd in production while the negative-path suite
+# (404/302 assertions above) stayed green. These tests exercise the HAPPY path
+# for each one: a properly scoped staffer with real data must get a 200/302,
+# not a crash.
+
+
+class VSOPositivePathBase(TestCase):
+    """Shared fixture: an org, a caseworker, a veteran, and a populated case."""
+
+    def setUp(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from claims.models import Document
+        from vso.models import VeteranCase, CaseNote, SharedDocument, CaseCondition
+
+        self.org = Organization.objects.create(
+            name="Happy Path VSO",
+            slug="happy-path-vso",
+            org_type="vso",
+        )
+        self.worker = User.objects.create_user(
+            email="happy_worker@example.com", password="TestPass123!"
+        )
+        OrganizationMembership.objects.create(
+            user=self.worker,
+            organization=self.org,
+            role="caseworker",
+            is_active=True,
+        )
+        self.veteran = User.objects.create_user(
+            email="happy_vet@example.com", password="TestPass123!"
+        )
+        self.case = VeteranCase.objects.create(
+            organization=self.org,
+            veteran=self.veteran,
+            assigned_to=self.worker,
+            title="Happy Path Case",
+            status="active",
+        )
+        self.note = CaseNote.objects.create(
+            case=self.case,
+            author=self.worker,
+            note_type="general",
+            subject="First contact",
+            content="Spoke with veteran about the claim.",
+        )
+        self.document = Document.objects.create(
+            user=self.veteran,
+            file=SimpleUploadedFile(
+                "dd214.pdf", b"%PDF-1.4 test", content_type="application/pdf"
+            ),
+            file_name="dd214.pdf",
+            file_size=13,
+            mime_type="application/pdf",
+            document_type="dd214",
+            status="completed",
+        )
+        self.shared_doc = SharedDocument.objects.create(
+            case=self.case,
+            document=self.document,
+            shared_by=self.veteran,
+        )
+        self.condition = CaseCondition.objects.create(
+            case=self.case,
+            condition_name="PTSD",
+            diagnostic_code="9411",
+            has_diagnosis=True,
+        )
+        self.client.login(email="happy_worker@example.com", password="TestPass123!")
+
+
+class TestVSOEndpointHappyPaths(VSOPositivePathBase):
+    def test_evidence_packet_builder_renders(self):
+        """Regression: crashed on SharedDocument.REVIEW_STATUS_CHOICES and
+        nonexistent document.title/.uploaded_at/sd.vso_notes/sd.review_status."""
+        response = self.client.get(reverse("vso:evidence_packet", args=[self.case.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "dd214.pdf")
+        self.assertContains(response, "PTSD")
+
+    def test_case_notes_partial_renders(self):
+        """Regression: vso/partials/case_notes.html did not exist."""
+        response = self.client.get(
+            reverse("vso:case_notes_partial", args=[self.case.pk])
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "First contact")
+
+    def test_case_documents_partial_renders(self):
+        """Regression: vso/partials/case_documents.html did not exist."""
+        response = self.client.get(
+            reverse("vso:case_documents_partial", args=[self.case.pk])
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "dd214.pdf")
+
+    def test_case_detail_still_renders_with_partials(self):
+        """case_detail now includes the partials — must still render whole."""
+        response = self.client.get(reverse("vso:case_detail", args=[self.case.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "First contact")
+        self.assertContains(response, "dd214.pdf")
+
+    def test_start_appeal_from_denied_case(self):
+        """Regression: called .all()/.exists() on the case.conditions JSON
+        field; the tracked-condition relation is case.case_conditions."""
+        from appeals.models import Appeal
+
+        self.case.status = "closed_denied"
+        self.case.save(update_fields=["status"])
+
+        response = self.client.post(reverse("vso:start_appeal", args=[self.case.pk]))
+        appeal = Appeal.objects.get(veteran_case=self.case)
+        self.assertRedirects(
+            response,
+            reverse("appeals:appeal_detail", args=[appeal.pk]),
+            fetch_redirect_response=False,
+        )
+        self.assertEqual(appeal.user, self.veteran)
+        self.assertIn("PTSD", appeal.conditions_appealed)
+        self.case.refresh_from_db()
+        self.assertEqual(self.case.status, "appeal_in_progress")
+
+    def test_invite_veteran_with_existing_open_case_warns(self):
+        """Regression: VeteranCase had no get_absolute_url, so warning about
+        an existing case crashed instead of redirecting."""
+        response = self.client.post(
+            reverse("vso:invite_veteran"),
+            {"email": self.veteran.email},
+        )
+        self.assertRedirects(
+            response, reverse("vso:invitations"), fetch_redirect_response=False
+        )
+        from accounts.models import OrganizationInvitation
+
+        self.assertFalse(
+            OrganizationInvitation.objects.filter(
+                organization=self.org, email=self.veteran.email
+            ).exists()
+        )
+
+
+class TestCaseListOrdering(VSOPositivePathBase):
+    def test_bogus_order_by_returns_200(self):
+        """Regression: raw ?order_by= reached .order_by() → FieldError 500."""
+        response = self.client.get(reverse("vso:case_list"), {"order_by": "hax"})
+        self.assertEqual(response.status_code, 200)
+
+    def test_related_field_order_by_is_rejected(self):
+        """Related-field ordering was a field-value oracle; must be ignored."""
+        response = self.client.get(
+            reverse("vso:case_list"), {"order_by": "veteran__va_file_number"}
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_allowlisted_order_by_still_works(self):
+        response = self.client.get(reverse("vso:case_list"), {"order_by": "-priority"})
+        self.assertEqual(response.status_code, 200)
+
+
+class TestInvitationCasePayloadFlow(TestCase):
+    """
+    End-to-end regression for the pending-case handoff: the inviting staffer
+    and the accepting veteran use SEPARATE sessions, exactly like production.
+    The old implementation stored the case details in the staffer's session,
+    so the promised case + milestone note were never created.
+    """
+
+    def setUp(self):
+        from allauth.account.models import EmailAddress
+
+        self.org = Organization.objects.create(
+            name="Payload Flow VSO",
+            slug="payload-flow-vso",
+            org_type="vso",
+        )
+        self.worker = User.objects.create_user(
+            email="flow_worker@example.com", password="TestPass123!"
+        )
+        OrganizationMembership.objects.create(
+            user=self.worker,
+            organization=self.org,
+            role="caseworker",
+            is_active=True,
+        )
+        self.veteran = User.objects.create_user(
+            email="flow_vet@example.com", password="TestPass123!"
+        )
+        EmailAddress.objects.create(
+            user=self.veteran,
+            email=self.veteran.email,
+            verified=True,
+            primary=True,
+        )
+
+    def test_invite_then_accept_creates_case_across_sessions(self):
+        from django.test import Client
+        from accounts.models import OrganizationInvitation
+        from vso.models import VeteranCase, CaseNote
+
+        staffer_client = Client()
+        staffer_client.login(email="flow_worker@example.com", password="TestPass123!")
+        response = staffer_client.post(
+            reverse("vso:invite_veteran"),
+            {
+                "email": self.veteran.email,
+                "case_title": "PTSD increase",
+                "case_description": "Rating increase 50 -> 70",
+                "priority": "high",
+            },
+        )
+        self.assertRedirects(
+            response, reverse("vso:invitations"), fetch_redirect_response=False
+        )
+
+        invitation = OrganizationInvitation.objects.get(
+            organization=self.org, email=self.veteran.email
+        )
+        # Payload must survive on the invitation itself, not in any session.
+        self.assertEqual(invitation.case_payload["title"], "PTSD increase")
+        self.assertEqual(invitation.case_payload["invited_by_id"], self.worker.id)
+
+        veteran_client = Client()
+        veteran_client.login(email="flow_vet@example.com", password="TestPass123!")
+        response = veteran_client.post(
+            reverse("vso:accept_invitation", args=[invitation.token])
+        )
+        self.assertEqual(response.status_code, 302)
+
+        case = VeteranCase.objects.get(organization=self.org, veteran=self.veteran)
+        self.assertEqual(case.title, "PTSD increase")
+        self.assertEqual(case.priority, "high")
+        self.assertEqual(case.assigned_to, self.worker)
+        self.assertTrue(
+            CaseNote.objects.filter(case=case, note_type="milestone").exists()
+        )
+        invitation.refresh_from_db()
+        self.assertIsNotNone(invitation.accepted_at)
+        # PII payload is cleared once consumed.
+        self.assertIsNone(invitation.case_payload)
+
+    def test_invite_without_case_title_stores_no_payload(self):
+        from django.test import Client
+        from accounts.models import OrganizationInvitation
+
+        staffer_client = Client()
+        staffer_client.login(email="flow_worker@example.com", password="TestPass123!")
+        staffer_client.post(
+            reverse("vso:invite_veteran"), {"email": self.veteran.email}
+        )
+        invitation = OrganizationInvitation.objects.get(
+            organization=self.org, email=self.veteran.email
+        )
+        self.assertIsNone(invitation.case_payload)

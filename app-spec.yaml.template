@@ -42,13 +42,22 @@ envs:
   - key: PILOT_DATA_RETENTION_DAYS
     value: "30"
 
+# deploy_on_push is FALSE on every component, deliberately.
+#
+# It used to be true, and nothing consulted CI: commit a6d8f98 shipped to
+# production with `Tests: failure`. There was no gate to bypass, because there
+# was no gate. Deploys now go through .github/workflows/deploy.yml, which
+# refuses unless every check on the merge commit is green.
+#
+# Turning this back on re-opens that hole. If you need a manual deploy, run the
+# Deploy workflow by hand (workflow_dispatch) — it still enforces the checks.
 services:
   # Django Web Application
   - name: web
     github:
       repo: Beaudoin0zach/benefits_navigator
       branch: main
-      deploy_on_push: true
+      deploy_on_push: false
     dockerfile_path: Dockerfile.prod
     instance_count: 1
     instance_size_slug: basic-xxs
@@ -81,11 +90,55 @@ workers:
     github:
       repo: Beaudoin0zach/benefits_navigator
       branch: main
-      deploy_on_push: true
+      deploy_on_push: false
     dockerfile_path: Dockerfile.prod
     instance_count: 1
     instance_size_slug: basic-xxs
     run_command: celery -A benefits_navigator worker -l info --concurrency=2
+    envs:
+      - key: DJANGO_SETTINGS_MODULE
+        value: "benefits_navigator.settings"
+      - key: DEBUG
+        value: "False"
+      - key: STAGING
+        value: "True"
+      - key: ALLOWED_HOSTS
+        value: "CHANGE_ME"
+      - key: SECRET_KEY
+        value: "CHANGE_ME"
+      - key: DATABASE_URL
+        value: "CHANGE_ME"
+      - key: REDIS_URL
+        value: "CHANGE_ME"
+      - key: CELERY_BROKER_URL
+        value: "CHANGE_ME"
+      - key: ANTHROPIC_API_KEY
+        value: "CHANGE_ME"
+      - key: FIELD_ENCRYPTION_KEY
+        value: "CHANGE_ME"
+
+  # Celery Beat (periodic task scheduler)
+  #
+  # REQUIRED. Without this component nothing in CELERY_BEAT_SCHEDULE ever runs:
+  # no account purges (the app promises deletion within 30 days), no pilot data
+  # retention, no reminder emails, no health metrics. The worker above does NOT
+  # start Beat — its run_command has no -B, and adding -B there is the wrong fix
+  # because it would double-fire every task the moment the worker scales past
+  # one instance.
+  #
+  # instance_count MUST stay 1. Two schedulers means two of everything:
+  # duplicate reminder emails to veterans, two retention passes, two purge runs.
+  - name: beat
+    github:
+      repo: Beaudoin0zach/benefits_navigator
+      branch: main
+      deploy_on_push: false
+    dockerfile_path: Dockerfile.prod
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    # --scheduler is explicit rather than relying on CELERY_BEAT_SCHEDULER, so
+    # the component is self-describing when read in the DO console.
+    run_command: celery -A benefits_navigator beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
     envs:
       - key: DJANGO_SETTINGS_MODULE
         value: "benefits_navigator.settings"
@@ -114,7 +167,7 @@ jobs:
     github:
       repo: Beaudoin0zach/benefits_navigator
       branch: main
-      deploy_on_push: true
+      deploy_on_push: false
     dockerfile_path: Dockerfile.prod
     kind: PRE_DEPLOY
     instance_count: 1

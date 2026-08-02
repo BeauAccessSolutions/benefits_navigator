@@ -31,7 +31,8 @@
                             but you're logged in as <strong>{{ request.user.email }}</strong>.
                         </p>
                         <p class="text-yellow-700 text-sm mt-2">
-                            You can either log in with the correct account, or accept the invitation with your current account.
+                            For your security, this invitation can only be accepted from the
+                            invited account. Please log in as <strong>{{ invitation.email }}</strong> to continue.
                         </p>
                     </div>
                 </div>
@@ -69,6 +70,16 @@
                 </dl>
             </div>
 
+            {% if email_mismatch %}
+            <!-- Bound to the invited address: offer to switch accounts only. -->
+            <a href="{% url 'account_logout' %}?next={{ request.path }}"
+               class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded transition inline-flex items-center justify-center">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14"/>
+                </svg>
+                Log in as {{ invitation.email }}
+            </a>
+            {% else %}
             <!-- Accept form -->
             <form method="post">
                 {% csrf_token %}
@@ -78,20 +89,9 @@
                     <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
                     </svg>
-                    {% if email_mismatch %}
-                    Accept as {{ request.user.email }}
-                    {% else %}
                     Accept Invitation
-                    {% endif %}
                 </button>
             </form>
-
-            {% if email_mismatch %}
-            <div class="mt-4 text-center">
-                <a href="{% url 'account_logout' %}?next={{ request.path }}" class="text-blue-600 hover:underline text-sm">
-                    Log in with a different account
-                </a>
-            </div>
             {% endif %}
 
             <div class="mt-6 pt-6 border-t border-gray-200 text-center">

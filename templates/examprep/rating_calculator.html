@@ -80,15 +80,15 @@
                     <select id="rate-year" onchange="calculate()"
                             class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
                         {% for year in available_rate_years %}
-                        <option value="{{ year }}" {% if year == 2024 %}selected{% endif %}>
-                            {{ year }} Rates{% if year == 2024 %} (Current){% endif %}
+                        <option value="{{ year }}" {% if year == current_rate_year %}selected{% endif %}>
+                            {{ year }} Rates{% if year == current_rate_year %} (Current){% endif %}
                         </option>
                         {% endfor %}
                     </select>
                     <p class="text-xs text-gray-500 mt-1">
                         Select a year to see historical compensation amounts.
                         <span id="dependent-rate-note" class="hidden text-amber-600">
-                            Note: Dependent additions only available for 2024 rates.
+                            Note: Dependent additions are only available for 2024 and later.
                         </span>
                     </p>
                 </div>
@@ -165,10 +165,10 @@
                 </div>
             </div>
 
-            <!-- 2024 Compensation Table -->
+            <!-- Current-year compensation table -->
             <div class="mt-4 bg-white shadow-md rounded-lg p-6">
-                <h3 class="font-bold text-gray-900 mb-3">2024 VA Compensation Rates</h3>
-                <p class="text-xs text-gray-500 mb-3">Monthly rates for veterans without dependents (effective Dec 1, 2023)</p>
+                <h3 class="font-bold text-gray-900 mb-3">{{ current_rate_year }} VA Compensation Rates</h3>
+                <p class="text-xs text-gray-500 mb-3">Monthly rates for veterans without dependents (effective Dec 1, {{ current_rate_year|add:"-1" }})</p>
                 <div class="grid grid-cols-2 gap-2 text-sm">
                     {% for rating, amount in compensation_rates.items %}
                     <div class="flex justify-between px-2 py-1 {% if forloop.counter|divisibleby:2 %}bg-gray-50{% endif %} rounded">
@@ -252,7 +252,17 @@ let ratingCount = 0;
 // Rating percentages for dropdown
 const ratingOptions = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
 
-function addRating(percentage = '', description = '', isBilateral = false) {
+// `limb` supersedes the old `isBilateral` boolean: the bilateral factor needs
+// to know WHICH limb, not just that one was involved (38 CFR § 4.26 requires a
+// compensable disability in both members of a pair). Saved calculations from
+// before this change carry only the boolean, so it is still accepted and maps
+// to "some limb, side unknown".
+function addRating(percentage = '', description = '', isBilateral = false, limb = '') {
+    // A saved row from before `limb` existed carries only the boolean and its
+    // side is unrecoverable. Keep the flag on a hidden input so the backend can
+    // still apply its legacy (pairing-unverified) rule instead of silently
+    // dropping a factor the user previously saw.
+    const legacyBilateral = isBilateral && !limb;
     ratingCount++;
     const container = document.getElementById('ratings-container');
 
@@ -271,12 +281,16 @@ function addRating(percentage = '', description = '', isBilateral = false) {
                onchange="calculate()"
                class="flex-1 min-w-[150px] px-3 py-2 border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500"
                aria-label="Condition description">
-        <label class="flex items-center whitespace-nowrap">
-            <input type="checkbox" name="bilateral" ${isBilateral ? 'checked' : ''} onchange="calculate()"
-                   class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                   aria-label="Bilateral condition">
-            <span class="ml-1 text-sm text-gray-600" title="Check if affects both arms, both legs, or paired body parts">Bilateral</span>
-        </label>
+        <input type="hidden" name="legacy_bilateral" value="${legacyBilateral ? '1' : ''}">
+        <select name="limb" onchange="calculate()"
+                class="w-32 px-2 py-2 border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500 text-sm"
+                aria-label="Which limb this condition affects, for the bilateral factor">
+            <option value="" ${!limb ? 'selected' : ''}>Not a limb</option>
+            <option value="left_arm" ${limb === 'left_arm' ? 'selected' : ''}>Left arm</option>
+            <option value="right_arm" ${limb === 'right_arm' ? 'selected' : ''}>Right arm</option>
+            <option value="left_leg" ${limb === 'left_leg' ? 'selected' : ''}>Left leg</option>
+            <option value="right_leg" ${limb === 'right_leg' ? 'selected' : ''}>Right leg</option>
+        </select>
         <button type="button" onclick="removeRating(${ratingCount})"
                 class="p-2 text-red-600 hover:bg-red-100 rounded"
                 aria-label="Remove this rating">
@@ -302,13 +316,17 @@ function getRatingsData() {
     document.querySelectorAll('.rating-row').forEach(row => {
         const percentage = row.querySelector('select[name="percentage"]').value;
         const description = row.querySelector('input[name="description"]').value;
-        const isBilateral = row.querySelector('input[name="bilateral"]').checked;
+        const limb = row.querySelector('select[name="limb"]').value;
+        const legacyBilateral = !!row.querySelector('input[name="legacy_bilateral"]').value;
 
         if (percentage) {
             ratings.push({
                 percentage: parseInt(percentage),
                 description: description,
-                is_bilateral: isBilateral
+                limb: limb,
+                // Still sent so the backend can tell "this is a limb" from
+                // "this is not"; the limb value is what decides pairing.
+                is_bilateral: !!limb || legacyBilateral
             });
         }
     });
@@ -322,10 +340,11 @@ function calculate() {
     const parents = document.getElementById('parents').value;
     const rateYear = document.getElementById('rate-year').value;
 
-    // Show/hide dependent rate note based on year selection
+    // Show/hide dependent rate note based on year selection. Dependent tables
+    // exist from 2024 on; earlier years apply base rates only.
     const dependentNote = document.getElementById('dependent-rate-note');
     if (dependentNote) {
-        if (rateYear !== '2024') {
+        if (parseInt(rateYear, 10) < 2024) {
             dependentNote.classList.remove('hidden');
         } else {
             dependentNote.classList.add('hidden');
@@ -407,7 +426,7 @@ function loadCalculation(id) {
 
         // Add each rating
         data.ratings.forEach(r => {
-            addRating(r.percentage, r.description, r.is_bilateral);
+            addRating(r.percentage, r.description, r.is_bilateral, r.limb || "");
         });
 
         // Set dependents
@@ -431,7 +450,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (importedRatings && importedRatings.length > 0) {
         // Add each imported rating
         importedRatings.forEach(r => {
-            addRating(r.percentage, r.description, r.is_bilateral);
+            addRating(r.percentage, r.description, r.is_bilateral, r.limb || "");
         });
         // Calculate immediately to show results
         calculate();
@@ -463,7 +482,7 @@ function addScenario() {
     const hasSpouse = document.getElementById('has-spouse').checked;
     const children = parseInt(document.getElementById('children').value) || 0;
     const parents = parseInt(document.getElementById('parents').value) || 0;
-    const rateYear = parseInt(document.getElementById('rate-year').value) || 2024;
+    const rateYear = parseInt(document.getElementById('rate-year').value) || {{ current_rate_year }};
 
     const scenario = {
         id: scenarioCount,
@@ -529,7 +548,7 @@ function loadScenarioToCalculator(id) {
 
     // Add each rating from the scenario
     scenario.ratings.forEach(r => {
-        addRating(r.percentage, r.description, r.is_bilateral);
+        addRating(r.percentage, r.description, r.is_bilateral, r.limb || "");
     });
 
     // Set dependents

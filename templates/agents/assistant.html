@@ -28,8 +28,10 @@
 {% endblock %}
 
 {% block content %}
-{# Endpoints ride on data-* so static/js/assistant.js needs no template rendering
-   and the page can ship with no inline <script>. #}
+{% comment %}
+   Endpoints ride on data-* so static/js/assistant.js needs no template rendering
+   and the page can ship with no inline <script>.
+{% endcomment %}
 <div id="assistant-app" class="max-w-3xl mx-auto flex flex-col" style="min-height: 60vh;"
      data-stream-url="{% url 'agents:assistant_stream' %}"
      data-stop-url="{% url 'agents:assistant_stop' %}">
@@ -112,7 +114,9 @@
 {% endblock %}
 
 {% block extra_js %}
-{# Extracted to static/js/assistant.js: unit-tested in tests/js/, and no inline
-   <script> means one less reason to need 'unsafe-inline' in the CSP. #}
+{% comment %}
+   Extracted to static/js/assistant.js: unit-tested in tests/js/, and no inline
+   <script> means one less reason to need 'unsafe-inline' in the CSP.
+{% endcomment %}
 <script src="{% static 'js/assistant.js' %}" defer></script>
 {% endblock %}

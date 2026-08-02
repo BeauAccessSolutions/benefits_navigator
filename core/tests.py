@@ -2000,6 +2000,7 @@ class TestCheckCeleryHealthLogsRedisFailure(TestCase):
             any("queue length" in message.lower() for message in logs.output)
         )
 
+
 # =============================================================================
 # IDLE SESSION TIMEOUT MIDDLEWARE TESTS (HIPAA automatic logoff)
 # =============================================================================
@@ -2073,6 +2074,7 @@ class TestIdleSessionTimeoutMiddleware:
         """Unauthenticated requests pass through the middleware untouched."""
         assert client.get(reverse("home")).status_code == 200
 
+
 # =============================================================================
 # REDIS TLS OPTIONS HELPER TESTS (HIPAA §164.312(e) transmission security)
 # =============================================================================
@@ -2112,3 +2114,244 @@ class TestRedisSSLOptions(TestCase):
         self.assertNotIn("ssl_ca_certs", redis_ssl_options("required"))
         opts = redis_ssl_options("required", "/etc/ssl/do-valkey-ca.crt")
         self.assertEqual(opts["ssl_ca_certs"], "/etc/ssl/do-valkey-ca.crt")
+
+
+# =============================================================================
+# STORAGE CONFIGURATION TESTS (Django >= 5.1 STORAGES)
+# =============================================================================
+
+
+class TestStorageConfiguration(TestCase):
+    """
+    Django >= 5.1 REMOVED DEFAULT_FILE_STORAGE / STATICFILES_STORAGE. They are
+    silently ignored, so the backends must be declared via STORAGES or the
+    configured storage never takes effect — which is exactly why USE_S3=True
+    still wrote veteran documents to the local filesystem.
+    """
+
+    def test_storages_setting_is_defined(self):
+        from django.conf import settings
+
+        self.assertIn("default", settings.STORAGES)
+        self.assertIn("staticfiles", settings.STORAGES)
+
+    def test_legacy_storage_settings_are_not_reintroduced(self):
+        """
+        Guard: these names are dead on Django >= 5.1. If someone re-adds them,
+        the storage they name will be silently ignored again.
+        """
+        from django.conf import settings
+
+        for dead in ("DEFAULT_FILE_STORAGE", "STATICFILES_STORAGE"):
+            self.assertFalse(
+                hasattr(settings, dead),
+                f"{dead} is removed in Django >=5.1 and is silently ignored; "
+                "configure the backend in STORAGES instead.",
+            )
+
+    def test_default_storage_is_filesystem_without_s3(self):
+        from django.core.files.storage import storages
+
+        self.assertEqual(type(storages["default"]).__name__, "FileSystemStorage")
+
+    def test_staticfiles_uses_whitenoise_manifest_storage_when_deployed(self):
+        """
+        Whitenoise's compressed-manifest storage must be what deployed
+        environments serve.
+
+        It cannot be the *active* backend under the test runner: it resolves
+        {% static %} through a manifest that `collectstatic` writes, and neither
+        pytest nor runserver writes one. Asserting it was active here is what
+        took the suite down — every page render raised "Missing staticfiles
+        manifest entry". So assert the deployed half of the selection instead.
+        """
+        from django.conf import settings
+
+        self.assertEqual(
+            settings.MANIFEST_STATICFILES_BACKEND,
+            "whitenoise.storage.CompressedManifestStaticFilesStorage",
+        )
+
+    def test_test_runs_fall_back_to_manifest_free_storage(self):
+        """The other half: tests must not require a collectstatic manifest."""
+        from django.conf import settings
+
+        self.assertTrue(settings.TESTING)
+        self.assertEqual(
+            settings.STORAGES["staticfiles"]["BACKEND"],
+            settings.LOCAL_STATICFILES_BACKEND,
+        )
+
+
+# =============================================================================
+# STORAGE-AGNOSTIC FILE ACCESS TESTS
+# =============================================================================
+
+
+class _FakeRemoteFieldFile:
+    """
+    Mimics a FieldFile on a backend with no local paths (S3/Spaces), where
+    ``.path`` raises NotImplementedError.
+    """
+
+    def __init__(self, name, content):
+        self.name = name
+        self._content = content
+        self._buf = None
+
+    @property
+    def path(self):
+        raise NotImplementedError("This backend doesn't support absolute paths.")
+
+    def open(self, mode="rb"):
+        import io
+
+        self._buf = io.BytesIO(self._content)
+        return self._buf
+
+    def read(self, size=-1):
+        return self._buf.read(size)
+
+    def close(self):
+        if self._buf:
+            self._buf.close()
+
+
+class TestFileAccessHelpers(TestCase):
+    """
+    FieldFile.path raises on remote storage, so path-only tools (Tesseract OCR)
+    need a temp copy and serving code must stream through the backend.
+    """
+
+    def test_local_path_or_none_returns_none_without_local_path(self):
+        from core.file_access import local_path_or_none
+
+        remote = _FakeRemoteFieldFile("documents/x.pdf", b"data")
+        self.assertIsNone(local_path_or_none(remote))
+
+    def test_as_local_path_materializes_remote_file(self):
+        """A remote file is downloaded to a real path with intact contents."""
+        import os
+        from core.file_access import as_local_path
+
+        remote = _FakeRemoteFieldFile("documents/scan.pdf", b"%PDF-1.4 remote bytes")
+
+        with as_local_path(remote) as path:
+            self.assertTrue(os.path.exists(path))
+            self.assertTrue(path.endswith(".pdf"))  # suffix preserved for OCR
+            with open(path, "rb") as fh:
+                self.assertEqual(fh.read(), b"%PDF-1.4 remote bytes")
+            captured = path
+
+        # Temp copy must not leak.
+        self.assertFalse(os.path.exists(captured))
+
+    def test_as_local_path_cleans_up_on_exception(self):
+        import os
+        from core.file_access import as_local_path
+
+        remote = _FakeRemoteFieldFile("documents/scan.pdf", b"bytes")
+        captured = None
+        with self.assertRaises(RuntimeError):
+            with as_local_path(remote) as path:
+                captured = path
+                raise RuntimeError("boom")
+        self.assertIsNotNone(captured)
+        self.assertFalse(os.path.exists(captured))
+
+    def test_as_local_path_uses_real_path_for_local_storage(self):
+        """Local storage yields the real path — no copy is made."""
+        import os
+        import tempfile
+        from core.file_access import as_local_path
+
+        class _LocalFieldFile:
+            def __init__(self, p):
+                self.name = "documents/local.pdf"
+                self.path = p
+
+        with tempfile.NamedTemporaryFile(suffix=".pdf") as real:
+            real.write(b"local")
+            real.flush()
+            with as_local_path(_LocalFieldFile(real.name)) as path:
+                self.assertEqual(path, real.name)
+            # The real file is untouched by the helper.
+            self.assertTrue(os.path.exists(real.name))
+
+
+# =============================================================================
+# RESPONSIVE NAVIGATION TESTS
+# =============================================================================
+# The header nav overflowed on mobile (no hamburger). It now renders a desktop
+# bar plus a CSS-only <details> hamburger for mobile, sharing one links partial.
+
+
+@pytest.mark.django_db
+class TestResponsiveNav:
+    """base.html renders both a desktop nav and a mobile <details> hamburger."""
+
+    def test_home_renders_desktop_and_mobile_nav(self, client):
+        html = client.get(reverse("home")).content.decode()
+        # Desktop bar + mobile dropdown are distinct <nav> landmarks.
+        assert 'aria-label="Main navigation"' in html
+        assert 'aria-label="Mobile navigation"' in html
+        # The CSS-only hamburger toggle.
+        assert "<details" in html
+        assert "Toggle navigation menu" in html
+        # Links render in BOTH navs (shared partial included twice).
+        assert html.count('href="/claims/"') >= 2
+        assert html.count('href="/appeals/"') >= 2
+
+    def test_nav_partial_comment_not_leaked(self, client):
+        """
+        Regression: the links partial used a multi-line {# #} comment, which
+        Django only treats as a comment on its first line — the rest rendered
+        as visible text in the header. Guard against that class of bug.
+        """
+        html = client.get(reverse("home")).content.decode()
+        assert "flex row or a flex column" not in html
+        assert "Shared main-navigation links" not in html
+
+    def test_authenticated_nav_shows_member_links(self, authenticated_client):
+        """Logged-in users see Dashboard/Logout in both desktop and mobile navs."""
+        html = authenticated_client.get(reverse("home")).content.decode()
+        assert html.count('href="/dashboard/"') >= 2
+        assert html.count('href="/accounts/logout/"') >= 2
+
+    def test_bar_and_hamburger_swap_at_xl(self, client):
+        """
+        The breakpoint must be xl, and both halves must use the same one.
+
+        Signed in with the VSO badge the bar needs ~960px beside a 250px logo.
+        At md (768px) the bar was shown anyway and the page overflowed
+        horizontally — "VSO Portal" clipped, "Logout" off-screen — which is the
+        bug the hamburger exists to fix. lg (1024px) is still too narrow.
+
+        Mismatched halves are the other failure: at any width where both
+        `hidden <bp>:block` and `<bp>:hidden` are false the user gets no nav at
+        all, and where both are true they get two.
+        """
+        html = client.get(reverse("home")).content.decode()
+
+        assert 'class="hidden xl:block"' in html, "desktop bar must appear at xl"
+        assert 'class="xl:hidden"' in html, "hamburger must hide at xl"
+        for too_narrow in (
+            "hidden md:block",
+            "hidden lg:block",
+            "md:hidden",
+            "lg:hidden",
+        ):
+            assert (
+                too_narrow not in html
+            ), f"{too_narrow!r} puts the full nav in a viewport it does not fit"
+
+    def test_nav_links_are_touch_sized_and_do_not_wrap(self, client):
+        """
+        Without min-h-[44px] the dropdown's rows were 40px. Without
+        whitespace-nowrap the desktop bar does not overflow — it wraps
+        "C&P Exam Prep" onto three ragged lines, which reads as broken.
+        """
+        html = client.get(reverse("home")).content.decode()
+
+        assert "min-h-[44px]" in html
+        assert "whitespace-nowrap" in html
