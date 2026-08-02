@@ -1491,18 +1491,14 @@ class VSOPositivePathBase(TestCase):
             diagnostic_code="9411",
             has_diagnosis=True,
         )
-        self.client.login(
-            email="happy_worker@example.com", password="TestPass123!"
-        )
+        self.client.login(email="happy_worker@example.com", password="TestPass123!")
 
 
 class TestVSOEndpointHappyPaths(VSOPositivePathBase):
     def test_evidence_packet_builder_renders(self):
         """Regression: crashed on SharedDocument.REVIEW_STATUS_CHOICES and
         nonexistent document.title/.uploaded_at/sd.vso_notes/sd.review_status."""
-        response = self.client.get(
-            reverse("vso:evidence_packet", args=[self.case.pk])
-        )
+        response = self.client.get(reverse("vso:evidence_packet", args=[self.case.pk]))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "dd214.pdf")
         self.assertContains(response, "PTSD")
@@ -1525,9 +1521,7 @@ class TestVSOEndpointHappyPaths(VSOPositivePathBase):
 
     def test_case_detail_still_renders_with_partials(self):
         """case_detail now includes the partials — must still render whole."""
-        response = self.client.get(
-            reverse("vso:case_detail", args=[self.case.pk])
-        )
+        response = self.client.get(reverse("vso:case_detail", args=[self.case.pk]))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "First contact")
         self.assertContains(response, "dd214.pdf")
@@ -1540,9 +1534,7 @@ class TestVSOEndpointHappyPaths(VSOPositivePathBase):
         self.case.status = "closed_denied"
         self.case.save(update_fields=["status"])
 
-        response = self.client.post(
-            reverse("vso:start_appeal", args=[self.case.pk])
-        )
+        response = self.client.post(reverse("vso:start_appeal", args=[self.case.pk]))
         appeal = Appeal.objects.get(veteran_case=self.case)
         self.assertRedirects(
             response,
@@ -1587,9 +1579,7 @@ class TestCaseListOrdering(VSOPositivePathBase):
         self.assertEqual(response.status_code, 200)
 
     def test_allowlisted_order_by_still_works(self):
-        response = self.client.get(
-            reverse("vso:case_list"), {"order_by": "-priority"}
-        )
+        response = self.client.get(reverse("vso:case_list"), {"order_by": "-priority"})
         self.assertEqual(response.status_code, 200)
 
 
@@ -1634,9 +1624,7 @@ class TestInvitationCasePayloadFlow(TestCase):
         from vso.models import VeteranCase, CaseNote
 
         staffer_client = Client()
-        staffer_client.login(
-            email="flow_worker@example.com", password="TestPass123!"
-        )
+        staffer_client.login(email="flow_worker@example.com", password="TestPass123!")
         response = staffer_client.post(
             reverse("vso:invite_veteran"),
             {
@@ -1681,9 +1669,7 @@ class TestInvitationCasePayloadFlow(TestCase):
         from accounts.models import OrganizationInvitation
 
         staffer_client = Client()
-        staffer_client.login(
-            email="flow_worker@example.com", password="TestPass123!"
-        )
+        staffer_client.login(email="flow_worker@example.com", password="TestPass123!")
         staffer_client.post(
             reverse("vso:invite_veteran"), {"email": self.veteran.email}
         )
