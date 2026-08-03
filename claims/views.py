@@ -531,6 +531,74 @@ def document_view_inline(request, pk):
 # =============================================================================
 
 
+def _resolve_signed_access(request, token_data, document):
+    """
+    Resolve who a signed-URL access is attributed to, enforcing VSO share
+    grants at serve time.
+
+    Tokens issued to the document owner carry no extra_data and behave as
+    before: no session required, access attributed to the owner.
+
+    Tokens issued from the VSO shared-document review page carry a grant
+    (``share_id`` + ``vso_user_id``) and are only honored while:
+    - the requester is logged in as the staffer the token was issued to
+      (a leaked URL is useless to anyone else),
+    - the SharedDocument row still exists (revocation deletes it, so a
+      token issued before revocation stops working immediately), and
+    - the staffer still holds an active staff membership in an active
+      organization and passes the same least-privilege case scoping as the
+      review page itself.
+
+    Returns (audit_user, extra_audit_details) or an HttpResponseForbidden.
+    """
+    extra = token_data.get("extra_data") or {}
+    share_id = extra.get("share_id")
+    if not share_id:
+        return document.user, {"access_type": "signed_url"}
+
+    from vso.models import SharedDocument
+    from vso.permissions import get_scoped_case_or_404
+    from vso.views import get_user_staff_memberships
+
+    if not request.user.is_authenticated or request.user.pk != extra.get("vso_user_id"):
+        return HttpResponseForbidden(
+            "This link only works for the caseworker it was issued to. "
+            "Please sign in and reopen the document from the case."
+        )
+
+    share = (
+        SharedDocument.objects.filter(pk=share_id, document=document)
+        .select_related("case__organization")
+        .first()
+    )
+    if share is None:
+        return HttpResponseForbidden(
+            "The veteran has revoked sharing for this document."
+        )
+
+    # Same staff-membership filter the review page reaches the case through
+    # (active membership AND active organization) — get_scoped_case_or_404
+    # checks neither, because VSO views establish the org upstream.
+    if (
+        not get_user_staff_memberships(request.user)
+        .filter(organization=share.case.organization)
+        .exists()
+    ):
+        return HttpResponseForbidden("You no longer have access to this case.")
+    try:
+        get_scoped_case_or_404(request.user, share.case.organization, share.case_id)
+    except Http404:
+        return HttpResponseForbidden("You no longer have access to this case.")
+
+    return request.user, {
+        "access_type": "vso_shared_document",
+        "share_id": share.pk,
+        "case_id": share.case_id,
+        "organization_id": share.case.organization_id,
+        "document_owner_id": document.user_id,
+    }
+
+
 @ratelimit(key="ip", rate="30/m", method="GET", block=True)
 @require_http_methods(["GET"])
 def document_download_signed(request, token):
@@ -585,17 +653,23 @@ def document_download_signed(request, token):
     if not document.file.storage.exists(file_path):
         raise Http404("Document file not found on disk")
 
-    # Audit log the download (use document owner since token-based access)
+    # Enforce VSO share grants (revocation, identity, org scoping) and
+    # resolve who this access is attributed to in the audit trail.
+    access = _resolve_signed_access(request, token_data, document)
+    if isinstance(access, HttpResponseForbidden):
+        return access
+    audit_user, access_details = access
+
     AuditLog.log(
         action="document_download",
         request=request,
-        user=document.user,
+        user=audit_user,
         resource_type="Document",
         resource_id=document.id,
         details={
             "file_name": document.file_name,
             "file_size": document.file_size,
-            "access_type": "signed_url",
+            **access_details,
         },
     )
 
@@ -667,17 +741,23 @@ def document_view_signed(request, token):
     if not document.file.storage.exists(file_path):
         raise Http404("Document file not found on disk")
 
-    # Audit log the view (use document owner since token-based access)
+    # Enforce VSO share grants (revocation, identity, org scoping) and
+    # resolve who this access is attributed to in the audit trail.
+    access = _resolve_signed_access(request, token_data, document)
+    if isinstance(access, HttpResponseForbidden):
+        return access
+    audit_user, access_details = access
+
     AuditLog.log(
         action="document_view",
         request=request,
-        user=document.user,
+        user=audit_user,
         resource_type="Document",
         resource_id=document.id,
         details={
             "file_name": document.file_name,
             "view_type": "inline",
-            "access_type": "signed_url",
+            **access_details,
         },
     )
 
@@ -782,9 +862,12 @@ def rating_analyzer_result(request, pk):
         document=document, user=request.user
     ).first()
 
+    from agents.views import analysis_sharing_context
+
     context = {
         "document": document,
         "analysis": rating_analysis,
+        **analysis_sharing_context(request.user, "rating", rating_analysis),
     }
 
     return render(request, "claims/rating_analyzer_result.html", context)

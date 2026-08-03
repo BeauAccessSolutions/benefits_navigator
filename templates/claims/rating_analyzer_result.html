@@ -658,8 +658,11 @@
         {% include 'components/vso_consultation_prompt.html' with reason='appeal_deadline' %}
         {% endif %}
 
+        <!-- Share with VSO -->
+        {% include 'agents/partials/analysis_share_controls.html' %}
+
         <!-- Disclaimer -->
-        <div class="p-4 bg-gray-50 rounded-lg text-sm text-gray-600">
+        <div class="p-4 bg-gray-50 rounded-lg text-sm text-gray-600 mt-8">
             <p class="font-medium text-gray-700 mb-1">Disclaimer</p>
             <p>
                 This analysis is for informational purposes only and does not constitute legal advice.

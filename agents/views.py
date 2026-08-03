@@ -7,6 +7,8 @@ from functools import wraps
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.http import Http404
+from django.urls import reverse
 from django.views.decorators.http import require_POST
 from django_ratelimit.decorators import ratelimit
 from decimal import Decimal
@@ -252,8 +254,196 @@ def decision_analyzer_result(request, pk):
 
     context = {
         "analysis": analysis,
+        **analysis_sharing_context(request.user, "decision", analysis),
     }
     return render(request, "agents/decision_analyzer_result.html", context)
+
+
+# =============================================================================
+# ANALYSIS SHARING WITH VSO
+# =============================================================================
+#
+# Mirrors document sharing (claims.document_share / document_unshare):
+# veteran-initiated, per-case, revocable. Creating a SharedAnalysis fires
+# post_save signals that audit-log the share and auto-derive CaseCondition
+# records for the caseworker's evidence tracker (vso/signals.py).
+
+
+def _get_analysis_share_config(analysis_type):
+    """Map a URL slug to the model and SharedAnalysis field it shares."""
+    from .models import RatingAnalysis
+
+    return {
+        "decision": {
+            "model": DecisionLetterAnalysis,
+            "share_field": "decision_analysis",
+            "share_type": "decision_analysis",
+            "label": "Decision Letter Analysis",
+        },
+        "rating": {
+            "model": RatingAnalysis,
+            "share_field": "rating_analysis",
+            "share_type": "rating_analysis",
+            "label": "Rating Analysis",
+        },
+    }.get(analysis_type)
+
+
+def _analysis_result_url(analysis_type, analysis):
+    """URL of the result page the share controls live on."""
+    if analysis_type == "decision":
+        return reverse("agents:decision_analyzer_result", args=[analysis.pk])
+    if analysis.document_id:
+        return reverse("claims:rating_analyzer_result", args=[analysis.document_id])
+    return reverse("agents:home")
+
+
+def analysis_sharing_context(user, analysis_type, analysis):
+    """
+    Context for the share-with-VSO controls on analysis result pages.
+
+    Sharing is only offered when the veteran has an open case with an
+    organization; existing shares are listed so they can be revoked.
+    """
+    from vso.models import SharedAnalysis, VeteranCase
+
+    config = _get_analysis_share_config(analysis_type)
+    if analysis is None or config is None:
+        return {
+            "analysis_shares": [],
+            "can_share_with_vso": False,
+            "analysis_share_type": analysis_type,
+        }
+
+    shares = SharedAnalysis.objects.filter(
+        case__veteran=user, **{config["share_field"]: analysis}
+    ).select_related("case__organization")
+    has_open_case = (
+        VeteranCase.objects.filter(veteran=user)
+        .exclude(status__startswith="closed")
+        .exists()
+    )
+    return {
+        "analysis_shares": shares,
+        "can_share_with_vso": has_open_case,
+        "analysis_share_type": analysis_type,
+    }
+
+
+@login_required
+def analysis_share(request, analysis_type, pk):
+    """
+    Share an AI analysis with the veteran's VSO.
+
+    Follows the document_share pattern: the veteran picks one of their open
+    cases, sees the same consent framing, and can revoke at any time.
+    """
+    from vso.models import SharedAnalysis, VeteranCase
+
+    config = _get_analysis_share_config(analysis_type)
+    if config is None:
+        raise Http404("Unknown analysis type")
+
+    analysis = get_object_or_404(config["model"], pk=pk, user=request.user)
+
+    active_cases = (
+        VeteranCase.objects.filter(veteran=request.user)
+        .exclude(status__startswith="closed")
+        .select_related("organization", "assigned_to")
+    )
+
+    if request.method == "POST":
+        case_id = request.POST.get("case_id")
+        if not case_id:
+            messages.error(request, "Please select a case to share with.")
+            return redirect("agents:analysis_share", analysis_type=analysis_type, pk=pk)
+
+        case = get_object_or_404(VeteranCase, pk=case_id, veteran=request.user)
+
+        if SharedAnalysis.objects.filter(
+            case=case, **{config["share_field"]: analysis}
+        ).exists():
+            messages.warning(request, "This analysis is already shared with this case.")
+            return redirect(_analysis_result_url(analysis_type, analysis))
+
+        share = SharedAnalysis(
+            case=case,
+            analysis_type=config["share_type"],
+            shared_by=request.user,
+            **{config["share_field"]: analysis},
+        )
+        # The post_save signal writes the vso_analysis_share audit entry;
+        # hand it the request so the entry carries client IP / user-agent
+        # like its vso_document_share peer does.
+        share._audit_request = request
+        share.save()
+
+        messages.success(
+            request,
+            f"{config['label']} shared with {case.organization.name}. "
+            "Your caseworker can now see this analysis on your case.",
+        )
+        return redirect(_analysis_result_url(analysis_type, analysis))
+
+    context = {
+        "analysis": analysis,
+        "analysis_type": analysis_type,
+        "analysis_label": config["label"],
+        "active_cases": active_cases,
+        "result_url": _analysis_result_url(analysis_type, analysis),
+    }
+    return render(request, "agents/analysis_share.html", context)
+
+
+@login_required
+@require_POST
+def analysis_unshare(request, analysis_type, pk, share_pk):
+    """
+    Revoke an analysis share.
+
+    Like document_unshare, the SharedAnalysis row is deleted so the VSO
+    loses access immediately. CaseCondition records already derived from
+    the analysis remain — they are the caseworker's work product, like
+    case notes (their source_analysis link is nulled).
+    """
+    from vso.models import SharedAnalysis
+
+    config = _get_analysis_share_config(analysis_type)
+    if config is None:
+        raise Http404("Unknown analysis type")
+
+    analysis = get_object_or_404(config["model"], pk=pk, user=request.user)
+    share = get_object_or_404(
+        SharedAnalysis,
+        pk=share_pk,
+        case__veteran=request.user,
+        **{config["share_field"]: analysis},
+    )
+
+    case = share.case
+    details = {
+        "analysis_type": share.analysis_type,
+        "case_id": case.pk,
+        "organization_id": case.organization_id,
+        "was_shared_at": share.shared_at.isoformat(),
+    }
+    share.delete()
+
+    AuditLog.log(
+        action="vso_analysis_unshare",
+        request=request,
+        resource_type="SharedAnalysis",
+        resource_id=share_pk,
+        details=details,
+        success=True,
+    )
+
+    messages.success(
+        request,
+        f"Sharing revoked. {case.organization.name} no longer has access "
+        "to this analysis.",
+    )
+    return redirect(_analysis_result_url(analysis_type, analysis))
 
 
 # =============================================================================

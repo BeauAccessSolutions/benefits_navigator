@@ -1677,3 +1677,485 @@ class TestInvitationCasePayloadFlow(TestCase):
             organization=self.org, email=self.veteran.email
         )
         self.assertIsNone(invitation.case_payload)
+
+
+# =============================================================================
+# SHARED DOCUMENT FILE ACCESS (issue #92 / audit P1-5)
+# =============================================================================
+
+
+class TestSharedDocumentFileAccess(VSOPositivePathBase):
+    """
+    VSO staff can open the files veterans share with them, via signed URLs
+    issued from the review page. Happy paths first (audit lesson: deny-path-
+    only suites hid the fact that the feature didn't work at all), then the
+    revocation and identity cut-offs.
+    """
+
+    def _review_response(self):
+        return self.client.get(
+            reverse(
+                "vso:shared_document_review",
+                args=[self.case.pk, self.shared_doc.pk],
+            )
+        )
+
+    def _veteran_client(self):
+        from django.test import Client
+
+        client = Client()
+        client.login(email="happy_vet@example.com", password="TestPass123!")
+        return client
+
+    def test_review_page_offers_signed_view_and_download_links(self):
+        response = self._review_response()
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "View Document")
+        self.assertContains(response, "/claims/document/s/")
+        self.assertTrue(response.context["document_view_url"])
+        self.assertTrue(response.context["document_download_url"])
+
+    def test_vso_can_download_shared_document(self):
+        from core.models import AuditLog
+
+        url = self._review_response().context["document_download_url"]
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(b"".join(response.streaming_content), b"%PDF-1.4 test")
+        # Access is attributed to the acting VSO user, not the veteran.
+        log = AuditLog.objects.filter(
+            action="document_download",
+            user=self.worker,
+            resource_type="Document",
+            resource_id=self.document.pk,
+        ).latest("timestamp")
+        self.assertEqual(log.details["access_type"], "vso_shared_document")
+        self.assertEqual(log.details["case_id"], self.case.pk)
+        self.assertEqual(log.details["organization_id"], self.org.pk)
+
+    def test_vso_can_view_shared_document_inline(self):
+        from core.models import AuditLog
+
+        url = self._review_response().context["document_view_url"]
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("inline", response["Content-Disposition"])
+        self.assertTrue(
+            AuditLog.objects.filter(action="document_view", user=self.worker).exists()
+        )
+
+    def test_revocation_kills_already_issued_links(self):
+        """A signed URL issued BEFORE the veteran revokes stops working:
+        the serve-time check requires the SharedDocument row to still exist,
+        and document_unshare deletes it."""
+        view_url = self._review_response().context["document_view_url"]
+        download_url = self._review_response().context["document_download_url"]
+
+        # Veteran revokes from their own session.
+        veteran_client = self._veteran_client()
+        response = veteran_client.post(
+            reverse(
+                "claims:document_unshare",
+                kwargs={"pk": self.document.pk, "share_pk": self.shared_doc.pk},
+            )
+        )
+        self.assertEqual(response.status_code, 302)
+
+        self.assertEqual(self.client.get(view_url).status_code, 403)
+        self.assertEqual(self.client.get(download_url).status_code, 403)
+        # And the review page itself is gone.
+        self.assertEqual(self._review_response().status_code, 404)
+
+    def test_link_is_useless_to_anyone_but_the_issued_staffer(self):
+        url = self._review_response().context["document_download_url"]
+
+        from django.test import Client
+
+        # Anonymous browser: no session, no access.
+        self.assertEqual(Client().get(url).status_code, 403)
+        # Even the veteran (document owner) can't use the staffer's link;
+        # they have their own authenticated routes.
+        self.assertEqual(self._veteran_client().get(url).status_code, 403)
+
+    def test_deactivated_membership_blocks_serving(self):
+        url = self._review_response().context["document_download_url"]
+        OrganizationMembership.objects.filter(
+            user=self.worker, organization=self.org
+        ).update(is_active=False)
+        self.assertEqual(self.client.get(url).status_code, 403)
+
+    def test_deactivated_organization_blocks_serving(self):
+        """The review page is unreachable once the org is deactivated, so
+        already-issued links must not outlive it either."""
+        url = self._review_response().context["document_download_url"]
+        self.org.is_active = False
+        self.org.save(update_fields=["is_active"])
+        self.assertEqual(self.client.get(url).status_code, 403)
+
+    def test_plain_download_routes_stay_veteran_only(self):
+        """The unsigned routes must NOT be loosened for VSO staff."""
+        self.assertEqual(
+            self.client.get(
+                reverse("claims:document_download", args=[self.document.pk])
+            ).status_code,
+            404,
+        )
+        self.assertEqual(
+            self.client.get(
+                reverse("claims:document_view", args=[self.document.pk])
+            ).status_code,
+            404,
+        )
+
+    def test_owner_signed_urls_still_work_without_grant(self):
+        """Tokens without a share grant keep their original no-session
+        semantics for the document owner's share links."""
+        from core.signed_urls import get_signed_url_generator
+
+        url = get_signed_url_generator().generate_url(
+            resource_type="document",
+            resource_id=self.document.pk,
+            user_id=self.veteran.pk,
+            action="download",
+        )
+        from django.test import Client
+
+        response = Client().get(url)  # no session at all
+        self.assertEqual(response.status_code, 200)
+
+
+# =============================================================================
+# SHARED ANALYSES END TO END (issue #93 / audit P1-6)
+# =============================================================================
+
+
+class SharedAnalysisBase(VSOPositivePathBase):
+    """Adds a decision-letter analysis and a rating analysis for the veteran,
+    plus a logged-in veteran client (separate from the worker client)."""
+
+    def setUp(self):
+        super().setUp()
+        from django.test import Client
+        from agents.models import (
+            AgentInteraction,
+            DecisionLetterAnalysis,
+            RatingAnalysis,
+        )
+
+        interaction = AgentInteraction.objects.create(
+            user=self.veteran, agent_type="decision_analyzer", status="completed"
+        )
+        self.decision_analysis = DecisionLetterAnalysis.objects.create(
+            interaction=interaction,
+            user=self.veteran,
+            summary="Granted PTSD at 50%, denied tinnitus.",
+            conditions_granted=[{"condition": "PTSD", "rating": 50}],
+            conditions_denied=[{"condition": "Tinnitus", "reason": "No nexus"}],
+        )
+        # Conditions use the shape the extraction pipeline actually stores
+        # (agents.schemas.RatedCondition: name/rating_percentage) so this
+        # fixture proves derivation works on real data, not a bespoke shape.
+        self.rating_analysis = RatingAnalysis.objects.create(
+            user=self.veteran,
+            document=self.document,
+            combined_rating=70,
+            conditions=[
+                {
+                    "name": "Back strain",
+                    "diagnostic_code": "5237",
+                    "rating_percentage": 20,
+                }
+            ],
+        )
+        self.veteran_client = Client()
+        self.veteran_client.login(
+            email="happy_vet@example.com", password="TestPass123!"
+        )
+
+    def _share(self, analysis_type, analysis):
+        return self.veteran_client.post(
+            reverse(
+                "agents:analysis_share",
+                kwargs={"analysis_type": analysis_type, "pk": analysis.pk},
+            ),
+            {"case_id": self.case.pk},
+        )
+
+
+class TestSharedAnalysisVeteranSide(SharedAnalysisBase):
+    def test_share_page_renders_with_consent_framing(self):
+        response = self.veteran_client.get(
+            reverse(
+                "agents:analysis_share",
+                kwargs={"analysis_type": "decision", "pk": self.decision_analysis.pk},
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Happy Path VSO")
+        self.assertContains(response, "revoke access at any time")
+
+    def test_veteran_shares_decision_analysis(self):
+        from core.models import AuditLog
+        from vso.models import SharedAnalysis
+
+        response = self._share("decision", self.decision_analysis)
+        self.assertRedirects(
+            response,
+            reverse(
+                "agents:decision_analyzer_result", args=[self.decision_analysis.pk]
+            ),
+            fetch_redirect_response=False,
+        )
+        share = SharedAnalysis.objects.get(
+            case=self.case, decision_analysis=self.decision_analysis
+        )
+        self.assertEqual(share.analysis_type, "decision_analysis")
+        self.assertEqual(share.organization, self.org)
+        self.assertEqual(share.shared_by, self.veteran)
+        log = AuditLog.objects.get(
+            action="vso_analysis_share",
+            resource_type="SharedAnalysis",
+            resource_id=share.pk,
+        )
+        # Request metadata must be captured, like its vso_document_share peer.
+        self.assertEqual(log.user, self.veteran)
+        self.assertTrue(log.ip_address)
+        self.assertEqual(log.request_method, "POST")
+        self.assertEqual(
+            log.request_path,
+            reverse(
+                "agents:analysis_share",
+                kwargs={"analysis_type": "decision", "pk": self.decision_analysis.pk},
+            ),
+        )
+
+    def test_sharing_decision_analysis_derives_conditions(self):
+        """The post_save signal must fire on the web create path so the
+        caseworker's evidence chips populate."""
+        from vso.models import CaseCondition, SharedAnalysis
+
+        self._share("decision", self.decision_analysis)
+        share = SharedAnalysis.objects.get(decision_analysis=self.decision_analysis)
+
+        granted = CaseCondition.objects.get(case=self.case, condition_name="PTSD")
+        self.assertEqual(granted.workflow_status, "granted")
+        self.assertEqual(granted.source, "decision_analysis")
+        self.assertEqual(granted.source_analysis, share)
+
+        denied = CaseCondition.objects.get(case=self.case, condition_name="Tinnitus")
+        self.assertEqual(denied.workflow_status, "denied")
+
+    def test_veteran_shares_rating_analysis(self):
+        from vso.models import CaseCondition, SharedAnalysis
+
+        response = self._share("rating", self.rating_analysis)
+        self.assertRedirects(
+            response,
+            reverse("claims:rating_analyzer_result", args=[self.document.pk]),
+            fetch_redirect_response=False,
+        )
+        self.assertTrue(
+            SharedAnalysis.objects.filter(
+                case=self.case,
+                rating_analysis=self.rating_analysis,
+                analysis_type="rating_analysis",
+            ).exists()
+        )
+        derived = CaseCondition.objects.get(
+            case=self.case, condition_name="Back strain"
+        )
+        self.assertEqual(derived.source, "rating_analysis")
+        self.assertEqual(derived.current_rating, 20)
+        self.assertEqual(derived.diagnostic_code, "5237")
+        self.assertEqual(derived.workflow_status, "granted")
+
+    def test_rating_derivation_accepts_legacy_condition_shape(self):
+        """Older rows stored condition/current_rating instead of the
+        pipeline's name/rating_percentage — both must derive."""
+        from vso.models import CaseCondition
+
+        self.rating_analysis.conditions = [
+            {"condition": "Tinnitus", "diagnostic_code": "6260", "current_rating": 10}
+        ]
+        self.rating_analysis.save(update_fields=["conditions"])
+
+        self._share("rating", self.rating_analysis)
+        derived = CaseCondition.objects.get(case=self.case, condition_name="Tinnitus")
+        self.assertEqual(derived.current_rating, 10)
+        self.assertEqual(derived.source, "rating_analysis")
+
+    def test_duplicate_share_warns_and_does_not_duplicate(self):
+        from vso.models import SharedAnalysis
+
+        self._share("decision", self.decision_analysis)
+        self._share("decision", self.decision_analysis)
+        self.assertEqual(
+            SharedAnalysis.objects.filter(
+                case=self.case, decision_analysis=self.decision_analysis
+            ).count(),
+            1,
+        )
+
+    def test_result_pages_offer_share_control_only_with_open_case(self):
+        share_url = reverse(
+            "agents:analysis_share",
+            kwargs={"analysis_type": "decision", "pk": self.decision_analysis.pk},
+        )
+        rating_share_url = reverse(
+            "agents:analysis_share",
+            kwargs={"analysis_type": "rating", "pk": self.rating_analysis.pk},
+        )
+
+        # With an open case: control present on both result pages.
+        response = self.veteran_client.get(
+            reverse("agents:decision_analyzer_result", args=[self.decision_analysis.pk])
+        )
+        self.assertContains(response, share_url)
+
+        response = self.veteran_client.get(
+            reverse("claims:rating_analyzer_result", args=[self.document.pk])
+        )
+        self.assertContains(response, rating_share_url)
+
+        # Case closed and nothing shared: no share offer.
+        self.case.status = "closed_won"
+        self.case.save(update_fields=["status"])
+        response = self.veteran_client.get(
+            reverse("agents:decision_analyzer_result", args=[self.decision_analysis.pk])
+        )
+        self.assertNotContains(response, share_url)
+
+    def test_veteran_revokes_share(self):
+        from core.models import AuditLog
+        from vso.models import CaseCondition, SharedAnalysis
+
+        self._share("decision", self.decision_analysis)
+        share = SharedAnalysis.objects.get(decision_analysis=self.decision_analysis)
+
+        response = self.veteran_client.post(
+            reverse(
+                "agents:analysis_unshare",
+                kwargs={
+                    "analysis_type": "decision",
+                    "pk": self.decision_analysis.pk,
+                    "share_pk": share.pk,
+                },
+            )
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(SharedAnalysis.objects.filter(pk=share.pk).exists())
+        self.assertTrue(
+            AuditLog.objects.filter(
+                action="vso_analysis_unshare", resource_id=share.pk
+            ).exists()
+        )
+        # Derived conditions are the caseworker's work product and remain,
+        # with the source link nulled (SET_NULL).
+        condition = CaseCondition.objects.get(case=self.case, condition_name="PTSD")
+        self.assertIsNone(condition.source_analysis)
+
+    def test_cannot_share_someone_elses_analysis(self):
+        other = User.objects.create_user(
+            email="other_vet@example.com", password="TestPass123!"
+        )
+        self.decision_analysis.user = other
+        self.decision_analysis.save(update_fields=["user"])
+        response = self._share("decision", self.decision_analysis)
+        self.assertEqual(response.status_code, 404)
+
+
+class TestSharedAnalysisVSOSide(SharedAnalysisBase):
+    def test_case_detail_renders_shared_analyses(self):
+        """The worker (separate client from the veteran who shared) sees
+        read-only summaries on the case."""
+        self._share("decision", self.decision_analysis)
+        self._share("rating", self.rating_analysis)
+
+        response = self.client.get(reverse("vso:case_detail", args=[self.case.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Shared Analyses")
+        self.assertContains(response, "Decision Letter Analysis")
+        self.assertContains(response, "Rating Analysis")
+        self.assertContains(response, "70%")  # combined rating summary
+        self.assertEqual(len(response.context["shared_analyses"]), 2)
+
+    def test_case_detail_shows_empty_state_before_any_share(self):
+        response = self.client.get(reverse("vso:case_detail", args=[self.case.pk]))
+        self.assertContains(response, "No analyses shared yet")
+
+    def test_revoked_share_disappears_from_case_detail(self):
+        from vso.models import SharedAnalysis
+
+        self._share("decision", self.decision_analysis)
+        share = SharedAnalysis.objects.get(decision_analysis=self.decision_analysis)
+        self.veteran_client.post(
+            reverse(
+                "agents:analysis_unshare",
+                kwargs={
+                    "analysis_type": "decision",
+                    "pk": self.decision_analysis.pk,
+                    "share_pk": share.pk,
+                },
+            )
+        )
+        response = self.client.get(reverse("vso:case_detail", args=[self.case.pk]))
+        self.assertEqual(len(response.context["shared_analyses"]), 0)
+
+    def test_denial_decoding_share_renders_its_summary(self):
+        """No veteran-facing create path yet, but case_detail's query admits
+        denial shares, so an admin-created one must render real content
+        rather than an empty details block."""
+        from agents.models import DenialDecoding
+        from vso.models import SharedAnalysis
+
+        decoding = DenialDecoding.objects.create(
+            analysis=self.decision_analysis,
+            denial_mappings=[
+                {
+                    "condition": "Tinnitus",
+                    "denial_reason": "No nexus to service",
+                    "required_evidence": [
+                        {"type": "nexus_letter", "priority": "critical"}
+                    ],
+                }
+            ],
+        )
+        SharedAnalysis.objects.create(
+            case=self.case,
+            analysis_type="denial_decoding",
+            denial_decoding=decoding,
+            shared_by=self.veteran,
+        )
+
+        response = self.client.get(reverse("vso:case_detail", args=[self.case.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.context["shared_analyses"]), 1)
+        self.assertContains(response, "Denials decoded")
+        self.assertContains(response, "Critical evidence needed")
+
+    def test_idor_guard_analysis_of_another_user_is_not_rendered(self):
+        """A share row whose underlying analysis does not belong to the
+        case's veteran must not be rendered (mirrors the
+        shared_document_review defense-in-depth check)."""
+        from agents.models import AgentInteraction, DecisionLetterAnalysis
+        from vso.models import SharedAnalysis
+
+        other = User.objects.create_user(
+            email="stranger@example.com", password="TestPass123!"
+        )
+        foreign_analysis = DecisionLetterAnalysis.objects.create(
+            interaction=AgentInteraction.objects.create(
+                user=other, agent_type="decision_analyzer", status="completed"
+            ),
+            user=other,
+            conditions_granted=[{"condition": "Migraines", "rating": 30}],
+        )
+        SharedAnalysis.objects.create(
+            case=self.case,
+            analysis_type="decision_analysis",
+            decision_analysis=foreign_analysis,
+            shared_by=self.veteran,
+        )
+
+        response = self.client.get(reverse("vso:case_detail", args=[self.case.pk]))
+        self.assertEqual(len(response.context["shared_analyses"]), 0)

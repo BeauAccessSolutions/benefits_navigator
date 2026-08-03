@@ -703,7 +703,21 @@ def case_detail(request, pk):
     # Get related data
     notes = case.notes.select_related("author").order_by("-created_at")
     shared_docs = case.shared_documents.select_related("document", "shared_by")
-    shared_analyses = case.shared_analyses.select_related("shared_by")
+    # IDOR guard (same pattern as shared_document_review): only render shares
+    # whose underlying analysis belongs to this case's veteran, and re-check
+    # the defense-in-depth organization FK on the share row itself.
+    shared_analyses = (
+        case.shared_analyses.filter(organization=org)
+        .filter(
+            Q(rating_analysis__user=case.veteran)
+            | Q(decision_analysis__user=case.veteran)
+            | Q(denial_decoding__analysis__user=case.veteran)
+        )
+        .select_related(
+            "shared_by", "rating_analysis", "decision_analysis", "denial_decoding"
+        )
+        .prefetch_related("derived_conditions")
+    )
     checklists = case.checklists.prefetch_related("items")
 
     # Case conditions with evidence status
@@ -1071,12 +1085,42 @@ def shared_document_review(request, pk, doc_pk):
                 if denial_decoding:
                     analysis_data["denial"] = denial_decoding
 
+    # Short-lived signed URLs so the staffer can open the actual file.
+    # The grant is tied to this share + this staffer and is re-checked at
+    # serve time (claims._resolve_signed_access), so revoking the share
+    # kills already-issued links immediately.
+    document_view_url = None
+    document_download_url = None
+    if document.file:
+        from core.signed_urls import get_signed_url_generator
+
+        generator = get_signed_url_generator()
+        grant = {"share_id": shared_doc.pk, "vso_user_id": request.user.pk}
+        document_view_url = generator.generate_url(
+            resource_type="document",
+            resource_id=document.pk,
+            user_id=document.user_id,
+            action="view",
+            expires_minutes=30,
+            extra_data=grant,
+        )
+        document_download_url = generator.generate_url(
+            resource_type="document",
+            resource_id=document.pk,
+            user_id=document.user_id,
+            action="download",
+            expires_minutes=30,
+            extra_data=grant,
+        )
+
     context = {
         "organization": org,
         "case": case,
         "shared_document": shared_doc,
         "document": document,
         "analysis_data": analysis_data,
+        "document_view_url": document_view_url,
+        "document_download_url": document_download_url,
         "status_choices": SharedDocument.SHARE_STATUS_CHOICES,
     }
 

@@ -383,6 +383,7 @@ class AuditLog(models.Model):
         ("vso_document_unshare", "Document Sharing Revoked"),
         ("vso_document_review", "Document Reviewed"),
         ("vso_analysis_share", "Analysis Shared"),
+        ("vso_analysis_unshare", "Analysis Sharing Revoked"),
         ("vso_analysis_view", "Analysis Viewed"),
         ("vso_note_add", "Case Note Added"),
         ("vso_invitation_sent", "Invitation Sent"),

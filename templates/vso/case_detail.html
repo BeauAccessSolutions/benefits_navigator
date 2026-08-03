@@ -307,6 +307,96 @@
                 </div>
                 {% include "vso/partials/case_documents.html" %}
             </div>
+
+            <!-- Shared Analyses (read-only summaries; veteran controls sharing) -->
+            <div class="bg-white rounded-lg shadow">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h2 class="text-lg font-semibold text-gray-900">Shared Analyses</h2>
+                    <p class="text-sm text-gray-500">AI analyses the veteran has chosen to share with your organization</p>
+                </div>
+                <div class="divide-y divide-gray-200">
+                    {% for share in shared_analyses %}
+                    <div class="px-6 py-4">
+                        <div class="flex items-start justify-between gap-4">
+                            <div>
+                                <p class="font-medium text-gray-900">{{ share.get_analysis_type_display }}</p>
+                                <p class="text-sm text-gray-500">
+                                    Shared {{ share.shared_at|date:"M d, Y" }}
+                                    by {{ share.shared_by.get_full_name|default:share.shared_by.email|default:"Veteran" }}
+                                </p>
+                            </div>
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                                {% if share.analysis_type == 'rating_analysis' %}bg-blue-100 text-blue-800
+                                {% elif share.analysis_type == 'decision_analysis' %}bg-purple-100 text-purple-800
+                                {% else %}bg-red-100 text-red-800{% endif %}">
+                                {{ share.get_analysis_type_display }}
+                            </span>
+                        </div>
+                        <dl class="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm">
+                            {% if share.rating_analysis %}
+                                {% if share.rating_analysis.combined_rating is not None %}
+                                <div class="flex gap-1">
+                                    <dt class="text-gray-500">Combined rating:</dt>
+                                    <dd class="font-medium text-gray-900">{{ share.rating_analysis.combined_rating }}%</dd>
+                                </div>
+                                {% endif %}
+                                <div class="flex gap-1">
+                                    <dt class="text-gray-500">Rated conditions:</dt>
+                                    <dd class="font-medium text-gray-900">{{ share.rating_analysis.conditions|length }}</dd>
+                                </div>
+                                <div class="flex gap-1">
+                                    <dt class="text-gray-500">Increase opportunities:</dt>
+                                    <dd class="font-medium text-gray-900">{{ share.rating_analysis.increase_opportunities|length }}</dd>
+                                </div>
+                            {% elif share.decision_analysis %}
+                                <div class="flex gap-1">
+                                    <dt class="text-gray-500">Granted:</dt>
+                                    <dd class="font-medium text-green-700">{{ share.decision_analysis.conditions_granted|length }}</dd>
+                                </div>
+                                <div class="flex gap-1">
+                                    <dt class="text-gray-500">Denied:</dt>
+                                    <dd class="font-medium text-red-700">{{ share.decision_analysis.conditions_denied|length }}</dd>
+                                </div>
+                                {% if share.decision_analysis.appeal_deadlines %}
+                                <div class="flex gap-1">
+                                    <dt class="text-gray-500">HLR/Board deadline:</dt>
+                                    <dd class="font-medium text-gray-900">{{ share.decision_analysis.appeal_deadlines.higher_level_review|date:"M d, Y" }}</dd>
+                                </div>
+                                {% endif %}
+                            {% elif share.denial_decoding %}
+                                {# No veteran-facing create path yet, but the query admits these, so admin-created shares must render. #}
+                                <div class="flex gap-1">
+                                    <dt class="text-gray-500">Denials decoded:</dt>
+                                    <dd class="font-medium text-gray-900">{{ share.denial_decoding.denial_count }}</dd>
+                                </div>
+                                <div class="flex gap-1">
+                                    <dt class="text-gray-500">Critical evidence needed:</dt>
+                                    <dd class="font-medium text-gray-900">{{ share.denial_decoding.critical_evidence_count }}</dd>
+                                </div>
+                            {% endif %}
+                        </dl>
+                        {# .all|length, not .count — .count() would bypass the prefetch #}
+                        {% with derived_count=share.derived_conditions.all|length %}
+                        {% if derived_count %}
+                        <p class="mt-2 text-xs text-gray-500">
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                                {{ derived_count }} condition{{ derived_count|pluralize }} added to the tracker above
+                            </span>
+                        </p>
+                        {% endif %}
+                        {% endwith %}
+                    </div>
+                    {% empty %}
+                    <div class="px-6 py-8 text-center text-gray-500">
+                        <p>No analyses shared yet.</p>
+                        <p class="text-sm mt-1">
+                            The veteran can share a Rating Analysis or Decision Letter Analysis
+                            from their results page. Conditions are derived automatically.
+                        </p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
         </div>
 
         <!-- Sidebar -->
