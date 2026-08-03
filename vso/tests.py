@@ -1784,6 +1784,14 @@ class TestSharedDocumentFileAccess(VSOPositivePathBase):
         ).update(is_active=False)
         self.assertEqual(self.client.get(url).status_code, 403)
 
+    def test_deactivated_organization_blocks_serving(self):
+        """The review page is unreachable once the org is deactivated, so
+        already-issued links must not outlive it either."""
+        url = self._review_response().context["document_download_url"]
+        self.org.is_active = False
+        self.org.save(update_fields=["is_active"])
+        self.assertEqual(self.client.get(url).status_code, 403)
+
     def test_plain_download_routes_stay_veteran_only(self):
         """The unsigned routes must NOT be loosened for VSO staff."""
         self.assertEqual(
@@ -1844,15 +1852,18 @@ class SharedAnalysisBase(VSOPositivePathBase):
             conditions_granted=[{"condition": "PTSD", "rating": 50}],
             conditions_denied=[{"condition": "Tinnitus", "reason": "No nexus"}],
         )
+        # Conditions use the shape the extraction pipeline actually stores
+        # (agents.schemas.RatedCondition: name/rating_percentage) so this
+        # fixture proves derivation works on real data, not a bespoke shape.
         self.rating_analysis = RatingAnalysis.objects.create(
             user=self.veteran,
             document=self.document,
             combined_rating=70,
             conditions=[
                 {
-                    "condition": "Back strain",
+                    "name": "Back strain",
                     "diagnostic_code": "5237",
-                    "current_rating": 20,
+                    "rating_percentage": 20,
                 }
             ],
         )
@@ -1946,6 +1957,23 @@ class TestSharedAnalysisVeteranSide(SharedAnalysisBase):
         )
         self.assertEqual(derived.source, "rating_analysis")
         self.assertEqual(derived.current_rating, 20)
+        self.assertEqual(derived.diagnostic_code, "5237")
+        self.assertEqual(derived.workflow_status, "granted")
+
+    def test_rating_derivation_accepts_legacy_condition_shape(self):
+        """Older rows stored condition/current_rating instead of the
+        pipeline's name/rating_percentage — both must derive."""
+        from vso.models import CaseCondition
+
+        self.rating_analysis.conditions = [
+            {"condition": "Tinnitus", "diagnostic_code": "6260", "current_rating": 10}
+        ]
+        self.rating_analysis.save(update_fields=["conditions"])
+
+        self._share("rating", self.rating_analysis)
+        derived = CaseCondition.objects.get(case=self.case, condition_name="Tinnitus")
+        self.assertEqual(derived.current_rating, 10)
+        self.assertEqual(derived.source, "rating_analysis")
 
     def test_duplicate_share_warns_and_does_not_duplicate(self):
         from vso.models import SharedAnalysis

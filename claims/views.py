@@ -545,8 +545,9 @@ def _resolve_signed_access(request, token_data, document):
       (a leaked URL is useless to anyone else),
     - the SharedDocument row still exists (revocation deletes it, so a
       token issued before revocation stops working immediately), and
-    - the staffer still passes the same org + least-privilege case scoping
-      as the review page itself.
+    - the staffer still holds an active staff membership in an active
+      organization and passes the same least-privilege case scoping as the
+      review page itself.
 
     Returns (audit_user, extra_audit_details) or an HttpResponseForbidden.
     """
@@ -556,7 +557,8 @@ def _resolve_signed_access(request, token_data, document):
         return document.user, {"access_type": "signed_url"}
 
     from vso.models import SharedDocument
-    from vso.permissions import get_scoped_case_or_404, is_vso_staff
+    from vso.permissions import get_scoped_case_or_404
+    from vso.views import get_user_staff_memberships
 
     if not request.user.is_authenticated or request.user.pk != extra.get("vso_user_id"):
         return HttpResponseForbidden(
@@ -574,10 +576,14 @@ def _resolve_signed_access(request, token_data, document):
             "The veteran has revoked sharing for this document."
         )
 
-    # Active staff membership in the case's org (get_scoped_case_or_404 does
-    # not check membership itself — VSO views enforce it upstream), then the
-    # same org + least-privilege case scoping as the review page.
-    if not is_vso_staff(request.user, share.case.organization):
+    # Same staff-membership filter the review page reaches the case through
+    # (active membership AND active organization) — get_scoped_case_or_404
+    # checks neither, because VSO views establish the org upstream.
+    if (
+        not get_user_staff_memberships(request.user)
+        .filter(organization=share.case.organization)
+        .exists()
+    ):
         return HttpResponseForbidden("You no longer have access to this case.")
     try:
         get_scoped_case_or_404(request.user, share.case.organization, share.case_id)

@@ -82,21 +82,31 @@ class ConditionDerivationService:
             analysis_conditions = rating_analysis.conditions
             if isinstance(analysis_conditions, list):
                 for cond in analysis_conditions:
-                    if isinstance(cond, dict) and cond.get("condition"):
-                        condition, created = CaseCondition.objects.update_or_create(
-                            case=case,
-                            condition_name=cond["condition"],
-                            defaults={
-                                "diagnostic_code": cond.get("diagnostic_code", ""),
-                                "current_rating": cond.get("current_rating"),
-                                "workflow_status": ConditionDerivationService._map_rating_to_workflow_status(
-                                    cond.get("current_rating")
-                                ),
-                                "source": "rating_analysis",
-                                "source_analysis": shared_analysis,
-                            },
-                        )
-                        conditions_created.append(condition)
+                    if not isinstance(cond, dict):
+                        continue
+                    # The extraction pipeline (agents.schemas.RatedCondition)
+                    # emits "name"/"rating_percentage"; accept the older
+                    # "condition"/"current_rating" spelling too.
+                    name = cond.get("condition") or cond.get("name")
+                    if not name:
+                        continue
+                    rating = cond.get("current_rating")
+                    if rating is None:
+                        rating = cond.get("rating_percentage")
+                    condition, created = CaseCondition.objects.update_or_create(
+                        case=case,
+                        condition_name=name,
+                        defaults={
+                            "diagnostic_code": cond.get("diagnostic_code") or "",
+                            "current_rating": rating,
+                            "workflow_status": ConditionDerivationService._map_rating_to_workflow_status(
+                                rating
+                            ),
+                            "source": "rating_analysis",
+                            "source_analysis": shared_analysis,
+                        },
+                    )
+                    conditions_created.append(condition)
 
         return conditions_created
 

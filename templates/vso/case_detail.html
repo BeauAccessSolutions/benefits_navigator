@@ -365,7 +365,8 @@
                                 {% endif %}
                             {% endif %}
                         </dl>
-                        {% with derived_count=share.derived_conditions.count %}
+                        {# .all|length, not .count — .count() would bypass the prefetch #}
+                        {% with derived_count=share.derived_conditions.all|length %}
                         {% if derived_count %}
                         <p class="mt-2 text-xs text-gray-500">
                             <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
