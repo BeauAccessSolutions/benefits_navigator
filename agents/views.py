@@ -366,12 +366,17 @@ def analysis_share(request, analysis_type, pk):
             messages.warning(request, "This analysis is already shared with this case.")
             return redirect(_analysis_result_url(analysis_type, analysis))
 
-        SharedAnalysis.objects.create(
+        share = SharedAnalysis(
             case=case,
             analysis_type=config["share_type"],
             shared_by=request.user,
             **{config["share_field"]: analysis},
         )
+        # The post_save signal writes the vso_analysis_share audit entry;
+        # hand it the request so the entry carries client IP / user-agent
+        # like its vso_document_share peer does.
+        share._audit_request = request
+        share.save()
 
         messages.success(
             request,

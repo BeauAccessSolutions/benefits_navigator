@@ -363,6 +363,16 @@
                                     <dd class="font-medium text-gray-900">{{ share.decision_analysis.appeal_deadlines.higher_level_review|date:"M d, Y" }}</dd>
                                 </div>
                                 {% endif %}
+                            {% elif share.denial_decoding %}
+                                {# No veteran-facing create path yet, but the query admits these, so admin-created shares must render. #}
+                                <div class="flex gap-1">
+                                    <dt class="text-gray-500">Denials decoded:</dt>
+                                    <dd class="font-medium text-gray-900">{{ share.denial_decoding.denial_count }}</dd>
+                                </div>
+                                <div class="flex gap-1">
+                                    <dt class="text-gray-500">Critical evidence needed:</dt>
+                                    <dd class="font-medium text-gray-900">{{ share.denial_decoding.critical_evidence_count }}</dd>
+                                </div>
                             {% endif %}
                         </dl>
                         {# .all|length, not .count — .count() would bypass the prefetch #}

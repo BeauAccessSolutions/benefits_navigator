@@ -1912,12 +1912,21 @@ class TestSharedAnalysisVeteranSide(SharedAnalysisBase):
         self.assertEqual(share.analysis_type, "decision_analysis")
         self.assertEqual(share.organization, self.org)
         self.assertEqual(share.shared_by, self.veteran)
-        self.assertTrue(
-            AuditLog.objects.filter(
-                action="vso_analysis_share",
-                resource_type="SharedAnalysis",
-                resource_id=share.pk,
-            ).exists()
+        log = AuditLog.objects.get(
+            action="vso_analysis_share",
+            resource_type="SharedAnalysis",
+            resource_id=share.pk,
+        )
+        # Request metadata must be captured, like its vso_document_share peer.
+        self.assertEqual(log.user, self.veteran)
+        self.assertTrue(log.ip_address)
+        self.assertEqual(log.request_method, "POST")
+        self.assertEqual(
+            log.request_path,
+            reverse(
+                "agents:analysis_share",
+                kwargs={"analysis_type": "decision", "pk": self.decision_analysis.pk},
+            ),
         )
 
     def test_sharing_decision_analysis_derives_conditions(self):
@@ -2091,6 +2100,38 @@ class TestSharedAnalysisVSOSide(SharedAnalysisBase):
         )
         response = self.client.get(reverse("vso:case_detail", args=[self.case.pk]))
         self.assertEqual(len(response.context["shared_analyses"]), 0)
+
+    def test_denial_decoding_share_renders_its_summary(self):
+        """No veteran-facing create path yet, but case_detail's query admits
+        denial shares, so an admin-created one must render real content
+        rather than an empty details block."""
+        from agents.models import DenialDecoding
+        from vso.models import SharedAnalysis
+
+        decoding = DenialDecoding.objects.create(
+            analysis=self.decision_analysis,
+            denial_mappings=[
+                {
+                    "condition": "Tinnitus",
+                    "denial_reason": "No nexus to service",
+                    "required_evidence": [
+                        {"type": "nexus_letter", "priority": "critical"}
+                    ],
+                }
+            ],
+        )
+        SharedAnalysis.objects.create(
+            case=self.case,
+            analysis_type="denial_decoding",
+            denial_decoding=decoding,
+            shared_by=self.veteran,
+        )
+
+        response = self.client.get(reverse("vso:case_detail", args=[self.case.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.context["shared_analyses"]), 1)
+        self.assertContains(response, "Denials decoded")
+        self.assertContains(response, "Critical evidence needed")
 
     def test_idor_guard_analysis_of_another_user_is_not_rendered(self):
         """A share row whose underlying analysis does not belong to the

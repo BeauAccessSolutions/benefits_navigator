@@ -19,7 +19,9 @@ from .services import ConditionDerivationService
 logger = logging.getLogger(__name__)
 
 
-def log_shared_analysis_action(instance, action: str, user=None, details: dict = None):
+def log_shared_analysis_action(
+    instance, action: str, user=None, details: dict = None, request=None
+):
     """
     Log SharedAnalysis operations to the audit log.
 
@@ -28,6 +30,10 @@ def log_shared_analysis_action(instance, action: str, user=None, details: dict =
         action: Action type (vso_analysis_share or vso_analysis_view)
         user: User performing the action
         details: Additional details to log
+        request: Django request, when the action came from one. Routed
+            through AuditLog.log so client IP / user-agent / path are
+            captured the same way document sharing captures them; shares
+            created outside a request (Django admin) simply have none.
     """
     try:
         from core.models import AuditLog
@@ -41,9 +47,10 @@ def log_shared_analysis_action(instance, action: str, user=None, details: dict =
         if details:
             log_details.update(details)
 
-        AuditLog.objects.create(
-            user=user or instance.shared_by,
+        AuditLog.log(
             action=action,
+            request=request,
+            user=user or instance.shared_by,
             resource_type="SharedAnalysis",
             resource_id=instance.pk,
             details=log_details,
@@ -55,9 +62,19 @@ def log_shared_analysis_action(instance, action: str, user=None, details: dict =
 
 @receiver(post_save, sender=SharedAnalysis)
 def audit_log_shared_analysis(sender, instance, created, **kwargs):
-    """Create audit log entry when an analysis is shared."""
+    """
+    Create audit log entry when an analysis is shared.
+
+    Views that create a share from a web request attach the request as
+    ``_audit_request`` so the entry carries the same request metadata as
+    its ``vso_document_share`` peer.
+    """
     if created:
-        log_shared_analysis_action(instance, "vso_analysis_share")
+        log_shared_analysis_action(
+            instance,
+            "vso_analysis_share",
+            request=getattr(instance, "_audit_request", None),
+        )
 
 
 def update_case_activity(case_id: int) -> None:
