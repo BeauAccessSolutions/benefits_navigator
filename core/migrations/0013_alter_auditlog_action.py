@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("core", "0011_alter_auditlog_action"),
+        ("core", "0012_set_default_site_domain"),
     ]
 
     operations = [
