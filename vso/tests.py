@@ -2159,3 +2159,206 @@ class TestSharedAnalysisVSOSide(SharedAnalysisBase):
 
         response = self.client.get(reverse("vso:case_detail", args=[self.case.pk]))
         self.assertEqual(len(response.context["shared_analyses"]), 0)
+
+
+# =============================================================================
+# BULK CLOSE CLOSURE STAMPING (issue #103)
+# =============================================================================
+
+
+class TestBulkCloseClosureStamping(VSOPositivePathBase):
+    """Bulk status updates must stamp closed_at/closed_by like the
+    single-case path (case_update_status) does. A bare queryset .update()
+    bypassed that, so bulk-closed cases had closed_at NULL and every
+    closure metric silently under-counted them (#103)."""
+
+    def _bulk_update_status(self, case_ids, new_status):
+        return self.client.post(
+            reverse("vso:bulk_case_action"),
+            {
+                "case_ids": [str(pk) for pk in case_ids],
+                "action": "update_status",
+                "new_status": new_status,
+            },
+        )
+
+    def _make_case(self, title="Second Case", **kwargs):
+        from vso.models import VeteranCase
+
+        return VeteranCase.objects.create(
+            organization=self.org,
+            veteran=self.veteran,
+            assigned_to=self.worker,
+            title=title,
+            **kwargs,
+        )
+
+    def test_bulk_close_sets_closed_at_and_closed_by(self):
+        second = self._make_case()
+
+        response = self._bulk_update_status([self.case.pk, second.pk], "closed_won")
+
+        self.assertEqual(response.status_code, 302)
+        for case in (self.case, second):
+            case.refresh_from_db()
+            self.assertEqual(case.status, "closed_won")
+            self.assertIsNotNone(case.closed_at)
+            self.assertEqual(case.closed_by, self.worker)
+            self.assertIsNotNone(case.last_activity_at)
+
+    def test_bulk_close_preserves_existing_closure_stamp(self):
+        """Changing one closed status to another must not restamp closure."""
+        self.case.close("closed_denied", closed_by=self.veteran)
+        self.case.refresh_from_db()
+        original_closed_at = self.case.closed_at
+        original_closed_by = self.case.closed_by
+
+        self._bulk_update_status([self.case.pk], "closed_won")
+
+        self.case.refresh_from_db()
+        self.assertEqual(self.case.status, "closed_won")
+        self.assertEqual(self.case.closed_at, original_closed_at)
+        self.assertEqual(self.case.closed_by, original_closed_by)
+
+    def test_bulk_non_closing_status_leaves_closure_unset(self):
+        self._bulk_update_status([self.case.pk], "on_hold")
+
+        self.case.refresh_from_db()
+        self.assertEqual(self.case.status, "on_hold")
+        self.assertIsNone(self.case.closed_at)
+        self.assertIsNone(self.case.closed_by)
+
+    def test_bulk_reopen_clears_closure_stamp(self):
+        self.case.close("closed_won", closed_by=self.worker)
+
+        self._bulk_update_status([self.case.pk], "appeal_in_progress")
+
+        self.case.refresh_from_db()
+        self.assertEqual(self.case.status, "appeal_in_progress")
+        self.assertIsNone(self.case.closed_at)
+        self.assertIsNone(self.case.closed_by)
+
+    def test_single_path_reopen_clears_closure_stamp(self):
+        self.case.close("closed_won", closed_by=self.worker)
+
+        self.client.post(
+            reverse("vso:case_update_status", args=[self.case.pk]),
+            {"status": "appeal_in_progress"},
+        )
+
+        self.case.refresh_from_db()
+        self.assertEqual(self.case.status, "appeal_in_progress")
+        self.assertIsNone(self.case.closed_at)
+        self.assertIsNone(self.case.closed_by)
+
+    def test_bulk_status_change_writes_milestone_notes(self):
+        """The single-case path records a milestone note; bulk must too."""
+        from vso.models import CaseNote
+
+        second = self._make_case()
+
+        self._bulk_update_status([self.case.pk, second.pk], "closed_won")
+
+        for case in (self.case, second):
+            note = CaseNote.objects.filter(case=case, note_type="milestone").latest(
+                "created_at"
+            )
+            self.assertEqual(note.subject, "Status changed to Closed - Won")
+            self.assertEqual(note.author, self.worker)
+            self.assertTrue(note.visible_to_veteran)
+
+    def test_bulk_unchanged_status_writes_no_note(self):
+        from vso.models import CaseNote
+
+        self.case.status = "on_hold"
+        self.case.save(update_fields=["status"])
+
+        self._bulk_update_status([self.case.pk], "on_hold")
+
+        self.assertFalse(
+            CaseNote.objects.filter(case=self.case, note_type="milestone").exists()
+        )
+
+    def test_dashboard_metrics_count_bulk_closed_cases(self):
+        second = self._make_case()
+        self._bulk_update_status([self.case.pk, second.pk], "closed_won")
+
+        response = self.client.get(reverse("vso:dashboard"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["total_closed"], 2)
+        self.assertEqual(response.context["closed_this_month"], 2)
+        self.assertEqual(response.context["win_rate"], 100)
+
+    def test_reports_monthly_closures_count_bulk_closed_cases(self):
+        self._bulk_update_status([self.case.pk], "closed_won")
+
+        response = self.client.get(reverse("vso:reports"))
+
+        self.assertEqual(response.status_code, 200)
+        current_month = response.context["monthly_closures"][-1]
+        self.assertEqual(current_month["count"], 1)
+
+
+class TestClosedAtBackfillMigration(TestCase):
+    """The 0011 data migration backfills closed_at (approximated by
+    updated_at) for rows bulk-closed before #103 was fixed."""
+
+    def setUp(self):
+        from vso.models import VeteranCase
+
+        self.org = Organization.objects.create(
+            name="Backfill VSO", slug="backfill-vso", org_type="vso"
+        )
+        self.veteran = User.objects.create_user(
+            email="backfill_vet@example.com", password="TestPass123!"
+        )
+        self.case = VeteranCase.objects.create(
+            organization=self.org,
+            veteran=self.veteran,
+            title="Backfill Case",
+        )
+
+    def _run_backfill(self):
+        import importlib
+
+        from django.apps import apps as django_apps
+        from django.db import connection
+
+        migration = importlib.import_module("vso.migrations.0011_backfill_closed_at")
+        migration.backfill_closed_at(django_apps, mock.Mock(connection=connection))
+
+    def test_backfills_closed_cases_missing_closed_at(self):
+        from vso.models import VeteranCase
+
+        # Reproduce the pre-fix bulk path: status flips, closed_at never set
+        VeteranCase.objects.filter(pk=self.case.pk).update(status="closed_won")
+
+        self._run_backfill()
+
+        self.case.refresh_from_db()
+        self.assertIsNotNone(self.case.closed_at)
+        self.assertEqual(self.case.closed_at, self.case.updated_at)
+
+    def test_leaves_correctly_stamped_cases_alone(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from vso.models import VeteranCase
+
+        past = timezone.now() - timedelta(days=30)
+        VeteranCase.objects.filter(pk=self.case.pk).update(
+            status="closed_denied", closed_at=past
+        )
+
+        self._run_backfill()
+
+        self.case.refresh_from_db()
+        self.assertEqual(self.case.closed_at, past)
+
+    def test_ignores_open_cases(self):
+        self._run_backfill()
+
+        self.case.refresh_from_db()
+        self.assertIsNone(self.case.closed_at)

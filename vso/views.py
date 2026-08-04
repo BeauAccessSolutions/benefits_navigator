@@ -601,7 +601,39 @@ def bulk_case_action(request):
     if action == "update_status":
         new_status = request.POST.get("new_status")
         if new_status and new_status in dict(VeteranCase.STATUS_CHOICES):
-            cases.update(status=new_status, last_activity_at=timezone.now())
+            now = timezone.now()
+            status_labels = dict(VeteranCase.STATUS_CHOICES)
+            old_statuses = dict(cases.values_list("pk", "status"))
+            if new_status.startswith("closed"):
+                # A bare .update() bypasses the closure stamping done in
+                # case_update_status(); without closed_at these cases are
+                # invisible to every closure metric (#103). Only stamp cases
+                # actually transitioning into a closed status.
+                cases.exclude(status__startswith="closed").update(
+                    closed_at=now, closed_by=request.user
+                )
+            else:
+                # Reopening: clear the stamp so days_open and a later
+                # re-close start clean.
+                cases.filter(status__startswith="closed").update(
+                    closed_at=None, closed_by=None
+                )
+            cases.update(status=new_status, last_activity_at=now)
+            CaseNote.objects.bulk_create(
+                CaseNote(
+                    case_id=pk,
+                    author=request.user,
+                    note_type="milestone",
+                    subject=f"Status changed to {status_labels[new_status]}",
+                    content=(
+                        f"Case status updated from {status_labels.get(old_status)} "
+                        f"to {status_labels[new_status]}"
+                    ),
+                    visible_to_veteran=True,
+                )
+                for pk, old_status in old_statuses.items()
+                if old_status != new_status
+            )
             messages.success(request, f"Updated status for {count} case(s).")
         else:
             messages.error(request, "Invalid status selected.")
@@ -791,6 +823,11 @@ def case_update_status(request, pk):
         if new_status.startswith("closed") and not old_status.startswith("closed"):
             case.closed_at = timezone.now()
             case.closed_by = request.user
+        elif old_status.startswith("closed") and not new_status.startswith("closed"):
+            # Reopening: clear the stamp so days_open and a later re-close
+            # start clean.
+            case.closed_at = None
+            case.closed_by = None
 
         case.save()
 
