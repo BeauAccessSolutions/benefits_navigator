@@ -117,6 +117,72 @@ jobs:
             echo "::error::DO_APP_ID variable is not set; cannot deploy."
             exit 1
           fi
-          # --wait so a failed rollout fails this job rather than reporting a
-          # green deploy that quietly rolled back to the previous container.
-          doctl apps create-deployment "$APP_ID" --wait
+
+          # This workflow is the only path to production (deploy_on_push is
+          # off everywhere), so a failure here means production cannot ship
+          # until a human notices. Make that impossible to miss.
+          fail() {
+            echo "::error::$1 This workflow is the ONLY deploy path; production will not update until it succeeds. If the error mentions 401/mTLS/auth, rotate DIGITALOCEAN_ACCESS_TOKEN (DO Console → API → Tokens) and update the repo secret, then 'gh run rerun --failed'."
+            {
+              echo "## :x: Production deploy failed"
+              echo ""
+              echo "$1"
+              echo ""
+              echo "- \`deploy_on_push\` is off on every DO component — **nothing else will deploy this commit**."
+              echo "- Transient DO API error (e.g. \`401 mTLS verification failed\`): rerun with \`gh run rerun --failed\`."
+              echo "- Persistent auth errors: rotate \`DIGITALOCEAN_ACCESS_TOKEN\` in the DO Console (API → Tokens) and update the repo secret."
+              echo "- Failed **rollout** (phase ERROR): DO already rolled back; inspect the deploy logs in the DO console before rerunning."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          }
+
+          # Create the deployment, retrying only the create call itself. A
+          # one-off DO API error here ("401 mTLS verification failed") once
+          # left production undeployable for ~14h because nothing retried.
+          # Creation is separated from waiting so that a rollout which starts
+          # and then fails is never retried blindly — rollouts are
+          # all-or-nothing with automatic rollback, and re-creating one would
+          # just redeploy the same build with no new information.
+          DEPLOYMENT_ID=""
+          for delay in 30 60 0; do
+            if DEPLOYMENT_ID=$(doctl apps create-deployment "$APP_ID" \
+                  --format ID --no-header 2>create_err.txt); then
+              break
+            fi
+            err=$(tr '\n' ' ' < create_err.txt)
+            if [ "$delay" -eq 0 ]; then
+              fail "Could not create a DigitalOcean deployment after 3 attempts. Last error: $err"
+            fi
+            echo "::warning::create-deployment API call failed: $err — retrying in ${delay}s."
+            sleep "$delay"
+          done
+          [ -n "$DEPLOYMENT_ID" ] || fail "create-deployment succeeded but returned no deployment ID."
+          echo "Created deployment $DEPLOYMENT_ID; waiting for the rollout."
+
+          # Wait for the rollout by polling the deployment we created (the
+          # equivalent of --wait, but resilient to transient poll errors and
+          # explicitly non-retrying on rollout failure).
+          deadline=$(( SECONDS + 1800 ))
+          while :; do
+            phase=$(doctl apps get-deployment "$APP_ID" "$DEPLOYMENT_ID" \
+                      --format Phase --no-header 2>/dev/null || echo "POLL_FAILED")
+            case "$phase" in
+              ACTIVE)
+                echo "::notice::Deployment $DEPLOYMENT_ID is ACTIVE."
+                break
+                ;;
+              ERROR|CANCELED|SUPERSEDED)
+                fail "Deployment $DEPLOYMENT_ID ended in phase $phase — the rollout itself failed or was displaced (DO rolls back to the previous container). Not retrying automatically; inspect the deploy logs in the DO console."
+                ;;
+              POLL_FAILED)
+                echo "get-deployment poll failed (transient); will retry."
+                ;;
+              *)
+                echo "Deployment $DEPLOYMENT_ID phase: $phase"
+                ;;
+            esac
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              fail "Deployment $DEPLOYMENT_ID did not reach a terminal phase within 30 minutes (last phase: $phase)."
+            fi
+            sleep 20
+          done
