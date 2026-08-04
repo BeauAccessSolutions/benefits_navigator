@@ -2,7 +2,7 @@
 
 {% block title %}{{ SITE_NAME }} - Get the VA Disability Rating You Deserve{% endblock %}
 
-{% block meta_description %}Free tools to help veterans maximize VA disability ratings. Calculate your combined rating, prepare for C&P exams, decode denial letters, and navigate appeals. Stop leaving money on the table.{% endblock %}
+{% block meta_description %}Free tools to help veterans prepare for VA disability claims. Calculate your combined rating, prepare for C&P exams, decode denial letters, and navigate appeals — so the record reflects what your service cost you.{% endblock %}
 
 {% block og_title %}VA Benefits Navigator - Get the Rating You Deserve{% endblock %}
 {% block og_description %}Free tools to help veterans maximize VA disability ratings. Calculate your combined rating, prepare for C&P exams, and navigate the VA claims process.{% endblock %}
@@ -14,14 +14,16 @@
     <!-- Hero Section -->
     <section class="text-center mb-12 py-8">
         <h1 class="text-4xl md:text-5xl font-bold text-gray-900 mb-6">
-            Stop Leaving Money on the Table
+            You Earned Your Rating. Now Prove It.
         </h1>
         <p class="text-xl md:text-2xl text-gray-700 max-w-3xl mx-auto mb-4">
-            The average veteran is underrated by 30%. Don't be one of them.
+            The C&P exam decides your rating, and most veterans walk in without ever
+            seeing the form the examiner is filling out.
         </p>
         <p class="text-lg text-gray-600 max-w-2xl mx-auto mb-8">
-            VA Benefits Navigator helps you prepare for C&P exams, understand VA terminology,
-            and navigate appeals - so you get the rating you've earned.
+            VA Benefits Navigator is a free set of tools to help you prepare for that exam,
+            understand what the VA is actually asking, and navigate appeals — so the record
+            finally says what your service cost you.
         </p>
 
         {% if not user.is_authenticated %}
@@ -47,7 +49,7 @@
     <section class="bg-gray-100 rounded-xl p-6 mb-12">
         <div class="grid grid-cols-2 md:grid-cols-5 gap-6 text-center">
             <div>
-                <div class="text-3xl font-bold text-blue-600">4</div>
+                <div class="text-3xl font-bold text-blue-600">7</div>
                 <div class="text-sm text-gray-600">C&P Exam Guides</div>
             </div>
             <div>
@@ -304,7 +306,7 @@
                         <svg class="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
                             <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
                         </svg>
-                        15 C&P exam prep guides
+                        7 C&P exam prep guides
                     </li>
                     <li class="flex items-center">
                         <svg class="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
