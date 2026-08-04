@@ -40,3 +40,25 @@
 - [observability, unresolved]: verification email delivered to the inbox but appears in NEITHER Resend account's Emails log — the DO `EMAIL_HOST_PASSWORD` may belong to the first (kindredaccess) Resend account; delivery works, logs don't. Follow up.
 
 ---
+## Session: 2026-08-03
+
+**Project:** benefits-navigator (issues #92 / #93 — VSO shared-document file access + SharedAnalysis end to end, PR #108)
+
+### Failures
+- [Bash, manage.py / pytest]: Every Django command in a fresh worktree died with `ValueError: SECRET_KEY environment variable is required in staging/production!` because the worktree has no `.env`. Resolved by prefixing `DEBUG=True` (settings then generate a throwaway key); the fuller CI-style export block in the `worktree-test-env` memory note also works but was not needed.
+- [vso/tests.py, share-control test]: `assertNotContains(response, "Share with VSO")` failed because it matched the `<!-- Share with VSO -->` HTML comment I had just added to the template, not the control itself. Asserting on rendered prose is fragile when your own markup comments repeat the string — switched both halves of the test to assert on the `agents:analysis_share` URL instead.
+- [templates/vso/case_detail.html]: Added a two-line `{# ... #}` comment; `tests/test_template_comments.py::test_no_multiline_django_comment` failed the whole suite. Django's `{# #}` is single-line only — a known repo trap already recorded in memory that I hit anyway. Collapsed to one line.
+- [core/migrations, CI]: **Local suite green (1474 passed), CI red on all three jobs.** `main` merged PR #107 (`core/0012_set_default_site_domain`) after this branch was cut, so my `0012_alter_auditlog_action` became a second leaf: `CommandError: Conflicting migrations detected; multiple leaf nodes`. Every CI job died at `manage.py migrate`, before any test ran. No local run could have caught this — the conflict only exists once the branches combine. Resolved by rebasing onto `origin/main` and renumbering to `0013` with a dependency on the site-domain migration. Lesson: after any long-lived branch, re-check migration leaf numbers against current `main` before assuming green.
+- [ultrareview, run 1]: Cloud review failed with "cloud session exceeded 30 minutes (API polls were failing)" and produced no output. Retry succeeded and returned 2 findings (both `nit`).
+- [doctl]: `doctl apps list --format ID,Spec.Name,...,UpdatedAt` → `Error: unknown column "UpdatedAt"`. Dropped the column.
+- [doctl + jq]: `doctl apps get-deployment ... -o json | jq '.phase'` → `Cannot index array with string "phase"`. The command returns a single-element **array**; needs `.[0].phase`.
+- [doctl apps spec validate]: Validating a round-tripped live spec failed with `errors validating app spec; first error in field "envs.4.value": secret env value must not be encrypted before app is created`. The validator proposes the spec as a *new* app, so the `EV[1:…]` ciphertext every live spec carries is always rejected. This is not a malformed edit — reading it as one leads straight to rewriting (and blanking) secrets. Used `--schema-only`; `doctl apps update` accepted the spec unchanged. Added to the `do-app-platform-debug` skill.
+- [DO deployment 3e19301c]: The `app spec updated` rollout from enabling `deploy_on_push` went `CANCELED` rather than `ACTIVE` — superseded 17 seconds later by a concurrent `manual` deployment (`54927013`) that I did not trigger. The spec change still applied. Verified by reading the app's `active_deployment` and re-reading the field, not the phase of my own rollout. Added to the skill.
+- [Bash, harness]: `sleep 150 && gh pr checks` was blocked ("To wait for a condition, use Monitor with an until-loop"). Switched to `Monitor` for the CI watch and `run_in_background` for the deploy watch.
+
+### Process notes (not failures)
+- PR #108 was merged with `gh pr merge --admin`, **bypassing the branch-protection rule requiring 1 approving review** (`enforce_admins: false` allowed it). Explicitly requested by the user after CI went green; recorded here because the review gate was skipped rather than satisfied.
+- `deploy_on_push` was re-enabled on all four components at user request. Memory (`live-spec-drift`) records that it was set false on 2026-08-02 *deliberately*, to make the CI Deploy workflow the only path to production. There are now two deploy paths again, and the push-triggered one does not consult the green-merge gate.
+
+---
+
