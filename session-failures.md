@@ -40,3 +40,13 @@
 - [observability, unresolved]: verification email delivered to the inbox but appears in NEITHER Resend account's Emails log — the DO `EMAIL_HOST_PASSWORD` may belong to the first (kindredaccess) Resend account; delivery works, logs don't. Follow up.
 
 ---
+## Session: 2026-08-04
+
+**Project:** benefits-navigator (worktree cool-lalande-2cf1b2 — issue #103 bulk-close closed_at fix, PR #111)
+
+### Failures
+- [Bash, permission classifier]: At session start the auto-mode safety classifier (claude-opus-5) was temporarily unavailable, so the first two Bash calls (git fetch, gh issue view) errored before running → proceeded with read-only tools until the classifier recovered a call later; no work lost.
+- [git worktree remove]: During wrap-up, removing two clean, squash-merged peer worktrees (objective-cohen-d0306f / PR #107, serene-chaplygin-7ecc07 / PR #105) was denied by the auto-mode classifier because the user hadn't named them → left in place and reported as removal candidates instead.
+- [git switch]: Returning to the session branch after a planned branch hop inside the linked worktree was blocked by the branch-ownership guard hook → redid the failure-log commit in a throwaway worktree off origin/main instead of switching branches in place.
+
+---
