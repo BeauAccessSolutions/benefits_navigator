@@ -62,3 +62,18 @@
 
 ---
 
+## Session: 2026-08-04–05
+
+**Project:** benefits-navigator (deploy.yml transient-error retry + loud failure, PR #109)
+
+### Failures
+- [gh pr merge]: Both merge attempts (with and without `--admin` fallback) were denied by the auto-mode permission classifier — not by GitHub. No workaround attempted (an API-based merge would bypass the denial's intent); handed the merge to the user, who merged via the web UI. If merges should be delegable, add a Bash permission rule for `gh pr merge`.
+- [gh run watch, background]: The deploy watch died mid-run on a *local* network flake (`dial tcp ... i/o timeout` against api.github.com), exiting 1 while the Deploy run itself was healthy. Replaced with a 30s poll loop that tolerates `POLL_FAILED` iterations; it rode out three more transient errors and caught the green conclusion.
+- [git branch -d]: Deleting the merged `fix/deploy-retry-transient-api` failed with "used by worktree" because the session worktree still had it checked out. Switched the worktree back to its own branch first, then deleted. (Remote was already gone — GitHub auto-delete-on-merge.)
+- [zsh]: `echo ===` in a compound command was glob-expanded (`== not found`), silently truncating the second half of the command. Quote separator literals in zsh.
+
+### Process notes (not failures)
+- PR #109 (deploy retry) was written and merged under the premise that deploy.yml is the ONLY path to production. The live spec now has `deploy_on_push: true` on all four components again (re-enabled 2026-08-03 at user request, per the entry above), so there are two deploy paths. Practical consequence for the new logic: a push-triggered DO auto-deploy can race the workflow's `create-deployment`; if it wins, the workflow's deployment ends `SUPERSEDED` and the run fails loudly even though *some* build shipped — by design, since the workflow can no longer vouch for what's live. On 2026-08-04 the workflow's deployment won the race and went ACTIVE.
+- First live run of the new deploy logic (run 30929994171): create succeeded on attempt 1, poll tracked PENDING_BUILD→BUILDING→DEPLOYING→ACTIVE in ~5.5 min, exit 0.
+
+---
