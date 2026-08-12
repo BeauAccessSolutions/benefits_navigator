@@ -10,6 +10,8 @@ import pytest
 import time
 import socket
 from contextlib import closing
+from pathlib import Path
+from urllib.parse import urlparse
 from playwright.sync_api import sync_playwright, Page, Browser, BrowserContext
 
 # =============================================================================
@@ -32,10 +34,45 @@ TEST_PREMIUM_PASSWORD = "E2EPremiumPassword123!"
 # =============================================================================
 
 
-def is_port_in_use(port: int) -> bool:
+def is_port_in_use(port: int, host: str = "localhost") -> bool:
     """Check if a port is in use."""
     with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as sock:
-        return sock.connect_ex(("localhost", port)) == 0
+        sock.settimeout(2)
+        return sock.connect_ex((host, port)) == 0
+
+
+def _e2e_server_reachable() -> bool:
+    """Whether something is listening at BASE_URL (cheap TCP connect, no HTTP)."""
+    parsed = urlparse(BASE_URL)
+    return is_port_in_use(parsed.port or 80, parsed.hostname or "localhost")
+
+
+def pytest_collection_modifyitems(config, items):
+    """Mark every test under tests/e2e/ as `e2e`, and skip them all when no
+    server is listening at BASE_URL.
+
+    The `e2e` marker is declared in pytest.ini but was never applied, so
+    `pytest -m "not e2e"` excluded nothing and a bare `pytest` run collected
+    these browser tests — which then failed one by one at page.goto() unless a
+    dev server happened to be running on :8000. CI sidesteps that with
+    --ignore=tests/e2e; local runs had no such guard.
+    """
+    e2e_dir = Path(__file__).resolve().parent
+    e2e_items = [i for i in items if e2e_dir in Path(str(i.fspath)).resolve().parents]
+    if not e2e_items:
+        return
+    skip = None
+    if not _e2e_server_reachable():
+        skip = pytest.mark.skip(
+            reason=(
+                f"no server listening at {BASE_URL} — start one "
+                "(python manage.py runserver) or point E2E_BASE_URL at it"
+            )
+        )
+    for item in e2e_items:
+        item.add_marker(pytest.mark.e2e)
+        if skip is not None:
+            item.add_marker(skip)
 
 
 def wait_for_server(url: str, timeout: int = 30) -> bool:
