@@ -82,7 +82,7 @@ jobs:
           FIELD_ENCRYPTION_KEY: icYQDhc0tmgE75lYSiQfexQ-2bSFuMJBn9SsiH5xpOI=
 
       - name: Upload benchmark results (main branch)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: github.ref == 'refs/heads/main'
         with:
           name: benchmark-main-${{ github.sha }}
@@ -90,7 +90,7 @@ jobs:
           retention-days: 30
 
       - name: Upload benchmark results (PR)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: github.event_name == 'pull_request'
         with:
           name: benchmark-pr-${{ github.event.pull_request.number }}
