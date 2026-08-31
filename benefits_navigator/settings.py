@@ -733,6 +733,15 @@ if SENTRY_DSN and not DEBUG:
         ],
         traces_sample_rate=0.1,
         send_default_pii=False,  # Don't send user data
+        # send_default_pii=False is NOT sufficient on its own. It governs request
+        # bodies, cookies and user identifiers; it does not touch stack-frame
+        # locals, which the SDK captures by default and attaches to every event.
+        # Celery task frames hold OCR'd document text and AI analysis — a veteran's
+        # medical narrative — so an exception anywhere in the processing pipeline
+        # would ship that content to a third-party processor while every obvious
+        # identity field was correctly scrubbed.
+        # Enforced by scripts/check_security_invariants.py (SENTRY_FRAME_LOCALS).
+        include_local_variables=False,
     )
 
 # ==============================================================================

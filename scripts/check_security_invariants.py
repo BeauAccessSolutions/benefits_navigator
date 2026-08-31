@@ -15,11 +15,12 @@ Exit codes:
 """
 
 import argparse
+import ast
 import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Set
+from typing import Iterator, List, Set
 
 # =============================================================================
 # Configuration
@@ -33,6 +34,11 @@ EXCLUDED_DIRS: Set[str] = {
     "migrations",
     "tests",
     ".git",
+    # Local git worktrees hold full checkouts of other branches. They are
+    # untracked, so CI never sees them, but a developer running this locally
+    # would get a wall of violations from branches they aren't working on.
+    ".worktrees",
+    ".claude",  # agent scratch, incl. .claude/worktrees/ — same reason
     "node_modules",
     "static",
     "media",
@@ -123,6 +129,8 @@ class SecurityChecker:
 
         self.check_prohibited_phi_fields()
         self.check_sentry_pii_config()
+        self.check_sentry_frame_locals()
+        self.check_sentry_sdk_pin()
         self.check_logging_pitfalls()
         self.check_phi_in_logging()
         self.check_streaming_prompt_logging()
@@ -242,6 +250,161 @@ class SecurityChecker:
                         "Sentry configured with send_default_pii=True. "
                         "This must be False to prevent PII leakage.",
                     )
+
+    # =========================================================================
+    # Check 2b: Sentry frame-locals capture
+    # =========================================================================
+
+    def _settings_files(self) -> List[Path]:
+        """
+        Every settings module in the project.
+
+        Globs `settings*.py` rather than naming files, so `settings_production.py`
+        and `settings_staging.py` are covered too. Check 2 above uses a narrower
+        hand-written list; that is fine for it (the only `send_default_pii` lives
+        in the base module) but would be a hole here, where the whole point is to
+        catch an omission in *any* module that calls `sentry_sdk.init`.
+        """
+        files = []
+        for path in self.root_dir.glob("**/settings*.py"):
+            if not self.should_exclude_path(path.relative_to(self.root_dir)):
+                files.append(path)
+        return sorted(files)
+
+    @staticmethod
+    def _iter_sentry_init_calls(tree: ast.AST) -> Iterator[ast.Call]:
+        """
+        Yield every call node that initialises the Sentry SDK.
+
+        Handles both import styles, resolving aliases first so a bare `init(...)`
+        is only matched when this module actually imported it from sentry_sdk —
+        matching every bare `init()` would fire on unrelated code.
+        """
+        module_aliases = {"sentry_sdk"}  # `import sentry_sdk` / `as sentry`
+        init_aliases = set()  # `from sentry_sdk import init [as x]`
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name == "sentry_sdk":
+                        module_aliases.add(alias.asname or alias.name)
+            elif isinstance(node, ast.ImportFrom) and node.module == "sentry_sdk":
+                for alias in node.names:
+                    if alias.name == "init":
+                        init_aliases.add(alias.asname or alias.name)
+
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            if isinstance(func, ast.Attribute) and func.attr == "init":
+                base = func.value
+                if isinstance(base, ast.Name) and base.id in module_aliases:
+                    yield node
+            elif isinstance(func, ast.Name) and func.id in init_aliases:
+                yield node
+
+    def check_sentry_frame_locals(self):
+        """
+        Ensure every sentry_sdk.init() sets include_local_variables=False.
+
+        WHY THIS CHECK IS AST-BASED AND NOT A REGEX
+        -------------------------------------------
+        Check 2 (SENTRY_PII) greps for `send_default_pii=True` — a *wrong value*.
+        This defect is a different shape: an *omission*. `include_local_variables`
+        is simply absent, the SDK default (True) applies, and no regex for a wrong
+        value can ever match a line that isn't there. Detecting an omission means
+        parsing the call and inspecting which keywords are present.
+
+        WHY IT MATTERS
+        --------------
+        `send_default_pii=False` reads as "no user data goes to Sentry" and does
+        not mean that. It governs request bodies, cookies and user identifiers. It
+        does not touch stack-frame locals, which are captured by default and
+        attached to every event. In this codebase the Celery task frames hold OCR'd
+        document text and AI analysis — a veteran's medical narrative.
+
+        Found in three separate Beau Access Solutions apps, by two independent
+        audits, 2026-07-26. Every one of them had set send_default_pii=False and
+        left include_local_variables unset. This is a default that everyone reads
+        as protective and isn't, which is exactly the kind of thing a build gate
+        exists to hold.
+        """
+        for settings_file in self._settings_files():
+            rel = str(settings_file.relative_to(self.root_dir))
+            self.log(f"Scanning {rel} for sentry_sdk.init()")
+
+            try:
+                tree = ast.parse(settings_file.read_text(), filename=str(settings_file))
+            except SyntaxError as exc:
+                self.add_violation(
+                    "SENTRY_FRAME_LOCALS",
+                    rel,
+                    exc.lineno or 0,
+                    f"Could not parse settings module: {exc.msg}. "
+                    "This check cannot verify Sentry configuration here.",
+                )
+                continue
+
+            for call in self._iter_sentry_init_calls(tree):
+                keywords = {kw.arg: kw.value for kw in call.keywords if kw.arg}
+
+                if "include_local_variables" not in keywords:
+                    self.add_violation(
+                        "SENTRY_FRAME_LOCALS",
+                        rel,
+                        call.lineno,
+                        "sentry_sdk.init() does not set include_local_variables. "
+                        "The SDK default captures stack-frame locals and attaches "
+                        "them to every event; send_default_pii=False does NOT "
+                        "prevent this. Celery frames hold OCR text and AI analysis. "
+                        "Add include_local_variables=False.",
+                    )
+                    continue
+
+                value = keywords["include_local_variables"]
+                if not (isinstance(value, ast.Constant) and value.value is False):
+                    self.add_violation(
+                        "SENTRY_FRAME_LOCALS",
+                        rel,
+                        call.lineno,
+                        "sentry_sdk.init() sets include_local_variables to "
+                        "something other than the literal False. Frame locals "
+                        "carry OCR text and AI analysis; this must be False.",
+                    )
+
+    def check_sentry_sdk_pin(self):
+        """
+        Warn when sentry-sdk is not pinned to an exact version.
+
+        Defence in depth, not the primary control: the explicit
+        include_local_variables=False above protects regardless of version. The
+        residual risk a floor pin (`>=`) leaves is a future major release
+        renaming or removing the keyword — `init()` accepts arbitrary keywords,
+        so it would silently become a no-op and frame capture would resume with
+        no error and no failing test. Warning, not error, so this never blocks a
+        deploy on its own.
+        """
+        requirements = self.root_dir / "requirements.txt"
+        if not requirements.exists():
+            return
+
+        for line_num, line in enumerate(requirements.read_text().splitlines(), 1):
+            stripped = line.strip()
+            if not stripped.lower().startswith("sentry-sdk"):
+                continue
+            if "==" in stripped:
+                continue
+            self.add_violation(
+                "SENTRY_SDK_PIN",
+                "requirements.txt",
+                line_num,
+                f"sentry-sdk is not pinned exactly ({stripped!r}). init() accepts "
+                "unknown keywords silently, so a major release that renames or "
+                "drops include_local_variables would turn the frame-locals "
+                "protection into a no-op with no error. Pin with '=='.",
+                severity="warning",
+            )
 
     # =========================================================================
     # Check 3: Logging Pitfalls
